@@ -1,0 +1,137 @@
+{
+  "resources": {
+    "timber": "Madera",
+    "clay": "Arcilla",
+    "iron": "Hierro",
+    "grain": "Grano",
+    "wool": "Lana"
+  },
+  "terrain": {
+    "timber": "Bosque",
+    "clay": "Colinas",
+    "iron": "Montañas",
+    "grain": "Campos",
+    "wool": "Pasto",
+    "desert": "Desierto"
+  },
+  "buildings": {
+    "settlement": "Aldea",
+    "city": "Ciudad",
+    "road": "Camino"
+  },
+  "phases": {
+    "LOBBY": "Sala de espera",
+    "SETUP_FORWARD": "Configuración (Ronda 1)",
+    "SETUP_REVERSE": "Configuración (Ronda 2)",
+    "ROLL": "Lanzar dados",
+    "ROBBER": "Mover Bandido",
+    "DISCARD": "Descartar cartas",
+    "ACTION": "Tu turno",
+    "TRADE_OFFER": "Oferta de intercambio",
+    "GAME_OVER": "Fin del juego"
+  },
+  "devCards": {
+    "warrior": "Guerrero",
+    "victoryPoint": "Punto de Victoria",
+    "roadBuilding": "Construcción de Caminos",
+    "yearOfPlenty": "Año de Abundancia",
+    "monopoly": "Monopolio"
+  },
+  "devCardDescriptions": {
+    "warrior": "Mueve el Bandido y roba un recurso",
+    "victoryPoint": "+1 Punto de Victoria",
+    "roadBuilding": "Construye 2 caminos gratis",
+    "yearOfPlenty": "Toma 2 recursos del banco",
+    "monopoly": "Toma todos los recursos de un tipo de los otros jugadores"
+  },
+  "specialCards": {
+    "grandRoad": "Gran Camino",
+    "supremeArmy": "Ejército Supremo"
+  },
+  "actions": {
+    "rollDice": "Lanzar dados",
+    "endTurn": "Terminar turno",
+    "buildSettlement": "Construir aldea",
+    "buildCity": "Construir ciudad",
+    "buildRoad": "Construir camino",
+    "buyDevCard": "Comprar carta",
+    "playDevCard": "Jugar carta",
+    "bankTrade": "Intercambio con banco",
+    "offerTrade": "Ofrecer intercambio",
+    "acceptTrade": "Aceptar",
+    "rejectTrade": "Rechazar",
+    "cancelTrade": "Cancelar intercambio"
+  },
+  "costs": {
+    "road": "1 Madera + 1 Arcilla",
+    "settlement": "1 Madera + 1 Arcilla + 1 Grano + 1 Lana",
+    "city": "3 Hierro + 2 Grano",
+    "devCard": "1 Hierro + 1 Grano + 1 Lana"
+  },
+  "info": {
+    "victoryPoints": "Puntos de victoria",
+    "devCards": "Cartas de desarrollo",
+    "grandRoad": "Gran Camino (5+ caminos)",
+    "supremeArmy": "Ejército Supremo (3+ guerreros)",
+    "deckRemaining": "{{count}} cartas restantes",
+    "longestRoad": "Camino más largo: {{length}}"
+  },
+  "log": {
+    "rolled": "{{player}} sacó {{roll}}",
+    "rolledSeven": "{{player}} sacó un 7!",
+    "placedSettlement": "{{player}} colocó una aldea",
+    "placedRoad": "{{player}} colocó un camino",
+    "builtSettlement": "{{player}} construyó una aldea",
+    "builtCity": "{{player}} construyó una ciudad",
+    "builtRoad": "{{player}} construyó un camino",
+    "boughtDevCard": "{{player}} compró una carta de desarrollo",
+    "playedWarrior": "{{player}} jugó un Guerrero",
+    "playedRoadBuilding": "{{player}} jugó Construcción de Caminos",
+    "playedYearOfPlenty": "{{player}} jugó Año de Abundancia",
+    "playedMonopoly": "{{player}} jugó Monopolio",
+    "movedBandit": "{{player}} movió el Bandido",
+    "bankTrade": "{{player}} intercambió con el banco",
+    "endedTurn": "{{player}} terminó su turno",
+    "discarded": "{{player}} descartó {{count}} cartas",
+    "playerJoined": "{{player}} se unió a la partida",
+    "playerLeft": "{{player}} abandonó la partida",
+    "gameStarted": "¡La partida ha comenzado!",
+    "gameOver": "¡{{player}} gana con {{points}} puntos de victoria!"
+  },
+  "colors": {
+    "red": "Rojo",
+    "blue": "Azul",
+    "green": "Verde",
+    "orange": "Naranja"
+  },
+  "port": {
+    "generic": "Puerto 3:1",
+    "specific": "Puerto 2:1 {{resource}}"
+  },
+  "dice": {
+    "roll": "Lanzar"
+  },
+  "trade": {
+    "youGive": "Tú das",
+    "youGet": "Tú recibes",
+    "bankTrade": "Intercambio con banco",
+    "playerTrade": "Intercambio con jugador",
+    "waitingForResponse": "Esperando respuestas...",
+    "acceptedBy": "Aceptado por {{player}}",
+    "rejectedBy": "Rechazado por {{player}}",
+    "tradeWith": "Intercambiar con {{player}}"
+  },
+  "bandit": {
+    "selectTile": "Selecciona una casilla para mover el Bandido",
+    "selectPlayerToSteal": "Selecciona un jugador para robar (opcional)"
+  },
+  "discard": {
+    "title": "Descartar cartas",
+    "instruction": "Selecciona {{count}} cartas para descartar"
+  },
+  "win": {
+    "title": "¡{{player}} gana!",
+    "points": "{{points}} puntos de victoria",
+    "playAgain": "Jugar de nuevo"
+  }
+}

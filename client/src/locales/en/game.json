@@ -1,0 +1,137 @@
+{
+  "resources": {
+    "timber": "Timber",
+    "clay": "Clay",
+    "iron": "Iron",
+    "grain": "Grain",
+    "wool": "Wool"
+  },
+  "terrain": {
+    "timber": "Forest",
+    "clay": "Hills",
+    "iron": "Mountains",
+    "grain": "Fields",
+    "wool": "Pasture",
+    "desert": "Desert"
+  },
+  "buildings": {
+    "settlement": "Settlement",
+    "city": "City",
+    "road": "Road"
+  },
+  "phases": {
+    "LOBBY": "Lobby",
+    "SETUP_FORWARD": "Setup (Round 1)",
+    "SETUP_REVERSE": "Setup (Round 2)",
+    "ROLL": "Roll Dice",
+    "ROBBER": "Move Bandit",
+    "DISCARD": "Discard Cards",
+    "ACTION": "Your Turn",
+    "TRADE_OFFER": "Trade Offer",
+    "GAME_OVER": "Game Over"
+  },
+  "devCards": {
+    "warrior": "Warrior",
+    "victoryPoint": "Victory Point",
+    "roadBuilding": "Road Building",
+    "yearOfPlenty": "Year of Plenty",
+    "monopoly": "Monopoly"
+  },
+  "devCardDescriptions": {
+    "warrior": "Move the Bandit and steal a resource",
+    "victoryPoint": "+1 Victory Point",
+    "roadBuilding": "Build 2 roads for free",
+    "yearOfPlenty": "Take any 2 resources from the bank",
+    "monopoly": "Take all of one resource type from other players"
+  },
+  "specialCards": {
+    "grandRoad": "Grand Road",
+    "supremeArmy": "Supreme Army"
+  },
+  "actions": {
+    "rollDice": "Roll Dice",
+    "endTurn": "End Turn",
+    "buildSettlement": "Build Settlement",
+    "buildCity": "Build City",
+    "buildRoad": "Build Road",
+    "buyDevCard": "Buy Dev Card",
+    "playDevCard": "Play Card",
+    "bankTrade": "Bank Trade",
+    "offerTrade": "Offer Trade",
+    "acceptTrade": "Accept",
+    "rejectTrade": "Reject",
+    "cancelTrade": "Cancel Trade"
+  },
+  "costs": {
+    "road": "1 Timber + 1 Clay",
+    "settlement": "1 Timber + 1 Clay + 1 Grain + 1 Wool",
+    "city": "3 Iron + 2 Grain",
+    "devCard": "1 Iron + 1 Grain + 1 Wool"
+  },
+  "info": {
+    "victoryPoints": "Victory Points",
+    "devCards": "Dev Cards",
+    "grandRoad": "Grand Road (5+ roads)",
+    "supremeArmy": "Supreme Army (3+ warriors)",
+    "deckRemaining": "{{count}} cards left",
+    "longestRoad": "Longest Road: {{length}}"
+  },
+  "log": {
+    "rolled": "{{player}} rolled {{roll}}",
+    "rolledSeven": "{{player}} rolled a 7!",
+    "placedSettlement": "{{player}} placed a settlement",
+    "placedRoad": "{{player}} placed a road",
+    "builtSettlement": "{{player}} built a settlement",
+    "builtCity": "{{player}} built a city",
+    "builtRoad": "{{player}} built a road",
+    "boughtDevCard": "{{player}} bought a development card",
+    "playedWarrior": "{{player}} played a Warrior card",
+    "playedRoadBuilding": "{{player}} played Road Building",
+    "playedYearOfPlenty": "{{player}} played Year of Plenty",
+    "playedMonopoly": "{{player}} played Monopoly",
+    "movedBandit": "{{player}} moved the Bandit",
+    "bankTrade": "{{player}} traded with the bank",
+    "endedTurn": "{{player}} ended their turn",
+    "discarded": "{{player}} discarded {{count}} cards",
+    "playerJoined": "{{player}} joined the game",
+    "playerLeft": "{{player}} left the game",
+    "gameStarted": "Game started!",
+    "gameOver": "{{player}} wins with {{points}} victory points!"
+  },
+  "colors": {
+    "red": "Red",
+    "blue": "Blue",
+    "green": "Green",
+    "orange": "Orange"
+  },
+  "port": {
+    "generic": "3:1 Port",
+    "specific": "2:1 {{resource}} Port"
+  },
+  "dice": {
+    "roll": "Roll"
+  },
+  "trade": {
+    "youGive": "You Give",
+    "youGet": "You Get",
+    "bankTrade": "Bank Trade",
+    "playerTrade": "Player Trade",
+    "waitingForResponse": "Waiting for responses...",
+    "acceptedBy": "Accepted by {{player}}",
+    "rejectedBy": "Rejected by {{player}}",
+    "tradeWith": "Trade with {{player}}"
+  },
+  "bandit": {
+    "selectTile": "Select a tile to move the Bandit",
+    "selectPlayerToSteal": "Select a player to steal from (optional)"
+  },
+  "discard": {
+    "title": "Discard Cards",
+    "instruction": "Select {{count}} cards to discard"
+  },
+  "win": {
+    "title": "{{player}} Wins!",
+    "points": "{{points}} Victory Points",
+    "playAgain": "Play Again"
+  }
+}

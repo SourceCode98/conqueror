@@ -1,0 +1,22 @@
+{
+  "INVALID_TOKEN": "Invalid or expired session. Please log in again.",
+  "NOT_IN_GAME": "You are not in this game.",
+  "GAME_NOT_FOUND": "Game not found.",
+  "NOT_YOUR_TURN": "It is not your turn.",
+  "WRONG_PHASE": "That action is not available right now.",
+  "INVALID_PLACEMENT": "Invalid placement: {{message}}",
+  "INSUFFICIENT_RESOURCES": "You don't have enough resources.",
+  "INVALID_TRADE": "Invalid trade: {{message}}",
+  "NO_TRADE_OFFER": "There is no active trade offer.",
+  "PLAYER_DID_NOT_ACCEPT": "That player has not accepted the trade.",
+  "DECK_EMPTY": "No development cards remaining.",
+  "NO_CARD": "You don't have that card or already played one this turn.",
+  "INVALID_RESOURCE": "Invalid resource selected.",
+  "SAME_HEX": "The Bandit must move to a different tile.",
+  "NO_BUILDING_ADJACENT": "That player has no building adjacent to that tile.",
+  "INTERNAL_ERROR": "An unexpected error occurred. Please try again.",
+  "UNKNOWN_ACTION": "Unknown action.",
+  "TRADE_IN_PROGRESS": "Cancel your current trade offer first.",
+  "NOT_A_PLAYER": "You are not a member of this game.",
+  "WRONG_DISCARD_AMOUNT": "You must discard exactly {{count}} cards."
+}

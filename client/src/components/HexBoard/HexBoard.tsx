@@ -1,0 +1,560 @@
+import { useRef, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { PublicGameState, VertexId, EdgeId, AxialCoord, HexTile, ResourceType } from '@conqueror/shared';
+import { edgeVertices, adjacentVertices } from '@conqueror/shared';
+import { useGameStore } from '../../store/gameStore.js';
+import { wsService } from '../../services/wsService.js';
+import { SettlementSvg, CitySvg, BanditSvg } from '../icons/GameIcons.js';
+import {
+  axialToPixel,
+  hexCornerPoints,
+  cornerPointsToString,
+  vertexToPixel,
+  edgeMidpoint,
+  BOARD_VIEWBOX,
+  TERRAIN_COLORS,
+  TERRAIN_HIGHLIGHT,
+  PLAYER_COLOR_HEX,
+  tokenColor,
+  TOKEN_PIPS,
+} from './hexLayout.js';
+
+interface HexBoardProps { state: PublicGameState }
+
+const SNAP_RADIUS = 28;
+
+function pageToSvg(svg: SVGSVGElement, pageX: number, pageY: number) {
+  const pt = svg.createSVGPoint();
+  pt.x = pageX; pt.y = pageY;
+  const m = svg.getScreenCTM();
+  if (!m) return null;
+  const { x, y } = pt.matrixTransform(m.inverse());
+  return { x, y };
+}
+
+function nearestVertex(svgX: number, svgY: number, vertices: readonly string[]): VertexId | null {
+  let best: VertexId | null = null, bestDist = SNAP_RADIUS;
+  for (const vid of vertices) {
+    const p = vertexToPixel(vid as VertexId);
+    const d = Math.hypot(p.x - svgX, p.y - svgY);
+    if (d < bestDist) { bestDist = d; best = vid as VertexId; }
+  }
+  return best;
+}
+
+function nearestEdge(svgX: number, svgY: number, edges: readonly string[]): EdgeId | null {
+  let best: EdgeId | null = null, bestDist = SNAP_RADIUS;
+  for (const eid of edges) {
+    const m = edgeMidpoint(eid as EdgeId);
+    const d = Math.hypot(m.x - svgX, m.y - svgY);
+    if (d < bestDist) { bestDist = d; best = eid as EdgeId; }
+  }
+  return best;
+}
+
+function nearestTile(svgX: number, svgY: number, tiles: HexTile[]): AxialCoord | null {
+  let best: AxialCoord | null = null, bestDist = Infinity;
+  for (const tile of tiles) {
+    const c = axialToPixel(tile.coord);
+    const d = Math.hypot(c.x - svgX, c.y - svgY);
+    if (d < bestDist) { bestDist = d; best = tile.coord; }
+  }
+  return best;
+}
+
+// ── Client-side placement validity filters (geometric only, no resource check) ─
+
+function validSettlementVerts(state: PublicGameState, playerId: string): Set<VertexId> {
+  const boardSet = new Set(state.board.vertices as VertexId[]);
+  const isSetup = state.phase === 'SETUP_FORWARD' || state.phase === 'SETUP_REVERSE';
+  const valid = new Set<VertexId>();
+  for (const vid of state.board.vertices as VertexId[]) {
+    if (state.buildings[vid]) continue;
+    const adj = adjacentVertices(vid, boardSet);
+    if (adj.some(v => state.buildings[v])) continue;
+    if (!isSetup) {
+      const hasRoad = (state.board.edges as EdgeId[]).some(eid => {
+        const [v1, v2] = edgeVertices(eid);
+        return (v1 === vid || v2 === vid) && state.roads[eid]?.playerId === playerId;
+      });
+      if (!hasRoad) continue;
+    }
+    valid.add(vid);
+  }
+  return valid;
+}
+
+function validCityVerts(state: PublicGameState, playerId: string): Set<VertexId> {
+  const valid = new Set<VertexId>();
+  for (const vid of state.board.vertices as VertexId[]) {
+    const b = state.buildings[vid];
+    if (b && b.playerId === playerId && b.type === 'settlement') valid.add(vid);
+  }
+  return valid;
+}
+
+function connectsAt(state: PublicGameState, playerId: string, edgeId: EdgeId, vertexId: VertexId): boolean {
+  const b = state.buildings[vertexId];
+  if (b && b.playerId !== playerId) return false;
+  if (b && b.playerId === playerId) return true;
+  return (state.board.edges as EdgeId[]).some(eid2 => {
+    if (eid2 === edgeId) return false;
+    const [a, c] = edgeVertices(eid2);
+    return (a === vertexId || c === vertexId) && state.roads[eid2]?.playerId === playerId;
+  });
+}
+
+function validRoadEdges(state: PublicGameState, playerId: string): Set<EdgeId> {
+  const valid = new Set<EdgeId>();
+  for (const eid of state.board.edges as EdgeId[]) {
+    if (state.roads[eid]) continue;
+    const [v1, v2] = edgeVertices(eid);
+    if (connectsAt(state, playerId, eid, v1) || connectsAt(state, playerId, eid, v2)) {
+      valid.add(eid);
+    }
+  }
+  return valid;
+}
+
+/** Inner-edge highlight polygon — slightly scaled inward from each hex */
+function innerHexPoints(center: { x: number; y: number }, scale = 0.88): string {
+  return Array.from({ length: 6 }, (_, i) => {
+    const angle = (Math.PI / 180) * (60 * i - 30);
+    const r = 60 * scale;
+    return `${center.x + r * Math.cos(angle)},${center.y + r * Math.sin(angle)}`;
+  }).join(' ');
+}
+
+function RoadSvg({ edgeId, color, opacity = 1, dashed = false }: {
+  edgeId: EdgeId; color: string; opacity?: number; dashed?: boolean;
+}) {
+  const [v1id, v2id] = edgeVertices(edgeId);
+  const p1 = vertexToPixel(v1id), p2 = vertexToPixel(v2id);
+  return (
+    <>
+      <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+        stroke="rgba(0,0,0,0.5)" strokeWidth={8} strokeLinecap="round" opacity={opacity}/>
+      <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+        stroke={color} strokeWidth={5} strokeLinecap="round" opacity={opacity}
+        strokeDasharray={dashed ? '7 4' : undefined}/>
+      <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+        stroke="rgba(255,255,255,0.15)" strokeWidth={1.5} strokeLinecap="round" opacity={opacity}/>
+    </>
+  );
+}
+
+const PORT_COLOR: Record<string, { bg: string; border: string; icon: string }> = {
+  timber: { bg: '#0f2e14', border: '#22c55e', icon: '🪵' },
+  clay:   { bg: '#3b1004', border: '#f97316', icon: '🧱' },
+  iron:   { bg: '#131c2b', border: '#94a3b8', icon: '⚙️' },
+  grain:  { bg: '#2e1d02', border: '#fbbf24', icon: '🌾' },
+  wool:   { bg: '#092b1b', border: '#86efac', icon: '🐑' },
+  any:    { bg: '#1a1a2e', border: '#6b7280', icon: '✦' },
+};
+
+function PortLabel({
+  vertices, resource, ratio,
+}: {
+  vertices: string[];
+  resource: ResourceType | null;
+  ratio: number;
+}) {
+  if (vertices.length < 2) return null;
+  const p1 = vertexToPixel(vertices[0] as VertexId);
+  const p2 = vertexToPixel(vertices[1] as VertexId);
+  const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+
+  // Push the label outward from board center
+  const dist = Math.hypot(mid.x, mid.y);
+  const nx = dist > 0 ? mid.x / dist : 0;
+  const ny = dist > 0 ? mid.y / dist : -1;
+  const lx = mid.x + nx * 30;
+  const ly = mid.y + ny * 30;
+
+  const key = resource ?? 'any';
+  const theme = PORT_COLOR[key] ?? PORT_COLOR.any;
+  const label = `${ratio}:1`;
+
+  return (
+    <g>
+      {/* Dock — connects the two coastal vertices */}
+      <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+        stroke={theme.border} strokeWidth={3} opacity={0.7}
+        strokeLinecap="round"/>
+      {/* Badge */}
+      <rect x={lx - 15} y={ly - 12} width={30} height={24} rx={6}
+        fill={theme.bg} stroke={theme.border} strokeWidth={1.5} opacity={0.92}/>
+      {/* Ratio */}
+      <text x={lx} y={ly + 5} textAnchor="middle" fontSize={10} fontWeight="bold" fill="white">
+        {label}
+      </text>
+      {/* Resource dot */}
+      <circle cx={lx + 12} cy={ly - 12} r={5}
+        fill={theme.border} stroke="#0a0a0a" strokeWidth={1}/>
+    </g>
+  );
+}
+
+export default function HexBoard({ state }: HexBoardProps) {
+  const { t } = useTranslation('game');
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  const {
+    boardMode, setBoardMode,
+    isMyTurn,
+    roadBuildingEdges, addRoadBuildingEdge,
+    setPendingBanditCoord,
+    dragPiece, setDragPiece,
+    cancelRoadBuilding,
+    localPlayerId,
+  } = useGameStore();
+
+  const myTurn = isMyTurn();
+
+  // Pre-compute valid placement positions (must be before snapVertex uses them)
+  const myId = localPlayerId ?? '';
+  let validSettVerts: Set<VertexId> | null = null;
+  let validCityVerts_: Set<VertexId> | null = null;
+  let validEdges: Set<EdgeId> | null = null;
+  try {
+    if (boardMode === 'place_settlement' && myTurn) validSettVerts = validSettlementVerts(state, myId);
+    if (boardMode === 'place_city'       && myTurn) validCityVerts_ = validCityVerts(state, myId);
+    if (boardMode === 'place_road'       && myTurn) validEdges = validRoadEdges(state, myId);
+  } catch { /* fall back to showing all positions */ }
+
+  const snapVertex: VertexId | null =
+    dragPiece && (dragPiece.type === 'settlement' || dragPiece.type === 'city')
+      ? nearestVertex(dragPiece.svgX, dragPiece.svgY,
+          dragPiece.type === 'settlement' && validSettVerts
+            ? [...validSettVerts]
+            : dragPiece.type === 'city' && validCityVerts_
+            ? [...validCityVerts_]
+            : state.board.vertices)
+      : null;
+  const snapEdge: EdgeId | null =
+    dragPiece?.type === 'road'
+      ? nearestEdge(dragPiece.svgX, dragPiece.svgY,
+          validEdges ? [...validEdges] : state.board.edges)
+      : null;
+  const snapTile: AxialCoord | null =
+    dragPiece?.type === 'bandit'
+      ? nearestTile(dragPiece.svgX, dragPiece.svgY, state.board.tiles) : null;
+  const validSnapTile = snapTile &&
+    !(snapTile.q === state.banditLocation.q && snapTile.r === state.banditLocation.r)
+    ? snapTile : null;
+
+  const handleDragMove = useCallback((e: PointerEvent) => {
+    if (!svgRef.current) return;
+    const p = pageToSvg(svgRef.current, e.clientX, e.clientY);
+    if (!p) return;
+    setDragPiece({ ...useGameStore.getState().dragPiece!, svgX: p.x, svgY: p.y });
+  }, []);
+
+  const handleDragEnd = useCallback((e: PointerEvent) => {
+    document.removeEventListener('pointermove', handleDragMove);
+    document.removeEventListener('pointerup', handleDragEnd);
+    const current = useGameStore.getState().dragPiece;
+    if (!current || !svgRef.current) { setDragPiece(null); return; }
+    const p = pageToSvg(svgRef.current, e.clientX, e.clientY);
+    if (!p) { setDragPiece(null); return; }
+    const { type } = current;
+    if (type === 'settlement' || type === 'city') {
+      const t = nearestVertex(p.x, p.y, state.board.vertices);
+      if (t) { wsService.send({ type: 'PLACE_BUILDING', payload: { gameId: state.gameId, vertexId: t, type } }); setBoardMode(null); }
+    } else if (type === 'road') {
+      const t = nearestEdge(p.x, p.y, state.board.edges);
+      if (t) {
+        if (roadBuildingEdges !== null) addRoadBuildingEdge(t);
+        else { wsService.send({ type: 'PLACE_ROAD', payload: { gameId: state.gameId, edgeId: t } }); setBoardMode(null); }
+      }
+    } else if (type === 'bandit') {
+      const t = nearestTile(p.x, p.y, state.board.tiles);
+      if (t && !(t.q === state.banditLocation.q && t.r === state.banditLocation.r))
+        setPendingBanditCoord(t);
+    }
+    setDragPiece(null);
+  }, [state, roadBuildingEdges, handleDragMove]);
+
+  useEffect(() => {
+    (window as any).__hexBoardStartDrag = (
+      type: 'settlement' | 'city' | 'road',
+      clientX: number, clientY: number,
+    ) => {
+      if (!svgRef.current) return;
+      const p = pageToSvg(svgRef.current, clientX, clientY);
+      if (!p) return;
+      setDragPiece({ type, svgX: p.x, svgY: p.y });
+      document.addEventListener('pointermove', handleDragMove);
+      document.addEventListener('pointerup', handleDragEnd);
+    };
+    return () => { delete (window as any).__hexBoardStartDrag; };
+  }, [handleDragMove, handleDragEnd]);
+
+  function handleVertexClick(vertexId: VertexId) {
+    if (!myTurn || dragPiece) return;
+    if (boardMode === 'place_settlement' || boardMode === 'place_city') {
+      wsService.send({ type: 'PLACE_BUILDING', payload: {
+        gameId: state.gameId, vertexId, type: boardMode === 'place_city' ? 'city' : 'settlement',
+      } });
+      setBoardMode(null);
+    }
+  }
+
+  function handleEdgeClick(edgeId: EdgeId) {
+    if (!myTurn || dragPiece) return;
+    if (boardMode === 'place_road') {
+      if (roadBuildingEdges !== null) addRoadBuildingEdge(edgeId);
+      else { wsService.send({ type: 'PLACE_ROAD', payload: { gameId: state.gameId, edgeId } }); setBoardMode(null); }
+    }
+  }
+
+  function handleTileClick(coord: AxialCoord) {
+    if (!myTurn) return;
+    if (boardMode === 'move_bandit') setPendingBanditCoord(coord);
+  }
+
+  function handleBanditPointerDown(e: React.PointerEvent<SVGGElement>) {
+    if (!myTurn || boardMode !== 'move_bandit' || !svgRef.current) return;
+    e.stopPropagation();
+    const p = pageToSvg(svgRef.current, e.clientX, e.clientY);
+    if (!p) return;
+    setDragPiece({ type: 'bandit', svgX: p.x, svgY: p.y });
+    document.addEventListener('pointermove', handleDragMove);
+    document.addEventListener('pointerup', handleDragEnd);
+  }
+
+  const isRobberClickable = boardMode === 'move_bandit' && myTurn && !dragPiece;
+  const isVertexClickable = (boardMode === 'place_settlement' || boardMode === 'place_city') && myTurn && !dragPiece;
+  const isEdgeClickable   = boardMode === 'place_road' && myTurn && !dragPiece;
+  const showDragVertex    = dragPiece && (dragPiece.type === 'settlement' || dragPiece.type === 'city');
+  const showDragEdge      = dragPiece?.type === 'road';
+  const showDragBandit    = dragPiece?.type === 'bandit';
+  const myColor = state.players.find(p => p.id === localPlayerId)?.color ?? 'red';
+
+  return (
+    <div className="relative w-full h-full flex items-center justify-center">
+      <svg
+        ref={svgRef}
+        viewBox={BOARD_VIEWBOX}
+        className="max-w-full max-h-full"
+        style={{ width: '100%', height: '100%' }}
+      >
+        <defs>
+          {/* Subtle vignette for ocean depth */}
+          <radialGradient id="oceanGrad" cx="50%" cy="50%" r="70%">
+            <stop offset="0%"   stopColor="#0d2a4a"/>
+            <stop offset="100%" stopColor="#060e1c"/>
+          </radialGradient>
+          {/* Hex inner glow on hover */}
+          <filter id="hexGlow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="blur"/>
+            <feFlood floodColor="#ffcc00" floodOpacity="0.3" result="color"/>
+            <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          {/* Token glow for 6 and 8 */}
+          <filter id="hotGlow" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="2.5" result="blur"/>
+            <feFlood floodColor="#dc2626" floodOpacity="0.5" result="color"/>
+            <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        {/* Deep ocean background */}
+        <rect x="-400" y="-400" width="800" height="800" fill="url(#oceanGrad)"/>
+
+        {/* Ocean grid lines (subtle depth lines) */}
+        {Array.from({ length: 9 }, (_, i) => (
+          <line key={`h${i}`} x1="-400" y1={-400 + i * 100} x2="400" y2={-400 + i * 100}
+            stroke="rgba(255,255,255,0.02)" strokeWidth={1}/>
+        ))}
+
+        {/* ── Ports ── */}
+        {state.board.ports.map((port, i) => (
+          <PortLabel key={i} vertices={port.vertices} resource={port.resource as ResourceType | null} ratio={port.ratio}/>
+        ))}
+
+        {/* ── Hex tiles ── */}
+        {state.board.tiles.map(tile => {
+          const center = axialToPixel(tile.coord);
+          const corners = hexCornerPoints(center);
+          const pts = cornerPointsToString(corners);
+          const innerPts = innerHexPoints(center, 0.87);
+          const fillColor = TERRAIN_COLORS[tile.terrain] ?? '#1a2a1a';
+          const hlColor   = TERRAIN_HIGHLIGHT[tile.terrain] ?? '#2a3a2a';
+          const pips = tile.numberToken ? TOKEN_PIPS[tile.numberToken] : 0;
+          const isHot = tile.numberToken === 6 || tile.numberToken === 8;
+          const isBandit = state.banditLocation.q === tile.coord.q && state.banditLocation.r === tile.coord.r;
+          const isSnapTarget = showDragBandit && !isBandit &&
+            validSnapTile?.q === tile.coord.q && validSnapTile?.r === tile.coord.r;
+          const clickable = isRobberClickable && !isBandit;
+
+          return (
+            <g key={`${tile.coord.q}:${tile.coord.r}`}
+              onClick={() => clickable && handleTileClick(tile.coord)}
+              style={{ cursor: clickable ? 'pointer' : 'default' }}>
+              {/* Outer hex — dark border */}
+              <polygon points={pts} fill={fillColor}
+                stroke={isSnapTarget ? '#ffcc00' : clickable ? '#ffcc00' : 'rgba(0,0,0,0.6)'}
+                strokeWidth={isSnapTarget ? 3 : clickable ? 2.5 : 1.5}/>
+
+              {/* Inner highlight edge — simulates 3D bevel */}
+              <polygon points={innerPts} fill="none"
+                stroke={hlColor} strokeWidth={1} opacity={0.5}/>
+
+              {/* Drag-over bandit tint */}
+              {showDragBandit && !isBandit && (
+                <polygon points={pts} fill="rgba(255,200,0,0.1)" stroke="rgba(255,200,0,0.3)" strokeWidth={2}
+                  style={{ pointerEvents: 'none' }}/>
+              )}
+
+              {/* Number token */}
+              {tile.numberToken && (
+                <g filter={isHot ? 'url(#hotGlow)' : undefined}>
+                  {/* Token disc */}
+                  <circle cx={center.x} cy={center.y} r={18}
+                    fill="#0a0a0a" stroke={isHot ? '#ff4444' : '#2a2a2a'} strokeWidth={2}/>
+                  <circle cx={center.x} cy={center.y} r={15}
+                    fill="none" stroke={isHot ? '#ff444440' : '#ffffff18'} strokeWidth={1}/>
+                  <text x={center.x} y={center.y + 5}
+                    textAnchor="middle" fontSize={13} fontWeight="bold"
+                    fill={tokenColor(tile.numberToken)}>
+                    {tile.numberToken}
+                  </text>
+                  {/* Probability pips */}
+                  {Array.from({ length: pips }, (_, i) => (
+                    <circle key={i}
+                      cx={center.x - ((pips - 1) * 3.5) + i * 7} cy={center.y + 15}
+                      r={2} fill={tokenColor(tile.numberToken!)}/>
+                  ))}
+                </g>
+              )}
+
+              {/* Bandit token */}
+              {isBandit && !showDragBandit && (
+                <BanditSvg cx={center.x} cy={center.y - 14}
+                  draggable={myTurn && boardMode === 'move_bandit'}
+                  onPointerDown={handleBanditPointerDown}/>
+              )}
+            </g>
+          );
+        })}
+
+        {/* ── Roads ── */}
+        {Object.entries(state.roads).map(([edgeId, road]) => {
+          const playerColor = state.players.find(p => p.id === road.playerId)?.color ?? 'red';
+          return <RoadSvg key={edgeId} edgeId={edgeId as EdgeId} color={PLAYER_COLOR_HEX[playerColor]}/>;
+        })}
+
+        {/* ── Buildings ── */}
+        {Object.entries(state.buildings).map(([vertexId, building]) => {
+          const pos = vertexToPixel(vertexId as VertexId);
+          const playerColor = state.players.find(p => p.id === building.playerId)?.color ?? 'red';
+          const fill = PLAYER_COLOR_HEX[playerColor];
+          return building.type === 'settlement'
+            ? <SettlementSvg key={vertexId} cx={pos.x} cy={pos.y} fill={fill}/>
+            : <CitySvg       key={vertexId} cx={pos.x} cy={pos.y} fill={fill}/>;
+        })}
+
+        {/* ── Drag ghosts ── */}
+        {showDragEdge && snapEdge && (
+          <RoadSvg edgeId={snapEdge} color={PLAYER_COLOR_HEX[myColor]} opacity={0.65} dashed/>
+        )}
+        {showDragVertex && snapVertex && (() => {
+          const pos = vertexToPixel(snapVertex);
+          const fill = PLAYER_COLOR_HEX[myColor];
+          return dragPiece!.type === 'settlement'
+            ? <SettlementSvg cx={pos.x} cy={pos.y} fill={fill} opacity={0.6}/>
+            : <CitySvg       cx={pos.x} cy={pos.y} fill={fill} opacity={0.6}/>;
+        })()}
+        {showDragBandit && dragPiece && (
+          <BanditSvg cx={dragPiece.svgX} cy={dragPiece.svgY}/>
+        )}
+
+        {/* ── Click vertex overlays ── */}
+        {isVertexClickable && state.board.vertices.map(vid => {
+          const isValid = boardMode === 'place_settlement'
+            ? validSettVerts?.has(vid as VertexId)
+            : validCityVerts_?.has(vid as VertexId);
+          if (!isValid) return null;
+          const pos = vertexToPixel(vid as VertexId);
+          return (
+            <circle key={vid} cx={pos.x} cy={pos.y} r={10}
+              fill="rgba(255,220,0,0.3)" stroke="#ffcc00" strokeWidth={1.5}
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleVertexClick(vid as VertexId)}/>
+          );
+        })}
+
+        {/* ── Drag vertex snap targets ── */}
+        {showDragVertex && state.board.vertices.map(vid => {
+          const validSet = boardMode === 'place_settlement' ? validSettVerts : validCityVerts_;
+          if (!validSet?.has(vid as VertexId)) return null;
+          const pos = vertexToPixel(vid as VertexId);
+          const isSnap = vid === snapVertex;
+          return (
+            <circle key={vid} cx={pos.x} cy={pos.y} r={isSnap ? 14 : 8}
+              fill={isSnap ? 'rgba(255,220,0,0.65)' : 'rgba(255,220,0,0.2)'}
+              stroke={isSnap ? '#ffcc00' : 'rgba(255,220,0,0.4)'}
+              strokeWidth={isSnap ? 2.5 : 1.5}/>
+          );
+        })}
+
+        {/* ── Click edge overlays ── */}
+        {isEdgeClickable && state.board.edges.map(eid => {
+          if (!validEdges?.has(eid as EdgeId)) return null;
+          const mid = edgeMidpoint(eid as EdgeId);
+          return (
+            <circle key={eid} cx={mid.x} cy={mid.y} r={8}
+              fill="rgba(255,220,0,0.3)" stroke="#ffcc00" strokeWidth={1.5}
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleEdgeClick(eid as EdgeId)}/>
+          );
+        })}
+
+        {/* ── Drag edge snap targets ── */}
+        {showDragEdge && state.board.edges.map(eid => {
+          if (!validEdges?.has(eid as EdgeId)) return null;
+          const mid = edgeMidpoint(eid as EdgeId);
+          const isSnap = eid === snapEdge;
+          return (
+            <circle key={eid} cx={mid.x} cy={mid.y} r={isSnap ? 12 : 6}
+              fill={isSnap ? 'rgba(255,220,0,0.65)' : 'rgba(255,220,0,0.15)'}
+              stroke={isSnap ? '#ffcc00' : 'rgba(255,220,0,0.35)'}
+              strokeWidth={isSnap ? 2.5 : 1.5}/>
+          );
+        })}
+      </svg>
+
+      {/* Mode bar */}
+      {boardMode && !dragPiece && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-gray-900/90 border border-amber-600 text-amber-300 px-5 py-2 rounded-full text-sm font-medium shadow-xl flex items-center gap-3 backdrop-blur-sm">
+          <span>
+            {boardMode === 'place_settlement' && t('actions.buildSettlement')}
+            {boardMode === 'place_city'       && t('actions.buildCity')}
+            {boardMode === 'place_road' && (roadBuildingEdges !== null
+              ? `Road Building: road ${roadBuildingEdges.length + 1}/2`
+              : t('actions.buildRoad'))}
+            {boardMode === 'move_bandit' && t('bandit.selectTile')}
+          </span>
+          {boardMode === 'move_bandit'
+            ? <span className="text-xs opacity-60">Drag or click a tile</span>
+            : <button className="text-xs underline opacity-70 hover:opacity-100" aria-label="Cancel"
+                onClick={() => { setBoardMode(null); cancelRoadBuilding(); }}>Cancel</button>
+          }
+        </div>
+      )}
+
+      {/* Drag hint */}
+      {dragPiece && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-gray-900/90 border border-gray-600 text-gray-300 px-5 py-2 rounded-full text-sm shadow-xl pointer-events-none select-none backdrop-blur-sm">
+          {dragPiece.type === 'bandit'
+            ? (validSnapTile ? '✓ Release to move bandit' : 'Drag to a tile…')
+            : (snapVertex || snapEdge ? '✓ Release to place' : 'Drag to a valid position…')
+          }
+        </div>
+      )}
+    </div>
+  );
+}

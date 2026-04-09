@@ -1,0 +1,13 @@
+{
+  "name": "conqueror",
+  "private": true,
+  "workspaces": ["shared", "server", "client"],
+  "scripts": {
+    "dev": "npm run build -w shared && concurrently \"npm run dev -w shared\" \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w shared && npm run build -w server && npm run build -w client",
+    "build:shared": "npm run build -w shared"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

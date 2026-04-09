@@ -1,0 +1,22 @@
+{
+  "INVALID_TOKEN": "Sesión inválida o expirada. Por favor inicia sesión nuevamente.",
+  "NOT_IN_GAME": "No eres parte de esta partida.",
+  "GAME_NOT_FOUND": "Partida no encontrada.",
+  "NOT_YOUR_TURN": "No es tu turno.",
+  "WRONG_PHASE": "Esa acción no está disponible ahora.",
+  "INVALID_PLACEMENT": "Colocación inválida: {{message}}",
+  "INSUFFICIENT_RESOURCES": "No tienes suficientes recursos.",
+  "INVALID_TRADE": "Intercambio inválido: {{message}}",
+  "NO_TRADE_OFFER": "No hay oferta de intercambio activa.",
+  "PLAYER_DID_NOT_ACCEPT": "Ese jugador no ha aceptado el intercambio.",
+  "DECK_EMPTY": "No quedan cartas de desarrollo.",
+  "NO_CARD": "No tienes esa carta o ya jugaste una esta vuelta.",
+  "INVALID_RESOURCE": "Recurso inválido seleccionado.",
+  "SAME_HEX": "El Bandido debe moverse a una casilla diferente.",
+  "NO_BUILDING_ADJACENT": "Ese jugador no tiene edificios adyacentes a esa casilla.",
+  "INTERNAL_ERROR": "Ocurrió un error inesperado. Por favor intenta nuevamente.",
+  "UNKNOWN_ACTION": "Acción desconocida.",
+  "TRADE_IN_PROGRESS": "Cancela tu oferta de intercambio actual primero.",
+  "NOT_A_PLAYER": "No eres miembro de esta partida.",
+  "WRONG_DISCARD_AMOUNT": "Debes descartar exactamente {{count}} cartas."
+}
