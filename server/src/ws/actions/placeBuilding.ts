@@ -7,6 +7,7 @@ import {
   recalculateSpecialCards,
   checkWinCondition,
   BUILD_COSTS,
+  EMPTY_RESOURCES,
 } from '@conqueror/shared';
 import type { GameOrchestrator } from '../../game/GameOrchestrator.js';
 import type { ClientMeta } from '../types.js';
@@ -36,22 +37,23 @@ export function handlePlaceBuilding(
     }
 
     orch.updateState(s => {
-      const player = s.players.find(p => p.id === meta.userId)!;
-      const newPlayers = s.players.map(p =>
-        p.id === meta.userId
-          ? {
-              ...p,
-              resources: subtractResources(p.resources, BUILD_COSTS.settlement),
-              settlementsLeft: p.settlementsLeft - 1,
-              victoryPoints: p.victoryPoints + 1,
-            }
-          : p
-      );
-      return {
+      const intermediate = {
         ...s,
-        buildings: { ...s.buildings, [vertexId]: { type: 'settlement', playerId: meta.userId } },
-        players: newPlayers,
+        buildings: { ...s.buildings, [vertexId]: { type: 'settlement' as const, playerId: meta.userId } },
+        players: s.players.map(p =>
+          p.id === meta.userId
+            ? {
+                ...p,
+                resources: subtractResources(p.resources, BUILD_COSTS.settlement),
+                settlementsLeft: p.settlementsLeft - 1,
+                victoryPoints: p.victoryPoints + 1,
+              }
+            : p
+        ),
       };
+      // Recalculate special cards — building can break opponent road networks
+      const updatedPlayers = recalculateSpecialCards(intermediate);
+      return { ...intermediate, players: updatedPlayers };
     });
   } else {
     const v = canPlaceCity(state, meta.userId, vertexId);
@@ -61,22 +63,23 @@ export function handlePlaceBuilding(
     }
 
     orch.updateState(s => {
-      const newPlayers = s.players.map(p =>
-        p.id === meta.userId
-          ? {
-              ...p,
-              resources: subtractResources(p.resources, BUILD_COSTS.city),
-              citiesLeft: p.citiesLeft - 1,
-              settlementsLeft: p.settlementsLeft + 1, // settlement piece returned
-              victoryPoints: p.victoryPoints + 1,     // city is +2 total, was +1 for settlement
-            }
-          : p
-      );
-      return {
+      const intermediate = {
         ...s,
-        buildings: { ...s.buildings, [vertexId]: { type: 'city', playerId: meta.userId } },
-        players: newPlayers,
+        buildings: { ...s.buildings, [vertexId]: { type: 'city' as const, playerId: meta.userId } },
+        players: s.players.map(p =>
+          p.id === meta.userId
+            ? {
+                ...p,
+                resources: subtractResources(p.resources, BUILD_COSTS.city),
+                citiesLeft: p.citiesLeft - 1,
+                settlementsLeft: p.settlementsLeft + 1, // settlement piece returned
+                victoryPoints: p.victoryPoints + 1,     // city is +2 total, was +1 for settlement
+              }
+            : p
+        ),
       };
+      const updatedPlayers = recalculateSpecialCards(intermediate);
+      return { ...intermediate, players: updatedPlayers };
     });
   }
 
@@ -91,6 +94,8 @@ export function handlePlaceBuilding(
     ctx.broadcastToRoom({ type: 'GAME_OVER', payload: { winnerId: winner, finalScores } });
   }
 
+  const actionLabel = type === 'settlement' ? 'builtSettlement' : 'builtCity';
   orch.addLogEntry(`log.built${type === 'settlement' ? 'Settlement' : 'City'}`, { player: meta.username }, meta.userId);
+  ctx.broadcastToRoom({ type: 'ACTION_TOAST', payload: { playerId: meta.userId, username: meta.username, action: actionLabel, extra: vertexId } });
   ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
 }

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { PLAYER_COLORS } from '@conqueror/shared';
+import { IS_VALID_PLAYER_COLOR } from '@conqueror/shared';
 import { startGame } from '../ws/gameStarter.js';
 
 export const gamesRouter = Router();
@@ -39,8 +39,8 @@ gamesRouter.post('/', (req, res) => {
     res.status(400).json({ error: 'maxPlayers must be 2-4' });
     return;
   }
-  if (!color || !PLAYER_COLORS.includes(color as any)) {
-    res.status(400).json({ error: 'Invalid color' });
+  if (!color || !IS_VALID_PLAYER_COLOR(color)) {
+    res.status(400).json({ error: 'Invalid color — send a hex color like #ef4444' });
     return;
   }
 
@@ -126,8 +126,8 @@ gamesRouter.post('/:id/join', (req, res) => {
   const userId = req.user.userId;
   const { color } = req.body as { color?: string };
 
-  if (!color || !PLAYER_COLORS.includes(color as any)) {
-    res.status(400).json({ error: 'Invalid color' });
+  if (!color || !IS_VALID_PLAYER_COLOR(color)) {
+    res.status(400).json({ error: 'Invalid color — send a hex color like #ef4444' });
     return;
   }
 

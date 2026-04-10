@@ -9,12 +9,24 @@ import type {
 } from '@conqueror/shared';
 import { hasResources, BUILD_COSTS } from '@conqueror/shared';
 
+export interface GameToast {
+  id: string;
+  type: 'dice_resources' | 'bank_trade' | 'action' | 'horn';
+  playerId: string;
+  username: string;
+  data: Record<string, any>;
+  timestamp: number;
+}
+
 export type InteractionMode = null | 'place_settlement' | 'place_city' | 'place_road' | 'move_bandit';
 
 interface GameStore {
   gameState: PublicGameState | null;
   localPlayerId: string | null;
   chatMessages: Array<{ fromPlayerId: string; username: string; text: string; timestamp: number }>;
+  toasts: GameToast[];
+  addToast: (toast: Omit<GameToast, 'id' | 'timestamp'>) => void;
+  removeToast: (id: string) => void;
 
   // Board interaction mode
   boardMode: InteractionMode;
@@ -60,6 +72,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   gameState: null,
   localPlayerId: null,
   chatMessages: [],
+  toasts: [],
   boardMode: null,
   roadBuildingEdges: null,
   pendingBanditCoord: null,
@@ -70,9 +83,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   setLocalPlayerId: (id) => set({ localPlayerId: id }),
 
+  addToast: (toast) => set(s => ({
+    toasts: [...s.toasts, { ...toast, id: `${Date.now()}-${Math.random()}`, timestamp: Date.now() }].slice(-8),
+  })),
+
+  removeToast: (id) => set(s => ({ toasts: s.toasts.filter(t => t.id !== id) })),
+
   resetGame: () => set({
     gameState: null,
     chatMessages: [],
+    toasts: [],
     boardMode: null,
     roadBuildingEdges: null,
     pendingBanditCoord: null,
@@ -108,9 +128,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     };
   }),
 
-  addChatMessage: (msg) => set(s => ({
-    chatMessages: [...s.chatMessages, msg].slice(-100),
-  })),
+  addChatMessage: (msg) => set(s => {
+    // Deduplicate: same sender + same timestamp = duplicate from reconnect
+    const key = `${msg.fromPlayerId}:${msg.timestamp}`;
+    if (s.chatMessages.some(m => `${m.fromPlayerId}:${m.timestamp}` === key)) return s;
+    return { chatMessages: [...s.chatMessages, msg].slice(-100) };
+  }),
 
   setBoardMode: (mode) => set({ boardMode: mode }),
 

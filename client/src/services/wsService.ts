@@ -12,6 +12,16 @@ class WSService {
   private token: string | null = null;
   private extraHandlers: MessageHandler[] = [];
   private intentionallyClosed = false;
+  // Dedup: key → timestamp of last processing (prevents double-fire from reconnects)
+  private recentKeys = new Map<string, number>();
+
+  private isDup(key: string, windowMs = 800): boolean {
+    const now = Date.now();
+    const last = this.recentKeys.get(key) ?? 0;
+    if (now - last < windowMs) return true;
+    this.recentKeys.set(key, now);
+    return false;
+  }
 
   connect(gameId: string, token: string): void {
     this.gameId = gameId;
@@ -93,6 +103,53 @@ class WSService {
       case 'CHAT':
         store.addChatMessage(msg.payload);
         break;
+      case 'DICE_ROLLED': {
+        const { roll, resources } = msg.payload;
+        const total = roll[0] + roll[1];
+        if (!this.isDup(`dice:${roll[0]}:${roll[1]}`)) {
+          store.addToast({
+            type: 'dice_resources',
+            playerId: '__dice__',
+            username: '',
+            data: { roll, resources: total === 7 ? {} : resources },
+          });
+        }
+        break;
+      }
+      case 'BANK_TRADE_EXECUTED': {
+        const key = `bank:${msg.payload.playerId}:${JSON.stringify(msg.payload.give)}`;
+        if (!this.isDup(key)) {
+          store.addToast({
+            type: 'bank_trade',
+            playerId: msg.payload.playerId,
+            username: msg.payload.username,
+            data: { give: msg.payload.give, want: msg.payload.want },
+          });
+        }
+        break;
+      }
+      case 'HORN_PLAYED':
+        if (!this.isDup(`horn:${msg.payload.fromPlayerId}`)) {
+          store.addToast({
+            type: 'horn',
+            playerId: msg.payload.fromPlayerId,
+            username: msg.payload.username,
+            data: {},
+          });
+        }
+        break;
+      case 'ACTION_TOAST': {
+        const key = `action:${msg.payload.playerId}:${msg.payload.action}:${msg.payload.extra ?? ''}`;
+        if (!this.isDup(key)) {
+          store.addToast({
+            type: 'action',
+            playerId: msg.payload.playerId,
+            username: msg.payload.username,
+            data: { action: msg.payload.action, extra: msg.payload.extra },
+          });
+        }
+        break;
+      }
     }
 
     // Notify extra handlers (for components that subscribe directly)

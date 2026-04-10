@@ -195,8 +195,6 @@ export default function ActionPanel({ gameState, gameId }: Props) {
   }) {
     const active = boardMode === mode;
     const affordable = canAfford(item);
-    const pieceType = mode === 'place_settlement' ? 'settlement'
-      : mode === 'place_city' ? 'city' : 'road';
     return (
       <button
         className={cn(
@@ -210,13 +208,6 @@ export default function ActionPanel({ gameState, gameId }: Props) {
         )}
         disabled={!affordable}
         onClick={() => setBoardMode(active ? null : mode)}
-        onPointerDown={(e) => {
-          if (!affordable) return;
-          if (!active) {
-            setBoardMode(mode);
-            (window as any).__hexBoardStartDrag?.(pieceType, e.clientX, e.clientY);
-          }
-        }}
       >
         <span className={cn('shrink-0', affordable && !active && 'drop-shadow-[0_0_4px_rgba(74,222,128,0.6)]')}>
           {icon}
@@ -228,7 +219,7 @@ export default function ActionPanel({ gameState, gameId }: Props) {
         {affordable && !active && (
           <span className="text-[9px] font-bold text-green-400 shrink-0">✓</span>
         )}
-        {active && <span className="text-[9px] text-amber-300 shrink-0">ON</span>}
+        {active && <span className="text-[9px] text-amber-300 shrink-0">TAP BOARD</span>}
       </button>
     );
   }
@@ -317,13 +308,6 @@ export default function ActionPanel({ gameState, gameId }: Props) {
         <button
           className={cn('btn-primary w-full flex items-center gap-2', boardMode && 'ring-2 ring-amber-300')}
           onClick={() => setBoardMode(boardMode ? null : (isSettlement ? 'place_settlement' : 'place_road'))}
-          onPointerDown={(e) => {
-            if (!boardMode) {
-              const m = isSettlement ? 'place_settlement' : 'place_road';
-              setBoardMode(m);
-              (window as any).__hexBoardStartDrag?.(isSettlement ? 'settlement' : 'road', e.clientX, e.clientY);
-            }
-          }}
         >
           {isSettlement ? <SettlementIcon size={18} color="white"/> : <RoadIcon size={18} color="white"/>}
           {boardMode ? 'Click a spot on the board…' : (isSettlement ? 'Place Settlement' : 'Place Road')}
@@ -418,52 +402,39 @@ export default function ActionPanel({ gameState, gameId }: Props) {
       // Non-offerer: TradeResponsePanel modal handles it (see GamePage)
       return (
         <div className="text-center py-4 text-gray-500 text-sm text-pretty">
-          Incoming trade offer — see the modal below
+          Incoming trade offer — see the panel below
         </div>
       );
     }
 
-    // Offerer's waiting view
-    const acceptors = Object.entries(offer.respondents).filter(([, s]) => s === 'accept');
-    const pending   = Object.entries(offer.respondents).filter(([, s]) => s === 'pending');
-    const rejected  = Object.entries(offer.respondents).filter(([, s]) => s === 'reject');
+    // Offerer view — show full status
     return (
       <div className="space-y-2">
         <p className="text-amber-400 font-semibold text-sm">{t('trade.waitingForResponse')}</p>
 
-        {acceptors.length === 0 && pending.length === 0 && (
-          <p className="text-gray-500 text-xs text-center">No one can fulfill this trade</p>
-        )}
-
-        {acceptors.map(([pid]) => {
+        {Object.entries(offer.respondents).map(([pid, status]) => {
           const p = gameState.players.find(pl => pl.id === pid);
           return (
-            <div key={pid} className="flex items-center justify-between bg-green-900/30 border border-green-800 rounded-lg px-3 py-2 text-sm">
-              <span className="text-green-300 font-medium">{p?.username} ✓</span>
-              <button className="btn-success text-xs px-2 py-1"
-                onClick={() => send('ACCEPT_PLAYER_TRADE', { fromPlayerId: pid })}>
-                Trade
-              </button>
-            </div>
-          );
-        })}
-
-        {pending.map(([pid]) => {
-          const p = gameState.players.find(pl => pl.id === pid);
-          return (
-            <div key={pid} className="flex items-center justify-between bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
-              <span className="text-gray-400">{p?.username}</span>
-              <span className="text-gray-600 text-xs">⏳ deciding</span>
-            </div>
-          );
-        })}
-
-        {rejected.map(([pid]) => {
-          const p = gameState.players.find(pl => pl.id === pid);
-          return (
-            <div key={pid} className="flex items-center justify-between px-3 py-2 text-sm opacity-40">
-              <span className="text-gray-500">{p?.username}</span>
-              <span className="text-red-500 text-xs">✕</span>
+            <div key={pid} className={cn(
+              'flex items-center justify-between rounded-lg px-3 py-2 text-sm border transition-colors',
+              status === 'accept'  ? 'bg-green-900/30 border-green-800' :
+              status === 'reject'  ? 'border-gray-800 opacity-50' :
+              'bg-gray-800 border-gray-700',
+            )}>
+              <span className={cn(
+                'font-medium',
+                status === 'accept' ? 'text-green-300' : status === 'reject' ? 'text-gray-500' : 'text-gray-400',
+              )}>
+                {p?.username}
+              </span>
+              {status === 'accept' && (
+                <button className="btn-success text-xs px-2 py-1"
+                  onClick={() => send('ACCEPT_PLAYER_TRADE', { fromPlayerId: pid })}>
+                  Trade ✓
+                </button>
+              )}
+              {status === 'pending' && <span className="text-gray-600 text-xs">⏳</span>}
+              {status === 'reject'  && <span className="text-red-500 text-xs">✕</span>}
             </div>
           );
         })}

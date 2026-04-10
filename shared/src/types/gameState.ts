@@ -67,6 +67,16 @@ export interface GameLogEntry {
   params?: Record<string, string | number>;
 }
 
+export interface LastAction {
+  playerId: string;
+  username: string;
+  type: string;        // e.g. 'builtRoad', 'bankTrade', 'buyDevCard', etc.
+  description: string; // human-readable
+  timestamp: number;
+  highlightEdgeId?: string;
+  highlightVertexId?: string;
+}
+
 export interface GameState {
   gameId: string;
   phase: GamePhase;
@@ -89,6 +99,9 @@ export interface GameState {
   discardsPending: Record<string, number>; // playerId → how many to discard
   log: GameLogEntry[];
   winner: string | null;
+  turnStartTime: number | null;    // ms timestamp when current turn started
+  turnTimeLimit: number | null;    // seconds per turn, null = no limit
+  lastAction: LastAction | null;   // last notable action for toasts
 }
 
 /**
@@ -106,4 +119,9 @@ export interface PublicPlayerState extends Omit<PlayerState, 'devCards' | 'victo
 export interface PublicGameState extends Omit<GameState, 'devCardDeck' | 'players'> {
   devCardDeckCount: number;
   players: PublicPlayerState[];
+}
+
+// Lobby config sent with game start
+export interface GameConfig {
+  turnTimeLimit: number | null; // seconds, null = no limit
 }

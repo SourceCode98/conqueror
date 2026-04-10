@@ -59,5 +59,6 @@ export function handlePlaceRoad(
   });
 
   orch.addLogEntry('log.builtRoad', { player: meta.username }, meta.userId);
+  ctx.broadcastToRoom({ type: 'ACTION_TOAST', payload: { playerId: meta.userId, username: meta.username, action: 'builtRoad', extra: payload.edgeId } });
   ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
 }

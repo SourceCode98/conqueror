@@ -9,10 +9,11 @@ import { useAuthStore } from './store/authStore.js';
 // Hydrate auth from localStorage before render
 useAuthStore.getState().hydrate();
 
+// StrictMode intentionally double-mounts components, which causes WebSocket
+// connections to fire twice and broadcasts duplicate events to all players.
+// Keep it off for local multiplayer testing.
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
-  </React.StrictMode>,
+  <BrowserRouter>
+    <App />
+  </BrowserRouter>,
 );

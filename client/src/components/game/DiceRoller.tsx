@@ -1,6 +1,46 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence, useAnimation } from 'motion/react';
 import { cn } from '../../lib/cn.js';
+import { safePlay, playDiceSound } from './SoundPanel.js';
+
+export type DiceAnimState = 'idle' | 'rolling' | 'showing';
+
+/** Reusable hook: drives dice animation when diceRoll changes */
+export function useDiceAnimation(diceRoll: [number, number] | null, phase: string) {
+  const [animState, setAnimState] = useState<DiceAnimState>('idle');
+  const [faces, setFaces] = useState<[number, number]>([1, 1]);
+  const prevPhase = useRef(phase);
+
+  useEffect(() => {
+    const d0 = diceRoll?.[0];
+    const d1 = diceRoll?.[1];
+    if (!d0 || !d1) return;
+    setAnimState('rolling');
+    safePlay(playDiceSound);
+    let ticks = 0;
+    const id = setInterval(() => {
+      ticks++;
+      if (ticks < 20) {
+        setFaces([(Math.floor(Math.random() * 6) + 1) as 1, (Math.floor(Math.random() * 6) + 1) as 1]);
+      } else {
+        clearInterval(id);
+        setFaces([d0, d1]);
+        setAnimState('showing');
+      }
+    }, 65);
+    return () => clearInterval(id);
+  }, [diceRoll?.[0], diceRoll?.[1]]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (prevPhase.current !== 'ROLL' && phase === 'ROLL') {
+      setAnimState('idle');
+      setFaces([1, 1]);
+    }
+    prevPhase.current = phase;
+  }, [phase]);
+
+  return { animState, faces };
+}
 
 interface Props {
   diceRoll: [number, number] | null;
@@ -17,7 +57,7 @@ const PIPS: Record<number, [number, number][]> = {
   6: [[28, 22], [72, 22], [28, 50], [72, 50], [28, 78], [72, 78]],
 };
 
-function Die({ value, rolling, dim }: { value: number; rolling: boolean; dim: boolean }) {
+export function Die({ value, rolling, dim, size = 48 }: { value: number; rolling: boolean; dim: boolean; size?: number }) {
   const controls = useAnimation();
   const pips = PIPS[Math.max(1, Math.min(6, value))] ?? PIPS[1];
   const isHot = value === 6 || value === 8;
@@ -35,21 +75,22 @@ function Die({ value, rolling, dim }: { value: number; rolling: boolean; dim: bo
     }
   }, [rolling, controls]);
 
+  const pip = Math.round(size / 5);
   return (
     <motion.div
       animate={controls}
       className={cn(
-        'relative size-12 rounded-xl shadow-md border-2 select-none',
+        'relative rounded-xl shadow-md border-2 select-none flex-shrink-0',
         dim ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-100',
       )}
-      style={{ opacity: dim ? 0.35 : 1 }}
+      style={{ width: size, height: size, opacity: dim ? 0.35 : 1 }}
     >
       {pips.map(([px, py], i) => (
         <div
           key={i}
           className="absolute rounded-full"
           style={{
-            width: 10, height: 10,
+            width: pip, height: pip,
             left: `${px}%`, top: `${py}%`,
             transform: 'translate(-50%,-50%)',
             backgroundColor: dim ? '#666' : isHot ? '#dc2626' : '#111827',
@@ -61,49 +102,7 @@ function Die({ value, rolling, dim }: { value: number; rolling: boolean; dim: bo
 }
 
 export default function DiceRoller({ diceRoll, phase, isMyTurn }: Props) {
-  type State = 'idle' | 'rolling' | 'showing';
-  const [animState, setAnimState] = useState<State>('idle');
-  const [faces, setFaces] = useState<[number, number]>([1, 1]);
-  const prevPhase = useRef(phase);
-
-  // Trigger animation when diceRoll changes to a new non-null value.
-  // Using raw values as deps so React's dep comparison handles dedup.
-  // No external guard — cleanup cancels the previous run's interval cleanly.
-  useEffect(() => {
-    const d0 = diceRoll?.[0];
-    const d1 = diceRoll?.[1];
-    if (!d0 || !d1) return;
-
-    setAnimState('rolling');
-    let ticks = 0;
-
-    const id = setInterval(() => {
-      ticks++;
-      if (ticks < 20) {
-        setFaces([
-          (Math.floor(Math.random() * 6) + 1) as 1,
-          (Math.floor(Math.random() * 6) + 1) as 1,
-        ]);
-      } else {
-        clearInterval(id);
-        setFaces([d0, d1]);
-        setAnimState('showing');
-      }
-    }, 65);
-
-    return () => clearInterval(id);
-    // Depend on the actual integer values — changes only when a new roll arrives
-  }, [diceRoll?.[0], diceRoll?.[1]]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Reset when a new ROLL phase starts
-  useEffect(() => {
-    if (prevPhase.current !== 'ROLL' && phase === 'ROLL') {
-      setAnimState('idle');
-      setFaces([1, 1]);
-    }
-    prevPhase.current = phase;
-  }, [phase]);
-
+  const { animState, faces } = useDiceAnimation(diceRoll, phase);
   const rolling    = animState === 'rolling';
   const showing    = animState === 'showing';
   const awaitRoll  = phase === 'ROLL' && isMyTurn;

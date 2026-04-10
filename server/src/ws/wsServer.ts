@@ -11,6 +11,9 @@ import type { ClientMeta } from './types.js';
 const rooms = new Map<string, Set<WebSocket>>();
 // Client metadata
 const clientMeta = new WeakMap<WebSocket, ClientMeta>();
+// Horn rate limiting: `${gameId}:${userId}` → last horn timestamp
+const hornLastUsed = new Map<string, number>();
+const HORN_COOLDOWN_MS = 30_000; // 30 seconds
 
 function getOrLoadOrchestrator(gameId: string) {
   return getOrchestrator(gameId);
@@ -40,6 +43,11 @@ function handleMessage(ws: WebSocket, data: RawData): void {
 
   if (msg.type === 'CHAT') {
     handleChat(ws, msg.payload as { gameId: string; text: string });
+    return;
+  }
+
+  if (msg.type === 'HORN') {
+    handleHorn(ws, msg.payload as { gameId: string });
     return;
   }
 
@@ -124,6 +132,26 @@ function handleChat(ws: WebSocket, payload: { gameId: string; text: string }): v
   broadcastToRoom(meta.gameId, {
     type: 'CHAT',
     payload: { fromPlayerId: meta.userId, username: meta.username, text, timestamp: Date.now() },
+  });
+}
+
+function handleHorn(ws: WebSocket, payload: { gameId: string }): void {
+  const meta = clientMeta.get(ws);
+  if (!meta) return;
+  const key = `${meta.gameId}:${meta.userId}`;
+  const last = hornLastUsed.get(key) ?? 0;
+  const now = Date.now();
+  if (now - last < HORN_COOLDOWN_MS) {
+    sendTo(ws, {
+      type: 'ERROR',
+      payload: { code: 'HORN_COOLDOWN', message: `Wait ${Math.ceil((HORN_COOLDOWN_MS - (now - last)) / 1000)}s before honking again` },
+    });
+    return;
+  }
+  hornLastUsed.set(key, now);
+  broadcastToRoom(meta.gameId, {
+    type: 'HORN_PLAYED',
+    payload: { fromPlayerId: meta.userId, username: meta.username },
   });
 }
 

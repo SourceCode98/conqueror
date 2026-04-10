@@ -52,7 +52,9 @@ export const VICTORY_POINTS_TO_WIN = 10;
 export const GRAND_ROAD_MIN_LENGTH = 5;
 export const SUPREME_ARMY_MIN_KNIGHTS = 3;
 
+/** Legacy named colors kept for backward-compat; server now accepts any #rrggbb hex */
 export const PLAYER_COLORS = ['red', 'blue', 'green', 'orange'] as const;
+export const IS_VALID_PLAYER_COLOR = (c: string) => /^#[0-9a-fA-F]{6}$/.test(c);
 
 // Starting pieces per player
 export const STARTING_SETTLEMENTS = 5;

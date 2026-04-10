@@ -70,33 +70,42 @@ export function edgeMidpoint(edgeId: EdgeId): { x: number; y: number } {
 /** SVG viewBox covering the full standard board */
 export const BOARD_VIEWBOX = '-280 -280 560 560';
 
-/** Color map for terrain types — deep, rich, dark palette to match the card aesthetic */
+/** Color map for terrain types — each terrain has a clearly distinct hue */
 export const TERRAIN_COLORS: Record<string, string> = {
-  timber: '#1b4a1e',
-  clay:   '#7a1e06',
-  iron:   '#1e2d3d',
-  grain:  '#5a3a02',
-  wool:   '#1a5028',
-  desert: '#3d2e14',
+  timber: '#0d3518',   // dark pine green
+  clay:   '#6e1804',   // deep burnt sienna
+  iron:   '#1a2640',   // dark slate blue-grey
+  grain:  '#5c3d00',   // deep amber-brown
+  wool:   '#2a5c00',   // vivid meadow green (lighter/yellower than timber)
+  desert: '#5c4a18',   // warm sandy tan
 };
 
 /** Slightly lighter highlight for the inner hex edge effect */
 export const TERRAIN_HIGHLIGHT: Record<string, string> = {
-  timber: '#2a6e2e',
-  clay:   '#b02a0a',
-  iron:   '#2e4257',
-  grain:  '#8a5c04',
-  wool:   '#287840',
-  desert: '#5e4820',
+  timber: '#1a5c28',   // mid forest green
+  clay:   '#a0300e',   // bright brick red
+  iron:   '#2a3e5c',   // steel blue
+  grain:  '#9a6a00',   // golden amber
+  wool:   '#48a000',   // bright lime-green
+  desert: '#8a7030',   // warm sand highlight
 };
 
-/** Player colors */
+/** Legacy named-color → hex map (for games created before free-pick colors) */
 export const PLAYER_COLOR_HEX: Record<string, string> = {
   red:    '#ef4444',
   blue:   '#3b82f6',
   green:  '#22c55e',
   orange: '#f97316',
 };
+
+/**
+ * Resolve a player color value to a CSS hex string.
+ * Accepts both legacy named colors ("red") and new free-pick hex values ("#e53e3e").
+ */
+export function resolvePlayerColor(color: string): string {
+  if (color.startsWith('#')) return color;
+  return PLAYER_COLOR_HEX[color] ?? '#888888';
+}
 
 /** Number token colors — high contrast against the dark token disc */
 export function tokenColor(num: number): string {

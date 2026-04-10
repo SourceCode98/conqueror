@@ -35,5 +35,9 @@ export function handleBankTrade(
   }));
 
   orch.addLogEntry('log.bankTrade', { player: meta.username }, meta.userId);
+  ctx.broadcastToRoom({
+    type: 'BANK_TRADE_EXECUTED',
+    payload: { playerId: meta.userId, username: meta.username, give: payload.give, want: payload.want },
+  });
   ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
 }

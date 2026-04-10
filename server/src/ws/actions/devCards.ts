@@ -70,6 +70,7 @@ export function handleBuyDevCard(
   }
 
   orch.addLogEntry('log.boughtDevCard', { player: meta.username }, meta.userId);
+  ctx.broadcastToRoom({ type: 'ACTION_TOAST', payload: { playerId: meta.userId, username: meta.username, action: 'boughtDevCard' } });
   ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
 }
 

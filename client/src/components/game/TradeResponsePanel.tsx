@@ -1,13 +1,17 @@
 /**
- * Trade response modal — shown to players who receive a trade offer.
- * Half-screen overlay. Self-contained, reads from store.
+ * Trade response panel — shown to all players when a trade offer is active.
+ * - Offerer sees: all player accept/reject/pending statuses, can confirm with any acceptor
+ * - Others see: the offer details, accept/decline, and can counter-offer
+ * Counter-offer: cancel current trade, then open offer panel with inverted resources
  */
-import { motion } from 'motion/react';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import type { ResourceType } from '@conqueror/shared';
-import { ALL_RESOURCES } from '@conqueror/shared';
+import { ALL_RESOURCES, EMPTY_RESOURCES } from '@conqueror/shared';
 import { wsService } from '../../services/wsService.js';
 import { useGameStore } from '../../store/gameStore.js';
 import { RESOURCE_ICON_MAP } from '../icons/GameIcons.js';
+import { resolvePlayerColor } from '../HexBoard/hexLayout.js';
 import { cn } from '../../lib/cn.js';
 
 const CARD_THEME: Record<ResourceType, { bg: string; border: string; label: string }> = {
@@ -19,37 +23,38 @@ const CARD_THEME: Record<ResourceType, { bg: string; border: string; label: stri
 };
 
 function ResourceRow({
-  label, accentColor, bundle,
+  label, accentColor, bundle, compact,
 }: {
   label: string;
   accentColor: string;
   bundle: Record<ResourceType, number>;
+  compact?: boolean;
 }) {
   const cards = ALL_RESOURCES.filter(r => bundle[r] > 0);
+  if (cards.length === 0) return null;
   return (
-    <div className="rounded-xl border border-gray-700 bg-gray-800 p-3">
-      <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: accentColor }}>
+    <div className={cn('rounded-xl border border-gray-700 bg-gray-800', compact ? 'p-2' : 'p-3')}>
+      <p className={cn('font-bold uppercase tracking-widest mb-1.5', compact ? 'text-[9px]' : 'text-[10px]')} style={{ color: accentColor }}>
         {label}
       </p>
-      {cards.length === 0 ? (
-        <p className="text-xs text-gray-600 italic">Nothing</p>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          {cards.map(r => (
-            <div key={r}
-              className="flex flex-col items-center rounded-xl border py-1.5 px-2"
-              style={{ backgroundColor: CARD_THEME[r].bg, borderColor: CARD_THEME[r].border }}>
-              {RESOURCE_ICON_MAP[r]?.({ size: 26 })}
-              <span className="text-[9px] font-bold tabular-nums mt-0.5" style={{ color: CARD_THEME[r].border }}>
-                ×{bundle[r]}
-              </span>
+      <div className="flex flex-wrap gap-1.5">
+        {cards.map(r => (
+          <div key={r}
+            className={cn('flex flex-col items-center rounded-xl border', compact ? 'py-1 px-1.5' : 'py-1.5 px-2')}
+            style={{ backgroundColor: CARD_THEME[r].bg, borderColor: CARD_THEME[r].border }}>
+            {RESOURCE_ICON_MAP[r]?.({ size: compact ? 20 : 26 })}
+            <span className={cn('font-bold tabular-nums mt-0.5', compact ? 'text-[8px]' : 'text-[9px]')}
+              style={{ color: CARD_THEME[r].border }}>
+              ×{bundle[r]}
+            </span>
+            {!compact && (
               <span className="text-[7px] uppercase" style={{ color: CARD_THEME[r].border, opacity: 0.7 }}>
                 {CARD_THEME[r].label}
               </span>
-            </div>
-          ))}
-        </div>
-      )}
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -57,24 +62,36 @@ function ResourceRow({
 interface Props { gameId: string }
 
 export default function TradeResponsePanel({ gameId }: Props) {
-  const { gameState, myPlayer } = useGameStore();
+  const { gameState, myPlayer, openTradePanel } = useGameStore();
   const offer = gameState?.tradeOffer;
   const me = myPlayer();
+  const [counterMode, setCounterMode] = useState(false);
 
   if (!offer || !me) return null;
 
   const offerer = gameState?.players.find(p => p.id === offer.fromPlayerId);
   const myResources = me.resources as Record<ResourceType, number>;
+  const isOfferer = offer.fromPlayerId === me.id;
 
-  // Check if local player can fulfill the trade (they need to give what offerer wants)
   const canFulfill = ALL_RESOURCES.every(r => myResources[r] >= offer.want[r]);
-
-  // Already responded?
   const myResponse = offer.respondents[me.id];
   const alreadyResponded = myResponse === 'accept' || myResponse === 'reject';
 
+  const acceptors = Object.entries(offer.respondents).filter(([, s]) => s === 'accept');
+  const pending   = Object.entries(offer.respondents).filter(([, s]) => s === 'pending');
+  const rejected  = Object.entries(offer.respondents).filter(([, s]) => s === 'reject');
+
   function respond(response: 'accept' | 'reject') {
     wsService.send({ type: 'RESPOND_TRADE', payload: { gameId, response } });
+  }
+
+  function sendCounterOffer() {
+    // Cancel current trade, then open TradeOfferPanel pre-configured
+    // We store the counter data in the store so TradeOfferPanel can pick it up
+    wsService.send({ type: 'CANCEL_TRADE', payload: { gameId } });
+    // Give a tiny delay for the state update then open the offer panel
+    setTimeout(() => openTradePanel('offer'), 150);
+    setCounterMode(false);
   }
 
   return (
@@ -91,83 +108,148 @@ export default function TradeResponsePanel({ gameId }: Props) {
         <div className="w-10 h-1 rounded-full bg-gray-700"/>
       </div>
 
-      <div className="px-5 pb-2 space-y-4">
-        {/* Header */}
+      <div className="px-5 pb-2 space-y-3">
+
+        {/* ── Header ── */}
         <div className="flex items-center justify-between">
           <h2 className="text-amber-400 font-bold text-base">
-            🤝 Trade from {offerer?.username}
+            🤝 Trade {isOfferer ? 'Offer' : `from ${offerer?.username}`}
           </h2>
-          {alreadyResponded && (
-            <span className={cn(
-              'text-xs font-semibold px-2 py-0.5 rounded-full',
-              myResponse === 'accept' ? 'bg-green-800 text-green-200' : 'bg-red-900 text-red-300',
-            )}>
-              {myResponse === 'accept' ? 'Accepted' : 'Declined'}
-            </span>
+          {isOfferer && (
+            <button
+              className="text-xs text-red-400 hover:text-red-300 border border-red-800 hover:border-red-600 rounded px-2 py-0.5 transition-colors"
+              onClick={() => wsService.send({ type: 'CANCEL_TRADE', payload: { gameId } })}
+            >
+              Cancel
+            </button>
           )}
         </div>
 
-        {/* They give you */}
-        <ResourceRow
-          label="They give you"
-          accentColor="#4ade80"
-          bundle={offer.give as Record<ResourceType, number>}
-        />
+        {/* ── Offer summary ── */}
+        <div className="grid grid-cols-2 gap-2">
+          <ResourceRow label="They give you" accentColor="#4ade80" bundle={offer.give as any} compact/>
+          <ResourceRow label="You give them" accentColor="#f97316" bundle={offer.want as any} compact/>
+        </div>
 
-        {/* You give them */}
-        <ResourceRow
-          label="You give them"
-          accentColor="#f97316"
-          bundle={offer.want as Record<ResourceType, number>}
-        />
-
-        {/* Resource check */}
-        {!canFulfill && (
-          <div className="rounded-xl border border-red-900 bg-red-950/40 p-3">
-            <p className="text-red-400 text-sm font-medium">You don't have the required resources</p>
-            <div className="flex flex-wrap gap-1 mt-1.5">
-              {ALL_RESOURCES.filter(r => offer.want[r] > 0).map(r => {
-                const missing = offer.want[r] - myResources[r];
-                if (missing <= 0) return null;
-                return (
-                  <span key={r} className="text-[10px] text-red-300 bg-red-900/40 rounded px-1.5 py-0.5">
-                    Missing {missing}× {CARD_THEME[r].label}
-                  </span>
-                );
-              })}
-            </div>
+        {/* ── All player statuses ── */}
+        <div className="rounded-xl border border-gray-700 bg-gray-800/60 p-2">
+          <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-2">Responses</p>
+          <div className="flex flex-col gap-1">
+            {gameState!.players.filter(p => p.id !== offer.fromPlayerId).map(p => {
+              const status = offer.respondents[p.id] ?? 'pending';
+              const color = resolvePlayerColor(p.color);
+              return (
+                <div key={p.id} className="flex items-center justify-between px-2 py-1 rounded-lg"
+                  style={{ background: status === 'accept' ? 'rgba(21,128,61,0.2)' : status === 'reject' ? 'rgba(127,29,29,0.2)' : 'rgba(31,41,55,0.6)' }}>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }}/>
+                    <span className="text-xs font-medium" style={{ color }}>{p.username}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={cn('text-[10px] font-semibold',
+                      status === 'accept' ? 'text-green-400' : status === 'reject' ? 'text-red-400' : 'text-gray-500')}>
+                      {status === 'accept' ? '✓ Accept' : status === 'reject' ? '✕ Decline' : '⏳ Deciding'}
+                    </span>
+                    {/* Offerer can confirm trade with acceptors */}
+                    {isOfferer && status === 'accept' && (
+                      <button
+                        className="text-[10px] bg-green-700 hover:bg-green-600 text-white rounded px-2 py-0.5 transition-colors"
+                        onClick={() => wsService.send({ type: 'ACCEPT_PLAYER_TRADE', payload: { gameId, fromPlayerId: p.id } })}
+                      >
+                        Confirm ✓
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
+        </div>
+
+        {/* ── Responder actions ── */}
+        {!isOfferer && !alreadyResponded && (
+          <>
+            {/* Resource check */}
+            {!canFulfill && (
+              <div className="rounded-xl border border-red-900 bg-red-950/40 p-2">
+                <p className="text-red-400 text-xs font-medium">You don't have the required resources</p>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {ALL_RESOURCES.filter(r => offer.want[r] > 0 && myResources[r] < offer.want[r]).map(r => {
+                    const missing = offer.want[r] - myResources[r];
+                    return (
+                      <span key={r} className="text-[10px] text-red-300 bg-red-900/40 rounded px-1.5 py-0.5">
+                        Missing {missing}× {CARD_THEME[r].label}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                className={cn('flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors',
+                  canFulfill ? 'bg-green-700 hover:bg-green-600 text-white' : 'bg-gray-700 text-gray-500 cursor-not-allowed')}
+                disabled={!canFulfill}
+                onClick={() => respond('accept')}
+              >
+                ✓ Accept
+              </button>
+              <button
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-red-900 hover:bg-red-800 text-white transition-colors"
+                onClick={() => respond('reject')}
+              >
+                ✕ Decline
+              </button>
+            </div>
+
+            {/* Counter-offer */}
+            <button
+              className="w-full py-2 rounded-xl text-sm font-semibold border border-amber-700 text-amber-400 hover:bg-amber-900/30 transition-colors"
+              onClick={() => setCounterMode(true)}
+            >
+              ↩ Counter-offer
+            </button>
+          </>
         )}
 
-        {/* Actions */}
-        {!alreadyResponded ? (
-          <div className="flex gap-2">
-            <button
-              className={cn(
-                'flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors',
-                canFulfill
-                  ? 'bg-green-700 hover:bg-green-600 text-white'
-                  : 'bg-gray-700 text-gray-500 cursor-not-allowed',
-              )}
-              disabled={!canFulfill}
-              onClick={() => respond('accept')}
-            >
-              ✓ Accept
-            </button>
-            <button
-              className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-red-900 hover:bg-red-800 text-white transition-colors"
-              onClick={() => respond('reject')}
-            >
-              ✕ Decline
-            </button>
-          </div>
-        ) : (
+        {/* Already responded */}
+        {!isOfferer && alreadyResponded && (
           <p className="text-center text-gray-500 text-sm">
-            {myResponse === 'accept'
-              ? 'Waiting for the offerer to confirm…'
-              : 'You declined this offer.'}
+            {myResponse === 'accept' ? 'Waiting for the offerer to confirm…' : 'You declined this offer.'}
           </p>
         )}
+
+        {/* Counter-offer confirmation */}
+        <AnimatePresence>
+          {counterMode && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="rounded-xl border border-amber-700 bg-amber-950/30 p-3 space-y-2">
+                <p className="text-amber-300 text-sm font-semibold">Make a counter-offer?</p>
+                <p className="text-gray-400 text-xs">This will cancel their offer and open a new trade panel for you to offer instead.</p>
+                <div className="flex gap-2">
+                  <button
+                    className="flex-1 py-2 rounded-xl text-sm font-semibold bg-amber-700 hover:bg-amber-600 text-white transition-colors"
+                    onClick={sendCounterOffer}
+                  >
+                    Yes, counter-offer
+                  </button>
+                  <button
+                    className="flex-1 py-2 rounded-xl text-sm font-semibold border border-gray-700 text-gray-400 hover:bg-gray-800 transition-colors"
+                    onClick={() => setCounterMode(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </motion.div>
   );

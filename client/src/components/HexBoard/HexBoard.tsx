@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PublicGameState, VertexId, EdgeId, AxialCoord, HexTile, ResourceType } from '@conqueror/shared';
 import { edgeVertices, adjacentVertices } from '@conqueror/shared';
@@ -15,6 +15,7 @@ import {
   TERRAIN_COLORS,
   TERRAIN_HIGHLIGHT,
   PLAYER_COLOR_HEX,
+  resolvePlayerColor,
   tokenColor,
   TOKEN_PIPS,
 } from './hexLayout.js';
@@ -125,6 +126,145 @@ function innerHexPoints(center: { x: number; y: number }, scale = 0.88): string 
   }).join(' ');
 }
 
+/** Terrain icon drawn inside each hex tile (SVG, centered at cx/cy offset from tile center) */
+function TerrainIcon({ terrain, cx, cy }: { terrain: string; cx: number; cy: number }) {
+  const op = 0.55; // base opacity — readable but not overwhelming
+  const hi = { opacity: op };
+
+  if (terrain === 'timber') {
+    // Three pine trees
+    return (
+      <g style={hi} pointerEvents="none">
+        {([-14, 0, 14] as number[]).map((dx, i) => (
+          <g key={i} transform={`translate(${cx + dx},${cy})`}>
+            <polygon points="0,-14 -8,0 8,0" fill="#4ade80" opacity={0.9}/>
+            <polygon points="0,-22 -10,-6 10,-6" fill="#22c55e" opacity={0.7}/>
+            <rect x={-2} y={0} width={4} height={7} fill="#854d0e" opacity={0.8}/>
+          </g>
+        ))}
+      </g>
+    );
+  }
+
+  if (terrain === 'clay') {
+    // Brick wall pattern — 4 rows × 3 bricks, offset every other row
+    const bricks: { x: number; y: number; key: string }[] = [];
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 3; col++) {
+        bricks.push({
+          x: cx - 27 + col * 18 + (row % 2 === 0 ? 0 : 9),
+          y: cy - 16 + row * 9,
+          key: `${row}-${col}`,
+        });
+      }
+    }
+    return (
+      <g style={hi} pointerEvents="none">
+        {bricks.map(b => (
+          <rect key={b.key} x={b.x} y={b.y} width={16} height={7}
+            fill="#f97316" stroke="#7c2d12" strokeWidth={1} rx={1} opacity={0.85}/>
+        ))}
+      </g>
+    );
+  }
+
+  if (terrain === 'iron') {
+    // Mountain peaks
+    return (
+      <g style={hi} pointerEvents="none">
+        {/* Back peak */}
+        <polygon points={`${cx},${cy - 26} ${cx - 20},${cy + 4} ${cx + 20},${cy + 4}`}
+          fill="#94a3b8" opacity={0.5}/>
+        {/* Snow cap */}
+        <polygon points={`${cx},${cy - 26} ${cx - 6},${cy - 14} ${cx + 6},${cy - 14}`}
+          fill="#f1f5f9" opacity={0.8}/>
+        {/* Left peak */}
+        <polygon points={`${cx - 16},${cy - 14} ${cx - 30},${cy + 4} ${cx - 2},${cy + 4}`}
+          fill="#64748b" opacity={0.7}/>
+        {/* Right peak */}
+        <polygon points={`${cx + 16},${cy - 16} ${cx + 2},${cy + 4} ${cx + 30},${cy + 4}`}
+          fill="#64748b" opacity={0.65}/>
+      </g>
+    );
+  }
+
+  if (terrain === 'grain') {
+    // Wheat stalks
+    return (
+      <g style={hi} pointerEvents="none">
+        {([-16, -8, 0, 8, 16] as number[]).map((dx, i) => {
+          const yBase = cy + 8;
+          const lean = (dx / 16) * 5;
+          return (
+            <g key={i}>
+              <line x1={cx + dx} y1={yBase} x2={cx + dx + lean} y2={cy - 18}
+                stroke="#fbbf24" strokeWidth={1.5} opacity={0.8}/>
+              {/* grain head */}
+              <ellipse cx={cx + dx + lean} cy={cy - 20} rx={3} ry={7}
+                fill="#fcd34d" opacity={0.9}/>
+              {/* side grains */}
+              <line x1={cx + dx + lean - 1} y1={cy - 22} x2={cx + dx + lean - 5} y2={cy - 16}
+                stroke="#fbbf24" strokeWidth={1} opacity={0.7}/>
+              <line x1={cx + dx + lean + 1} y1={cy - 22} x2={cx + dx + lean + 5} y2={cy - 16}
+                stroke="#fbbf24" strokeWidth={1} opacity={0.7}/>
+            </g>
+          );
+        })}
+      </g>
+    );
+  }
+
+  if (terrain === 'wool') {
+    // Two fluffy sheep
+    return (
+      <g style={hi} pointerEvents="none">
+        {([-14, 10] as number[]).map((dx, i) => (
+          <g key={i} transform={`translate(${cx + dx},${cy - 4})`}>
+            {/* Body (fluffy cloud) */}
+            <circle cx={0}  cy={0} r={9}  fill="#e2e8f0" opacity={0.9}/>
+            <circle cx={7}  cy={2} r={7}  fill="#f1f5f9" opacity={0.85}/>
+            <circle cx={-6} cy={3} r={7}  fill="#e2e8f0" opacity={0.85}/>
+            <circle cx={2}  cy={-5} r={6} fill="#f8fafc" opacity={0.8}/>
+            {/* Head */}
+            <circle cx={10} cy={-3} r={5} fill="#cbd5e1" opacity={0.95}/>
+            {/* Eye */}
+            <circle cx={12} cy={-4} r={1} fill="#1e293b"/>
+            {/* Legs */}
+            <rect x={-4} y={8} width={3} height={8} fill="#94a3b8" rx={1}/>
+            <rect x={1}  y={8} width={3} height={8} fill="#94a3b8" rx={1}/>
+          </g>
+        ))}
+      </g>
+    );
+  }
+
+  if (terrain === 'desert') {
+    // Sun above dune lines
+    return (
+      <g style={hi} pointerEvents="none">
+        {/* Sun */}
+        <circle cx={cx} cy={cy - 14} r={8} fill="#fde68a" opacity={0.9}/>
+        {([0, 45, 90, 135, 180, 225, 270, 315] as number[]).map(angle => {
+          const rad = (angle * Math.PI) / 180;
+          return (
+            <line key={angle}
+              x1={cx + Math.cos(rad) * 10} y1={cy - 14 + Math.sin(rad) * 10}
+              x2={cx + Math.cos(rad) * 14} y2={cy - 14 + Math.sin(rad) * 14}
+              stroke="#fcd34d" strokeWidth={1.5} opacity={0.8}/>
+          );
+        })}
+        {/* Dune lines */}
+        <path d={`M ${cx - 28},${cy + 6} Q ${cx - 14},${cy - 2} ${cx},${cy + 6} Q ${cx + 14},${cy + 14} ${cx + 28},${cy + 6}`}
+          fill="none" stroke="#d97706" strokeWidth={2} opacity={0.7}/>
+        <path d={`M ${cx - 22},${cy + 14} Q ${cx - 8},${cy + 6} ${cx + 8},${cy + 14} Q ${cx + 18},${cy + 20} ${cx + 28},${cy + 14}`}
+          fill="none" stroke="#b45309" strokeWidth={1.5} opacity={0.5}/>
+      </g>
+    );
+  }
+
+  return null;
+}
+
 function RoadSvg({ edgeId, color, opacity = 1, dashed = false }: {
   edgeId: EdgeId; color: string; opacity?: number; dashed?: boolean;
 }) {
@@ -193,9 +333,12 @@ function PortLabel({
   );
 }
 
+const MIN_DRAG_PX = 12; // minimum screen pixels to move before a drag becomes a placement
+
 export default function HexBoard({ state }: HexBoardProps) {
   const { t } = useTranslation('game');
   const svgRef = useRef<SVGSVGElement>(null);
+  const dragStartClientPos = useRef<{ x: number; y: number } | null>(null);
 
   const {
     boardMode, setBoardMode,
@@ -252,7 +395,16 @@ export default function HexBoard({ state }: HexBoardProps) {
     document.removeEventListener('pointermove', handleDragMove);
     document.removeEventListener('pointerup', handleDragEnd);
     const current = useGameStore.getState().dragPiece;
-    if (!current || !svgRef.current) { setDragPiece(null); return; }
+    if (!current || !svgRef.current) { setDragPiece(null); dragStartClientPos.current = null; return; }
+
+    // Require minimum drag distance to prevent accidental placement on quick button taps
+    const start = dragStartClientPos.current;
+    dragStartClientPos.current = null;
+    if (start) {
+      const dist = Math.hypot(e.clientX - start.x, e.clientY - start.y);
+      if (dist < MIN_DRAG_PX) { setDragPiece(null); return; }
+    }
+
     const p = pageToSvg(svgRef.current, e.clientX, e.clientY);
     if (!p) { setDragPiece(null); return; }
     const { type } = current;
@@ -281,6 +433,7 @@ export default function HexBoard({ state }: HexBoardProps) {
       if (!svgRef.current) return;
       const p = pageToSvg(svgRef.current, clientX, clientY);
       if (!p) return;
+      dragStartClientPos.current = { x: clientX, y: clientY };
       setDragPiece({ type, svgX: p.x, svgY: p.y });
       document.addEventListener('pointermove', handleDragMove);
       document.addEventListener('pointerup', handleDragEnd);
@@ -321,6 +474,25 @@ export default function HexBoard({ state }: HexBoardProps) {
     document.addEventListener('pointerup', handleDragEnd);
   }
 
+  // ── Dice-roll tile glow ─────────────────────────────────────────────────────
+  const [glowCoords, setGlowCoords] = useState<Set<string>>(new Set());
+  const glowTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => {
+    const roll = state.diceRoll;
+    if (!roll) { setGlowCoords(new Set()); return; }
+    const total = roll[0] + roll[1];
+    if (total === 7) { setGlowCoords(new Set()); return; }
+    const matching = new Set(
+      state.board.tiles
+        .filter(t => t.numberToken === total && t.terrain !== 'desert')
+        .map(t => `${t.coord.q}:${t.coord.r}`)
+    );
+    setGlowCoords(matching);
+    clearTimeout(glowTimer.current);
+    glowTimer.current = setTimeout(() => setGlowCoords(new Set()), 4500);
+    return () => clearTimeout(glowTimer.current);
+  }, [state.diceRoll]);
+
   const isRobberClickable = boardMode === 'move_bandit' && myTurn && !dragPiece;
   const isVertexClickable = (boardMode === 'place_settlement' || boardMode === 'place_city') && myTurn && !dragPiece;
   const isEdgeClickable   = boardMode === 'place_road' && myTurn && !dragPiece;
@@ -357,6 +529,13 @@ export default function HexBoard({ state }: HexBoardProps) {
             <feComposite in="color" in2="blur" operator="in" result="shadow"/>
             <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
           </filter>
+          {/* Dice-roll tile glow */}
+          <filter id="diceGlow" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="blur"/>
+            <feFlood floodColor="#fbbf24" floodOpacity="0.9" result="color"/>
+            <feComposite in="color" in2="blur" operator="in" result="glow"/>
+            <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
         </defs>
 
         {/* Deep ocean background */}
@@ -388,18 +567,23 @@ export default function HexBoard({ state }: HexBoardProps) {
             validSnapTile?.q === tile.coord.q && validSnapTile?.r === tile.coord.r;
           const clickable = isRobberClickable && !isBandit;
 
+          const isGlowing = glowCoords.has(`${tile.coord.q}:${tile.coord.r}`);
+
           return (
             <g key={`${tile.coord.q}:${tile.coord.r}`}
               onClick={() => clickable && handleTileClick(tile.coord)}
               style={{ cursor: clickable ? 'pointer' : 'default' }}>
               {/* Outer hex — dark border */}
               <polygon points={pts} fill={fillColor}
-                stroke={isSnapTarget ? '#ffcc00' : clickable ? '#ffcc00' : 'rgba(0,0,0,0.6)'}
-                strokeWidth={isSnapTarget ? 3 : clickable ? 2.5 : 1.5}/>
+                stroke={isSnapTarget ? '#ffcc00' : clickable ? '#ffcc00' : isGlowing ? '#fbbf24' : 'rgba(0,0,0,0.6)'}
+                strokeWidth={isSnapTarget ? 3 : clickable ? 2.5 : isGlowing ? 2 : 1.5}/>
 
               {/* Inner highlight edge — simulates 3D bevel */}
               <polygon points={innerPts} fill="none"
                 stroke={hlColor} strokeWidth={1} opacity={0.5}/>
+
+              {/* Terrain icon */}
+              <TerrainIcon terrain={tile.terrain} cx={center.x} cy={center.y - (tile.numberToken ? 14 : 0)}/>
 
               {/* Drag-over bandit tint */}
               {showDragBandit && !isBandit && (
@@ -407,9 +591,29 @@ export default function HexBoard({ state }: HexBoardProps) {
                   style={{ pointerEvents: 'none' }}/>
               )}
 
+              {/* Dice-roll glow: pulsing ring + fill */}
+              {isGlowing && (
+                <g style={{ pointerEvents: 'none' }}>
+                  <polygon points={pts} fill="rgba(251,191,36,0.10)" stroke="none">
+                    <animate attributeName="fill-opacity" values="0.10;0.22;0.10" dur="0.9s" repeatCount="indefinite"/>
+                  </polygon>
+                  <polygon points={pts} fill="none" stroke="#fbbf24" filter="url(#diceGlow)">
+                    <animate attributeName="stroke-width" values="2;5;2" dur="0.9s" repeatCount="indefinite"/>
+                    <animate attributeName="stroke-opacity" values="1;0.35;1" dur="0.9s" repeatCount="indefinite"/>
+                  </polygon>
+                </g>
+              )}
+
               {/* Number token */}
               {tile.numberToken && (
-                <g filter={isHot ? 'url(#hotGlow)' : undefined}>
+                <g filter={isGlowing ? 'url(#diceGlow)' : isHot ? 'url(#hotGlow)' : undefined}>
+                  {/* Ripple ring expanding from token when glowing */}
+                  {isGlowing && (
+                    <circle cx={center.x} cy={center.y} r={18} fill="none" stroke="#fbbf24" strokeWidth={2} style={{ pointerEvents: 'none' }}>
+                      <animate attributeName="r" values="18;32;18" dur="0.9s" repeatCount="indefinite"/>
+                      <animate attributeName="stroke-opacity" values="0.9;0;0.9" dur="0.9s" repeatCount="indefinite"/>
+                    </circle>
+                  )}
                   {/* Token disc */}
                   <circle cx={center.x} cy={center.y} r={18}
                     fill="#0a0a0a" stroke={isHot ? '#ff4444' : '#2a2a2a'} strokeWidth={2}/>
@@ -442,14 +646,14 @@ export default function HexBoard({ state }: HexBoardProps) {
         {/* ── Roads ── */}
         {Object.entries(state.roads).map(([edgeId, road]) => {
           const playerColor = state.players.find(p => p.id === road.playerId)?.color ?? 'red';
-          return <RoadSvg key={edgeId} edgeId={edgeId as EdgeId} color={PLAYER_COLOR_HEX[playerColor]}/>;
+          return <RoadSvg key={edgeId} edgeId={edgeId as EdgeId} color={resolvePlayerColor(playerColor)}/>;
         })}
 
         {/* ── Buildings ── */}
         {Object.entries(state.buildings).map(([vertexId, building]) => {
           const pos = vertexToPixel(vertexId as VertexId);
           const playerColor = state.players.find(p => p.id === building.playerId)?.color ?? 'red';
-          const fill = PLAYER_COLOR_HEX[playerColor];
+          const fill = resolvePlayerColor(playerColor);
           return building.type === 'settlement'
             ? <SettlementSvg key={vertexId} cx={pos.x} cy={pos.y} fill={fill}/>
             : <CitySvg       key={vertexId} cx={pos.x} cy={pos.y} fill={fill}/>;
@@ -457,11 +661,11 @@ export default function HexBoard({ state }: HexBoardProps) {
 
         {/* ── Drag ghosts ── */}
         {showDragEdge && snapEdge && (
-          <RoadSvg edgeId={snapEdge} color={PLAYER_COLOR_HEX[myColor]} opacity={0.65} dashed/>
+          <RoadSvg edgeId={snapEdge} color={resolvePlayerColor(myColor)} opacity={0.65} dashed/>
         )}
         {showDragVertex && snapVertex && (() => {
           const pos = vertexToPixel(snapVertex);
-          const fill = PLAYER_COLOR_HEX[myColor];
+          const fill = resolvePlayerColor(myColor);
           return dragPiece!.type === 'settlement'
             ? <SettlementSvg cx={pos.x} cy={pos.y} fill={fill} opacity={0.6}/>
             : <CitySvg       cx={pos.x} cy={pos.y} fill={fill} opacity={0.6}/>;

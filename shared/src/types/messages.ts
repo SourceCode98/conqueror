@@ -33,18 +33,22 @@ export type ClientMessage =
   | WSMessage<'MOVE_BANDIT',         { gameId: string; coord: AxialCoord; stealFromPlayerId?: string }>
   | WSMessage<'DISCARD_CARDS',       { gameId: string; cards: ResourceBundle }>
   | WSMessage<'END_TURN',            { gameId: string }>
-  | WSMessage<'CHAT',                { gameId: string; text: string }>;
+  | WSMessage<'CHAT',                { gameId: string; text: string }>
+  | WSMessage<'HORN',                { gameId: string }>;
 
 // ─── Server → Client ──────────────────────────────────────────────────────────
 
 export type ServerMessage =
-  | WSMessage<'ERROR',             { code: string; message: string; requestId?: string }>
-  | WSMessage<'GAME_STATE',        { state: PublicGameState }>
-  | WSMessage<'DICE_ROLLED',       { roll: [number, number]; resources: Record<string, ResourceBundle> }>
-  | WSMessage<'DEV_CARD_DRAWN',    { cardType: DevCardType }>
-  | WSMessage<'TRADE_OFFERED',     { offer: TradeOffer }>
-  | WSMessage<'TRADE_RESOLVED',    { accepted: boolean; byPlayerId?: string }>
-  | WSMessage<'GAME_OVER',         { winnerId: string; finalScores: Record<string, number> }>
-  | WSMessage<'CHAT',              { fromPlayerId: string; username: string; text: string; timestamp: number }>
-  | WSMessage<'PLAYER_CONNECTED',  { playerId: string }>
-  | WSMessage<'PLAYER_DISCONNECTED', { playerId: string }>;
+  | WSMessage<'ERROR',               { code: string; message: string; requestId?: string }>
+  | WSMessage<'GAME_STATE',          { state: PublicGameState }>
+  | WSMessage<'DICE_ROLLED',         { roll: [number, number]; resources: Record<string, ResourceBundle> }>
+  | WSMessage<'DEV_CARD_DRAWN',      { cardType: DevCardType }>
+  | WSMessage<'TRADE_OFFERED',       { offer: TradeOffer }>
+  | WSMessage<'TRADE_RESOLVED',      { accepted: boolean; byPlayerId?: string }>
+  | WSMessage<'GAME_OVER',           { winnerId: string; finalScores: Record<string, number> }>
+  | WSMessage<'CHAT',                { fromPlayerId: string; username: string; text: string; timestamp: number }>
+  | WSMessage<'PLAYER_CONNECTED',    { playerId: string }>
+  | WSMessage<'PLAYER_DISCONNECTED', { playerId: string }>
+  | WSMessage<'BANK_TRADE_EXECUTED', { playerId: string; username: string; give: ResourceBundle; want: ResourceBundle }>
+  | WSMessage<'HORN_PLAYED',         { fromPlayerId: string; username: string }>
+  | WSMessage<'ACTION_TOAST',        { playerId: string; username: string; action: string; extra?: string }>;

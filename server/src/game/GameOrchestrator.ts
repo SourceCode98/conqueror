@@ -76,6 +76,9 @@ export class GameOrchestrator {
       discardsPending: {},
       log: [],
       winner: null,
+      turnStartTime: Date.now(),
+      turnTimeLimit: null,
+      lastAction: null,
     };
 
     this.persist();
