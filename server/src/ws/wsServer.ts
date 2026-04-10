@@ -65,9 +65,17 @@ function handleMessage(ws: WebSocket, data: RawData): void {
   }
 
   handleGameAction(ws, msg, meta, orch, {
-    broadcastToRoom: (msg) => broadcastToRoom(meta.gameId, msg),
+    broadcastToRoom: (outMsg) => {
+      // Intercept GAME_STATE broadcasts and send each client their own personalised view
+      // so that dev cards (and VP cards) are visible to the owning player only.
+      if (outMsg.type === 'GAME_STATE') {
+        broadcastPersonalizedGameState(meta.gameId, orch);
+      } else {
+        broadcastToRoom(meta.gameId, outMsg);
+      }
+    },
     sendTo,
-    sendPrivate: (targetPlayerId, msg) => sendToPlayer(meta.gameId, targetPlayerId, msg),
+    sendPrivate: (targetPlayerId, outMsg) => sendToPlayer(meta.gameId, targetPlayerId, outMsg),
   });
 }
 
@@ -186,6 +194,21 @@ export function broadcastToRoom(gameId: string, message: ServerMessage, exclude?
     if (client !== exclude && client.readyState === WebSocket.OPEN) {
       client.send(data);
     }
+  }
+}
+
+/**
+ * Send each connected player their own personalised GAME_STATE so that
+ * dev cards and VP cards are only visible to the owning player.
+ */
+export function broadcastPersonalizedGameState(gameId: string, orch: import('../game/GameOrchestrator.js').GameOrchestrator): void {
+  const room = rooms.get(gameId);
+  if (!room) return;
+  for (const client of room) {
+    if (client.readyState !== WebSocket.OPEN) continue;
+    const meta = clientMeta.get(client);
+    const state = orch.getPublicState(meta?.userId);
+    client.send(JSON.stringify({ type: 'GAME_STATE', payload: { state } }));
   }
 }
 

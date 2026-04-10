@@ -6,6 +6,7 @@ import {
   recalculateSpecialCards,
   BUILD_COSTS,
 } from '@conqueror/shared';
+import { checkAndHandleWin } from './winCheck.js';
 import type { GameOrchestrator } from '../../game/GameOrchestrator.js';
 import type { ClientMeta } from '../types.js';
 import type { ActionContext } from '../actionRouter.js';
@@ -58,6 +59,7 @@ export function handlePlaceRoad(
     };
   });
 
+  checkAndHandleWin(orch, ctx);
   orch.addLogEntry('log.builtRoad', { player: meta.username }, meta.userId);
   ctx.broadcastToRoom({ type: 'ACTION_TOAST', payload: { playerId: meta.userId, username: meta.username, action: 'builtRoad', extra: payload.edgeId } });
   ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });

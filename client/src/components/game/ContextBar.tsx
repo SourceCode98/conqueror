@@ -10,6 +10,7 @@ import { ALL_RESOURCES, hexVertexIds } from '@conqueror/shared';
 import { useGameStore } from '../../store/gameStore.js';
 import type { InteractionMode } from '../../store/gameStore.js';
 import { wsService } from '../../services/wsService.js';
+import StealCardModal from './StealCardModal.js';
 import {
   SettlementIcon, CityIcon, RoadIcon, BanditIcon, DevCardIcon, RESOURCE_ICON_MAP,
 } from '../icons/GameIcons.js';
@@ -32,13 +33,15 @@ const CARD_LABEL: Record<string, string> = {
 };
 
 function ActionBtn({
-  label, children, disabled = false, active = false, badge, onClick,
+  label, children, disabled = false, active = false, badge, pieces, onClick,
 }: {
   label: string;
   children: React.ReactNode;
   disabled?: boolean;
   active?: boolean;
   badge?: number;
+  /** Remaining piece count — shown as a small tag; red when 0 */
+  pieces?: number;
   onClick: () => void;
 }) {
   return (
@@ -60,6 +63,14 @@ function ActionBtn({
       {badge !== undefined && badge > 0 && (
         <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center px-0.5">
           {badge}
+        </span>
+      )}
+      {pieces !== undefined && (
+        <span className={cn(
+          'absolute -bottom-0.5 -right-0.5 min-w-[14px] h-[14px] rounded-full text-[8px] font-bold flex items-center justify-center px-0.5',
+          pieces === 0 ? 'bg-red-600 text-white' : pieces <= 1 ? 'bg-yellow-600 text-white' : 'bg-gray-600 text-gray-200',
+        )}>
+          {pieces}
         </span>
       )}
     </button>
@@ -84,6 +95,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
   const [yopPicks, setYopPicks]       = useState<ResourceType[]>([]);
   const [monoPicking, setMonoPicking] = useState(false);
   const [showCards, setShowCards]     = useState(false);
+  const [mobileStealVictim, setMobileStealVictim] = useState<{ id: string; cardCount: number } | null>(null);
   const savedCoordRef                 = useRef<typeof pendingBanditCoord>(null);
 
   const myTurn = isMyTurn();
@@ -107,6 +119,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
   // Reset card picker on phase / turn change
   useEffect(() => {
     setYopPicking(false); setYopPicks([]); setMonoPicking(false); setShowCards(false);
+    setMobileStealVictim(null);
   }, [gameState.activePlayerId, gameState.phase]);
 
   function send(type: string, extra?: object) {
@@ -229,33 +242,73 @@ export default function ContextBar({ gameState, gameId }: Props) {
     const victims = [...adjIds].map(pid => gameState.players.find(p => p.id === pid)).filter(Boolean);
 
     return (
-      <div className="bg-orange-950/30 px-3 py-2 space-y-2">
-        <p className="text-orange-300 text-xs font-semibold">Bandit moved — steal from:</p>
-        <div className="flex flex-wrap gap-2">
-          {victims.map(p => p && (
-            <button key={p.id}
-              className="flex items-center gap-2 rounded-xl border border-gray-600 bg-gray-800 hover:border-amber-500 px-3 py-1.5 text-xs font-semibold transition-colors"
-              onClick={() => { send('MOVE_BANDIT', { coord: pendingBanditCoord, stealFromPlayerId: p.id }); setPendingBanditCoord(null); }}
+      <>
+        <div className="bg-orange-950/30 px-3 py-2 space-y-2">
+          <p className="text-orange-300 text-xs font-semibold">Bandit moved — steal from:</p>
+          <div className="flex flex-wrap gap-2">
+            {victims.map(p => p && (
+              <button key={p.id}
+                className="flex items-center gap-2 rounded-xl border border-gray-600 bg-gray-800 hover:border-amber-500 px-3 py-1.5 text-xs font-semibold transition-colors"
+                onClick={() => {
+                  const count = ALL_RESOURCES.reduce((s, r) => s + (p.resources as any)[r], 0);
+                  setMobileStealVictim({ id: p.id, cardCount: count });
+                }}
+              >
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: resolvePlayerColor(p.color) }}/>
+                <span className="text-white">{p.username}</span>
+                <span className="text-gray-400">{ALL_RESOURCES.reduce((s, r) => s + (p.resources as any)[r], 0)} cards</span>
+              </button>
+            ))}
+            <button
+              className="rounded-xl border border-gray-700 bg-gray-800 text-gray-400 text-xs px-3 py-1.5"
+              onClick={() => { send('MOVE_BANDIT', { coord: pendingBanditCoord }); setPendingBanditCoord(null); }}
             >
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: resolvePlayerColor(p.color) }}/>
-              <span className="text-white">{p.username}</span>
-              <span className="text-gray-400">{ALL_RESOURCES.reduce((s, r) => s + (p.resources as any)[r], 0)} cards</span>
+              {victims.length > 0 ? 'Skip steal' : 'Confirm'}
             </button>
-          ))}
-          <button
-            className="rounded-xl border border-gray-700 bg-gray-800 text-gray-400 text-xs px-3 py-1.5"
-            onClick={() => { send('MOVE_BANDIT', { coord: pendingBanditCoord }); setPendingBanditCoord(null); }}
-          >
-            {victims.length > 0 ? 'Skip steal' : 'Confirm'}
-          </button>
+          </div>
         </div>
-      </div>
+        {mobileStealVictim && (
+          <StealCardModal
+            victimId={mobileStealVictim.id}
+            cardCount={mobileStealVictim.cardCount}
+            onSteal={() => {
+              send('MOVE_BANDIT', { coord: pendingBanditCoord!, stealFromPlayerId: mobileStealVictim.id });
+              setPendingBanditCoord(null);
+              setMobileStealVictim(null);
+            }}
+            onClose={() => setMobileStealVictim(null)}
+          />
+        )}
+      </>
     );
   }
 
   // ── ROBBER phase — move the bandit (hint shown on board pill) ───────────
   if (phase === 'ROBBER' && myTurn && !pendingBanditCoord) {
     return null;
+  }
+
+  // ── ROBBER phase — not my turn, show "being robbed" visual ──────────────
+  if (phase === 'ROBBER' && !myTurn) {
+    const thief = gameState.players.find(p => p.id === gameState.activePlayerId);
+    const myCardCount = me ? ALL_RESOURCES.reduce((s, r) => s + ((me.resources as any)[r] ?? 0), 0) : 0;
+    return (
+      <div className="bg-gray-900/80 px-3 py-2 space-y-1.5">
+        <p className="text-orange-300 text-xs font-semibold">⚔️ {thief?.username} is moving the bandit…</p>
+        {myCardCount > 0 && (
+          <div className="flex gap-1 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
+            {Array.from({ length: Math.min(myCardCount, 12) }, (_, i) => (
+              <div key={i} className="shrink-0 rounded-md" style={{
+                width: 22, height: 34,
+                background: 'linear-gradient(160deg, #0d2b0d 0%, #091a09 100%)',
+                border: '1.5px solid #2d6b1e',
+              }}/>
+            ))}
+            {myCardCount > 12 && <span className="text-gray-600 text-xs self-center shrink-0">+{myCardCount - 12}</span>}
+          </div>
+        )}
+      </div>
+    );
   }
 
   // ── DISCARD phase ────────────────────────────────────────────────────────
@@ -306,9 +359,12 @@ export default function ContextBar({ gameState, gameId }: Props) {
 
   // ── ACTION phase ─────────────────────────────────────────────────────────
   if (phase === 'ACTION' && myTurn) {
-    const canSettle  = canAfford('settlement');
-    const canRoad    = canAfford('road');
-    const canCity    = canAfford('city');
+    const settlementsLeft = me?.settlementsLeft ?? 0;
+    const citiesLeft      = me?.citiesLeft ?? 0;
+    const roadsLeft       = me?.roadsLeft ?? 0;
+    const canSettle  = canAfford('settlement') && settlementsLeft > 0;
+    const canRoad    = canAfford('road') && roadsLeft > 0;
+    const canCity    = canAfford('city') && citiesLeft > 0;
     const canDevBuy  = canAfford('devCard') && gameState.devCardDeckCount > 0;
     const playable   = me?.devCards?.filter(c => !c.playedThisTurn && !c.boughtThisTurn && c.type !== 'victoryPoint') ?? [];
 
@@ -351,16 +407,19 @@ export default function ContextBar({ gameState, gameId }: Props) {
         {/* Action buttons row */}
         <div className="flex items-center gap-0.5 px-1 py-1.5">
           <ActionBtn label="Settle" disabled={!canSettle} active={mode === 'place_settlement'}
+            pieces={settlementsLeft}
             onClick={() => setBoardMode(mode === 'place_settlement' ? null : 'place_settlement')}>
             <SettlementIcon size={18} color={canSettle ? '#4ade80' : '#4b5563'}/>
           </ActionBtn>
 
           <ActionBtn label="Road" disabled={!canRoad} active={mode === 'place_road'}
+            pieces={roadsLeft}
             onClick={() => setBoardMode(mode === 'place_road' ? null : 'place_road')}>
             <RoadIcon size={18} color={canRoad ? '#4ade80' : '#4b5563'}/>
           </ActionBtn>
 
           <ActionBtn label="City" disabled={!canCity} active={mode === 'place_city'}
+            pieces={citiesLeft}
             onClick={() => setBoardMode(mode === 'place_city' ? null : 'place_city')}>
             <CityIcon size={18} color={canCity ? '#4ade80' : '#4b5563'}/>
           </ActionBtn>

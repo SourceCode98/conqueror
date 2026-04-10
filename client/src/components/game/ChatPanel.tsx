@@ -25,7 +25,7 @@ export default function ChatPanel({ gameId }: Props) {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+      <div className="flex-1 overflow-y-auto p-2 space-y-0.5" style={{ scrollbarWidth: 'none' }}>
         <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{t('chat')}</p>
         {chatMessages.map((msg, i) => (
           <p key={i} className="text-xs text-gray-300">

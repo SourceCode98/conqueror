@@ -1,6 +1,7 @@
 import { WebSocket } from 'ws';
 import type { AxialCoord } from '@conqueror/shared';
 import { axialEquals, hexVertexIds, recalculateSpecialCards } from '@conqueror/shared';
+import { checkAndHandleWin } from './winCheck.js';
 import type { GameOrchestrator } from '../../game/GameOrchestrator.js';
 import type { ClientMeta } from '../types.js';
 import type { ActionContext } from '../actionRouter.js';
@@ -92,6 +93,7 @@ export function handleMoveBandit(
     };
   });
 
+  checkAndHandleWin(orch, ctx);
   orch.addLogEntry('log.movedBandit', { player: meta.username }, meta.userId);
   ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
 }

@@ -21,7 +21,14 @@ const CARD_THEME: Record<ResourceType, { bg: string; border: string }> = {
   wool:   { bg: '#092b1b', border: '#86efac' },
 };
 
-const TOAST_DURATION = 5000;
+const TOAST_DURATION: Record<string, number> = {
+  dice_resources: 5000,
+  bank_trade: 4000,
+  action: 4000,
+  horn: 5000,
+  chat: 7000,
+  stolen: 6000,
+};
 
 interface Props {
   gameState: PublicGameState;
@@ -38,7 +45,7 @@ export default function ActionToast({ gameState }: Props) {
         timerRefs.current[toast.id] = setTimeout(() => {
           removeToast(toast.id);
           delete timerRefs.current[toast.id];
-        }, TOAST_DURATION);
+        }, TOAST_DURATION[toast.type] ?? 5000);
       }
     }
     return () => {
@@ -62,8 +69,10 @@ export default function ActionToast({ gameState }: Props) {
   }
 
   return (
-    <div className="fixed top-14 left-1/2 -translate-x-1/2 z-60 flex flex-col gap-2 pointer-events-none"
-      style={{ zIndex: 60, maxWidth: '90vw', width: 360 }}>
+    <div
+      className="fixed bottom-[90px] right-3 lg:bottom-6 lg:left-4 lg:right-auto z-[61] flex flex-col gap-2 pointer-events-none"
+      style={{ maxWidth: 'min(340px, 90vw)' }}
+    >
       <AnimatePresence mode="popLayout">
         {toasts.map(toast => (
           <motion.div
@@ -170,6 +179,51 @@ export default function ActionToast({ gameState }: Props) {
                 <span className="text-xs text-gray-400">is honking at you!</span>
               </div>
             )}
+
+            {/* Stolen card (shown only to victim) */}
+            {toast.type === 'stolen' && (() => {
+              const { resource } = toast.data as { resource: ResourceType };
+              const color = playerColor(toast.playerId);
+              return (
+                <div className="flex items-center gap-2">
+                  <span className="text-lg leading-none shrink-0">🗡️</span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] font-bold" style={{ color }}>{toast.username}</span>
+                      <span className="text-xs text-red-300 font-semibold">stole from you!</span>
+                    </div>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <div className="flex items-center gap-1 rounded-lg px-1.5 py-0.5 border"
+                        style={{ backgroundColor: CARD_THEME[resource].bg, borderColor: CARD_THEME[resource].border }}>
+                        {RESOURCE_ICON_MAP[resource]?.({ size: 14 })}
+                        <span className="text-[10px] font-bold" style={{ color: CARD_THEME[resource].border }}>
+                          {resource.charAt(0).toUpperCase() + resource.slice(1)}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-gray-500">was taken</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Chat message */}
+            {toast.type === 'chat' && (() => {
+              const { text } = toast.data as { text: string };
+              const color = playerColor(toast.playerId);
+              return (
+                <div className="flex items-start gap-2">
+                  <span className="text-base leading-none shrink-0">💬</span>
+                  <div className="min-w-0">
+                    <span className="text-[11px] font-bold" style={{ color }}>{toast.username}</span>
+                    <p className="text-xs text-gray-200 mt-0.5 break-words leading-snug"
+                      style={{ wordBreak: 'break-word', maxWidth: 260 }}>
+                      {text}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
           </motion.div>
         ))}
       </AnimatePresence>

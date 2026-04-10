@@ -23,6 +23,8 @@ import SoundPanel from '../components/game/SoundPanel.js';
 import { musicEngine } from '../components/game/musicEngine.js';
 import DiscardPanel from '../components/game/DiscardPanel.js';
 import { resolvePlayerColor } from '../components/HexBoard/hexLayout.js';
+import { RESOURCE_ICON_MAP } from '../components/icons/GameIcons.js';
+import { ALL_RESOURCES } from '@conqueror/shared';
 import { cn } from '../lib/cn.js';
 
 // Board padding: top = ResourceHand peek bar, bottom = ContextBar height
@@ -341,7 +343,7 @@ export default function GamePage() {
               return `${activeName} · ${t(`phases.${phase}`)}`;
             })()}
           </span>
-          {gameState.turnStartTime && gameState.turnTimeLimit && (
+          {gameState.turnStartTime && gameState.turnTimeLimit && phase !== 'GAME_OVER' && (
             <TurnTimer
               turnStartTime={gameState.turnStartTime}
               turnTimeLimit={gameState.turnTimeLimit}
@@ -360,7 +362,7 @@ export default function GamePage() {
               return `${activeName} · ${t(`phases.${phase}`)}`;
             })()}
           </span>
-          {gameState.turnStartTime && gameState.turnTimeLimit && (
+          {gameState.turnStartTime && gameState.turnTimeLimit && phase !== 'GAME_OVER' && (
             <TurnTimer
               turnStartTime={gameState.turnStartTime}
               turnTimeLimit={gameState.turnTimeLimit}
@@ -534,18 +536,94 @@ export default function GamePage() {
 
         {/* Right sidebar — desktop only */}
         <div className="hidden lg:flex w-72 flex-shrink-0 bg-gray-800 border-l border-gray-700 flex-col">
-          <div className="flex-1 overflow-y-auto p-3 space-y-3" style={{ paddingBottom: HAND_PEEK_H + 8 }}>
+
+          {/* ── Pinned top: dice + hand ── always fully visible, never scrolls */}
+          <div className="flex-shrink-0 p-3 space-y-2 border-b border-gray-700">
             <DiceRoller
               diceRoll={gameState.diceRoll}
               phase={phase}
               isMyTurn={isMyTurn}
             />
+
+            {/* Resource hand */}
+            {localPlayer && (() => {
+              const CARD_THEME: Record<string, { bg: string; border: string }> = {
+                timber: { bg: '#0f2e14', border: '#22c55e' },
+                clay:   { bg: '#3b1004', border: '#f97316' },
+                iron:   { bg: '#131c2b', border: '#94a3b8' },
+                grain:  { bg: '#2e1d02', border: '#fbbf24' },
+                wool:   { bg: '#092b1b', border: '#86efac' },
+              };
+              const held = ALL_RESOURCES.filter(r => (localPlayer.resources as any)[r] > 0);
+              const total = ALL_RESOURCES.reduce((s, r) => s + (localPlayer.resources as any)[r], 0);
+              const devCards = localPlayer.devCards ?? [];
+              return (
+                <div className="rounded-xl border border-gray-700 bg-gray-800/60 p-2 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Your Hand</p>
+                    <span className={cn('text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded-full',
+                      total > 0 ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-400')}>
+                      {total} cards
+                    </span>
+                  </div>
+                  {held.length === 0
+                    ? <p className="text-xs text-gray-600 italic">No resources</p>
+                    : (
+                      <div className="flex flex-wrap gap-1">
+                        {held.map(r => {
+                          const count = (localPlayer.resources as any)[r];
+                          const { bg, border } = CARD_THEME[r];
+                          return (
+                            <div key={r}
+                              className="flex flex-col items-center rounded-lg border py-1 px-1.5 min-w-[34px]"
+                              style={{ backgroundColor: bg, borderColor: border }}>
+                              {RESOURCE_ICON_MAP[r]?.({ size: 18 })}
+                              <span className="text-[9px] font-bold tabular-nums" style={{ color: border }}>×{count}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )
+                  }
+                  {devCards.length > 0 && (
+                    <div className="pt-1 border-t border-gray-700 flex flex-wrap gap-1">
+                      {devCards.map((c, i) => (
+                        <div key={i}
+                          className={cn('rounded border px-1.5 py-0.5 text-[9px] font-semibold flex items-center gap-0.5',
+                            c.playedThisTurn ? 'opacity-30' : c.boughtThisTurn ? 'opacity-60' : '')}
+                          style={{
+                            backgroundColor: '#0c1a2e',
+                            borderColor: c.type === 'victoryPoint' ? '#fbbf24' : '#3b82f6',
+                            color: c.type === 'victoryPoint' ? '#fbbf24' : '#93c5fd',
+                          }}
+                        >
+                          {c.type === 'warrior' ? '⚔️' : c.type === 'victoryPoint' ? '⭐' :
+                           c.type === 'roadBuilding' ? '🛣️' : c.type === 'yearOfPlenty' ? '🌟' : '💰'}
+                          <span>{c.type === 'roadBuilding' ? 'Road×2' : c.type === 'yearOfPlenty' ? 'Plenty' :
+                            c.type === 'victoryPoint' ? '+1VP' : c.type}</span>
+                          {c.boughtThisTurn && !c.playedThisTurn && <span className="text-green-400 text-[7px]">NEW</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* ── Middle: action panel — scrollable without visible bar ── */}
+          <div
+            className="flex-1 min-h-0 overflow-y-auto p-3"
+            style={{ scrollbarWidth: 'none' }}
+          >
             <ActionPanel gameState={gameState} gameId={gameId!} />
           </div>
-          <div className="h-36 flex-shrink-0 border-t border-gray-700">
+
+          {/* ── Bottom: log + chat — each has its own hidden-scrollbar scroll ── */}
+          <div className="h-28 flex-shrink-0 border-t border-gray-700">
             <GameLog log={gameState.log} />
           </div>
-          <div className="h-32 flex-shrink-0 border-t border-gray-700" style={{ paddingBottom: HAND_PEEK_H }}>
+          <div className="h-28 flex-shrink-0 border-t border-gray-700">
             <ChatPanel gameId={gameId!} />
           </div>
         </div>

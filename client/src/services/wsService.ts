@@ -100,9 +100,23 @@ class WSService {
           store.applyGameState(msg.payload.state);
         }
         break;
-      case 'CHAT':
+      case 'CHAT': {
         store.addChatMessage(msg.payload);
+        // Show toast for messages from other players
+        const localId = store.localPlayerId;
+        if (msg.payload.fromPlayerId !== localId) {
+          const key = `chat:${msg.payload.fromPlayerId}:${msg.payload.timestamp}`;
+          if (!this.isDup(key, 2000)) {
+            store.addToast({
+              type: 'chat',
+              playerId: msg.payload.fromPlayerId,
+              username: msg.payload.username,
+              data: { text: msg.payload.text },
+            });
+          }
+        }
         break;
+      }
       case 'DICE_ROLLED': {
         const { roll, resources } = msg.payload;
         const total = roll[0] + roll[1];

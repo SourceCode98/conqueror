@@ -2,6 +2,7 @@ import { WebSocket } from 'ws';
 import type { GameOrchestrator } from '../../game/GameOrchestrator.js';
 import type { ClientMeta } from '../types.js';
 import type { ActionContext } from '../actionRouter.js';
+import { checkAndHandleWin } from './winCheck.js';
 
 /**
  * Force-advances the turn to the next player regardless of current phase.
@@ -28,6 +29,13 @@ export function handleForceEndTurn(
     state.phase === 'SETUP_FORWARD' ||
     state.phase === 'SETUP_REVERSE'
   ) {
+    return;
+  }
+
+  // If the active player already has enough VP (e.g. from a road that gave longest road),
+  // honour the win before advancing the turn.
+  if (checkAndHandleWin(orch, ctx)) {
+    ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
     return;
   }
 

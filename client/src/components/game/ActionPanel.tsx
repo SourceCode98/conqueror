@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AnimatePresence, motion } from 'motion/react';
 import type { PublicGameState, ResourceType, EdgeId, AxialCoord } from '@conqueror/shared';
 import { ALL_RESOURCES, hexVertexIds } from '@conqueror/shared';
 import { useGameStore } from '../../store/gameStore.js';
@@ -9,7 +8,7 @@ import DiscardPanel from './DiscardPanel.js';
 import StealCardModal from './StealCardModal.js';
 import {
   SettlementIcon, CityIcon, RoadIcon, BanditIcon,
-  DevCardIcon, DiceIcon, FloatingDevCard, RESOURCE_ICON_MAP,
+  DevCardIcon, DiceIcon, RESOURCE_ICON_MAP,
 } from '../icons/GameIcons.js';
 import { resolvePlayerColor } from '../HexBoard/hexLayout.js';
 import { cn } from '../../lib/cn.js';
@@ -71,9 +70,6 @@ export default function ActionPanel({ gameState, gameId }: Props) {
   const [stealTarget, setStealTarget] = useState<string | null>(null); // playerId to steal from
   const [stealModalOpen, setStealModalOpen] = useState(false);
   const savedBanditCoordRef = useRef<AxialCoord | null>(null);
-  const [stolenNotif, setStolenNotif] = useState<ResourceType | null>(null); // shown to victim
-  const prevResourcesRef = useRef<Record<ResourceType, number> | null>(null);
-  const prevPhaseRef = useRef<string | null>(null);
 
   // ── Dev card drag ─────────────────────────────────────────────────────────
   const [dragCard, setDragCard] = useState<DragCard | null>(null);
@@ -143,26 +139,6 @@ export default function ActionPanel({ gameState, gameId }: Props) {
     if (!stealModalOpen) setStealTarget(null);
   }, [gameState.activePlayerId, gameState.phase]);
 
-  // Victim notification: snapshot when entering ROBBER, detect loss when leaving
-  useEffect(() => {
-    const prevPhase = prevPhaseRef.current;
-    prevPhaseRef.current = gameState.phase;
-
-    if (gameState.phase === 'ROBBER' && prevPhase !== 'ROBBER' && me) {
-      prevResourcesRef.current = { ...me.resources as Record<ResourceType, number> };
-      return;
-    }
-    if (prevPhase === 'ROBBER' && gameState.phase !== 'ROBBER' && me && prevResourcesRef.current) {
-      const prev = prevResourcesRef.current;
-      prevResourcesRef.current = null;
-      const lost = ALL_RESOURCES.find(r => (me.resources as any)[r] < (prev[r] ?? 0));
-      if (lost) {
-        setStolenNotif(lost);
-        const t = setTimeout(() => setStolenNotif(null), 4000);
-        return () => clearTimeout(t);
-      }
-    }
-  }, [gameState.phase, me]);
 
   function send(type: string, extra?: object) {
     wsService.send({ type: type as any, payload: { gameId, ...extra } });
@@ -196,6 +172,13 @@ export default function ActionPanel({ gameState, gameId }: Props) {
   }) {
     const active = boardMode === mode;
     const affordable = canAfford(item);
+    const piecesLeft =
+      item === 'settlement' ? (me?.settlementsLeft ?? 0) :
+      item === 'city'       ? (me?.citiesLeft ?? 0) :
+      (me?.roadsLeft ?? 0);
+    const noPieces = piecesLeft === 0;
+    const canBuild = affordable && !noPieces;
+
     return (
       <button
         className={cn(
@@ -203,21 +186,28 @@ export default function ActionPanel({ gameState, gameId }: Props) {
           'flex items-center gap-2',
           active
             ? 'border-amber-400 bg-amber-900/40 text-white'
-            : affordable
+            : canBuild
               ? 'border-green-600 bg-gray-800 text-white hover:bg-gray-700 animate-[pulse-ring_2s_ease-in-out_infinite]'
               : 'border-gray-700 bg-gray-800 text-gray-500 cursor-not-allowed',
         )}
-        disabled={!affordable}
+        disabled={!canBuild}
         onClick={() => setBoardMode(active ? null : mode)}
       >
-        <span className={cn('shrink-0', affordable && !active && 'drop-shadow-[0_0_4px_rgba(74,222,128,0.6)]')}>
+        <span className={cn('shrink-0', canBuild && !active && 'drop-shadow-[0_0_4px_rgba(74,222,128,0.6)]')}>
           {icon}
         </span>
         <div className="flex-1 min-w-0">
           <div className="text-xs font-semibold truncate">{label}</div>
-          <CostBadges item={item}/>
+          {noPieces
+            ? <span className="text-[9px] text-red-400 font-semibold">No pieces left</span>
+            : <CostBadges item={item}/>
+          }
         </div>
-        {affordable && !active && (
+        <span className={cn('text-[9px] tabular-nums shrink-0 font-semibold',
+          noPieces ? 'text-red-500' : piecesLeft <= 1 ? 'text-yellow-500' : 'text-gray-600')}>
+          {piecesLeft}
+        </span>
+        {canBuild && !active && (
           <span className="text-[9px] font-bold text-green-400 shrink-0">✓</span>
         )}
         {active && <span className="text-[9px] text-amber-300 shrink-0">TAP BOARD</span>}
@@ -251,41 +241,13 @@ export default function ActionPanel({ gameState, gameId }: Props) {
     );
   }
 
-  // ── Victim toast — fixed overlay, renders regardless of phase ─────────────
-  const victimToast = stolenNotif && (
-    <AnimatePresence>
-      <motion.div
-        key="victim-toast"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 20 }}
-        transition={{ duration: 0.2, ease: 'easeOut' }}
-        className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-gray-900 border border-red-700 rounded-2xl px-4 py-3 shadow-2xl"
-      >
-        <span className="text-red-400 text-lg">🗡️</span>
-        <div className="flex items-center gap-2">
-          <span className="text-red-300 font-semibold text-sm">A card was stolen!</span>
-          <div className="flex items-center gap-1">
-            {RESOURCE_ICON_MAP[stolenNotif]?.({ size: 20 })}
-            <span className="text-xs font-bold" style={{ color: '#f97316' }}>
-              {stolenNotif.charAt(0).toUpperCase() + stolenNotif.slice(1)}
-            </span>
-          </div>
-        </div>
-      </motion.div>
-    </AnimatePresence>
-  );
-
   // ── Not my turn ───────────────────────────────────────────────────────────
   if (!myTurn && phase !== 'DISCARD' && phase !== 'TRADE_OFFER') {
     const activeName = gameState.players.find(p => p.id === gameState.activePlayerId)?.username;
     return (
-      <>
-        {victimToast}
-        <div className="text-gray-400 text-sm text-center py-4 text-pretty">
-          Waiting for {activeName}…
-        </div>
-      </>
+      <div className="text-gray-400 text-sm text-center py-4 text-pretty">
+        Waiting for {activeName}…
+      </div>
     );
   }
 
@@ -294,7 +256,7 @@ export default function ActionPanel({ gameState, gameId }: Props) {
     return <DiscardPanel gameId={gameId} hand={me.resources as any} requiredCount={gameState.discardsPending[myId]}/>;
   }
   if (phase === 'DISCARD') {
-    return <>{victimToast}<div className="text-yellow-400 text-sm text-center py-4">Waiting for others to discard…</div></>;
+    return <div className="text-yellow-400 text-sm text-center py-4">Waiting for others to discard…</div>;
   }
 
   // ── Setup phases ──────────────────────────────────────────────────────────
@@ -326,7 +288,6 @@ export default function ActionPanel({ gameState, gameId }: Props) {
   if (phase === 'ROLL') {
     return (
       <div className="space-y-2">
-        {victimToast}
         <button
           className="btn-primary w-full py-3 flex items-center justify-center gap-2 text-lg"
           onClick={() => send('ROLL_DICE')}
@@ -510,7 +471,6 @@ export default function ActionPanel({ gameState, gameId }: Props) {
 
     return (
       <div className="space-y-3">
-        {victimToast}
         {/* Dev card drop zone (shown while dragging) */}
         {dragCard && (
           <div
@@ -650,5 +610,5 @@ export default function ActionPanel({ gameState, gameId }: Props) {
     );
   }
 
-  return victimToast ?? null;
+  return null;
 }

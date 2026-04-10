@@ -1,7 +1,7 @@
 import db from '../db/index.js';
 import { GameOrchestrator } from '../game/GameOrchestrator.js';
 import { registerOrchestrator } from '../game/orchestratorRegistry.js';
-import { broadcastToRoom } from './wsServer.js';
+import { broadcastPersonalizedGameState } from './wsServer.js';
 
 interface GamePlayer {
   id: string;
@@ -20,11 +20,8 @@ export function startGame(gameId: string, players: GamePlayer[], turnTimeLimit: 
   );
   registerOrchestrator(gameId, orch);
 
-  // Broadcast game state to all connected players
-  broadcastToRoom(gameId, {
-    type: 'GAME_STATE',
-    payload: { state: orch.getPublicState() },
-  });
+  // Broadcast personalised game state to each connected player
+  broadcastPersonalizedGameState(gameId, orch);
 
   return orch;
 }

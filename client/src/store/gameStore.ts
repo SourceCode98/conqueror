@@ -7,11 +7,11 @@ import type {
   AxialCoord,
   ResourceType,
 } from '@conqueror/shared';
-import { hasResources, BUILD_COSTS } from '@conqueror/shared';
+import { hasResources, BUILD_COSTS, ALL_RESOURCES } from '@conqueror/shared';
 
 export interface GameToast {
   id: string;
-  type: 'dice_resources' | 'bank_trade' | 'action' | 'horn';
+  type: 'dice_resources' | 'bank_trade' | 'action' | 'horn' | 'chat' | 'stolen';
   playerId: string;
   username: string;
   data: Record<string, any>;
@@ -102,7 +102,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     _tradeCardCb: null,
   }),
 
-  applyGameState: (state) => set(s => {
+  applyGameState: (state) => {
+    const s = get();
     const prev = s.gameState;
     const playerOrPhaseChanged =
       !prev ||
@@ -120,13 +121,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
       newMode = (state.phase === 'ROBBER' && isMyTurn) ? 'move_bandit' : null;
     }
 
-    return {
+    // Detect robbery: when exiting ROBBER phase, check if local player lost a resource
+    if (prev?.phase === 'ROBBER' && state.phase !== 'ROBBER' && s.localPlayerId && prev) {
+      const prevMe = prev.players.find(p => p.id === s.localPlayerId);
+      const newMe  = state.players.find(p => p.id === s.localPlayerId);
+      if (prevMe && newMe) {
+        const lost = ALL_RESOURCES.find(r => (newMe.resources as any)[r] < (prevMe.resources as any)[r]);
+        if (lost) {
+          const thiefPlayer = state.players.find(p => p.id === prev.activePlayerId);
+          s.addToast({
+            type: 'stolen',
+            playerId: thiefPlayer?.id ?? '',
+            username: thiefPlayer?.username ?? 'Someone',
+            data: { resource: lost },
+          });
+        }
+      }
+    }
+
+    set({
       gameState: state,
       boardMode: newMode,
       roadBuildingEdges: newRoadBuilding,
       pendingBanditCoord: newPendingBandit,
-    };
-  }),
+    });
+  },
 
   addChatMessage: (msg) => set(s => {
     // Deduplicate: same sender + same timestamp = duplicate from reconnect
