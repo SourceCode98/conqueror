@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../store/authStore.js';
 import LanguageSwitcher from '../components/LanguageSwitcher.js';
-
-const PLAYER_COLORS = ['red', 'blue', 'green', 'orange'] as const;
+import { PLAYER_COLOR_OPTIONS } from '@conqueror/shared';
+import { cn } from '../lib/cn.js';
 
 interface GameListing {
   id: string;
@@ -15,6 +15,39 @@ interface GameListing {
   created_by_username: string;
 }
 
+function ColorPicker({
+  value,
+  onChange,
+  takenColors = [],
+}: {
+  value: string;
+  onChange: (c: string) => void;
+  takenColors?: string[];
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {PLAYER_COLOR_OPTIONS.map(c => {
+        const taken = takenColors.includes(c);
+        const selected = value === c;
+        return (
+          <button
+            key={c}
+            disabled={taken}
+            onClick={() => onChange(c)}
+            title={taken ? 'Already taken' : c}
+            className={cn(
+              'w-8 h-8 rounded-full border-2 transition-all',
+              selected ? 'border-white scale-110 shadow-lg' : 'border-transparent',
+              taken ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:scale-105',
+            )}
+            style={{ backgroundColor: c }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 export default function LobbyPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -23,8 +56,12 @@ export default function LobbyPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newGameName, setNewGameName] = useState('');
   const [maxPlayers, setMaxPlayers] = useState(4);
-  const [color, setColor] = useState<string>('red');
+  const [color, setColor] = useState<string>(PLAYER_COLOR_OPTIONS[0]);
   const [error, setError] = useState('');
+  // Join state: which game is being joined + color picker
+  const [joiningGameId, setJoiningGameId] = useState<string | null>(null);
+  const [joinColor, setJoinColor] = useState<string>(PLAYER_COLOR_OPTIONS[0]);
+  const [joinTakenColors, setJoinTakenColors] = useState<string[]>([]);
 
   async function fetchGames() {
     const res = await fetch('/api/games', {
@@ -51,15 +88,32 @@ export default function LobbyPage() {
     navigate(`/game/${data.gameId}`);
   }
 
-  async function joinGame(gameId: string, selectedColor: string) {
-    const res = await fetch(`/api/games/${gameId}/join`, {
+  async function openJoin(gameId: string) {
+    // Fetch taken colors for this game
+    const res = await fetch(`/api/games/${gameId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const taken: string[] = (data.players ?? []).map((p: any) => p.color);
+      setJoinTakenColors(taken);
+      // Pick first available color
+      const first = PLAYER_COLOR_OPTIONS.find(c => !taken.includes(c)) ?? PLAYER_COLOR_OPTIONS[0];
+      setJoinColor(first);
+    }
+    setJoiningGameId(gameId);
+  }
+
+  async function confirmJoin() {
+    if (!joiningGameId) return;
+    const res = await fetch(`/api/games/${joiningGameId}/join`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ color: selectedColor }),
+      body: JSON.stringify({ color: joinColor }),
     });
     const data = await res.json();
     if (!res.ok) { alert(data.error); return; }
-    navigate(`/game/${gameId}`);
+    navigate(`/game/${joiningGameId}`);
   }
 
   return (
@@ -95,16 +149,7 @@ export default function LobbyPage() {
               </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">{t('color')}</label>
-                <div className="flex gap-2">
-                  {PLAYER_COLORS.map(c => (
-                    <button
-                      key={c}
-                      onClick={() => setColor(c)}
-                      className={`w-8 h-8 rounded-full border-2 transition-transform ${color === c ? 'border-white scale-110' : 'border-transparent'}`}
-                      style={{ backgroundColor: c === 'red' ? '#ef4444' : c === 'blue' ? '#3b82f6' : c === 'green' ? '#22c55e' : '#f97316' }}
-                    />
-                  ))}
-                </div>
+                <ColorPicker value={color} onChange={setColor}/>
               </div>
               {error && <p className="text-red-400 text-sm">{error}</p>}
               <div className="flex gap-2">
@@ -120,28 +165,38 @@ export default function LobbyPage() {
             <p className="text-gray-500 text-center py-8">No games available. Create one!</p>
           )}
           {games.map(game => (
-            <div key={game.id} className="card flex items-center justify-between">
-              <div>
-                <p className="font-medium">{game.name}</p>
-                <p className="text-sm text-gray-400">
-                  {t('players')}: {game.player_count}/{game.max_players} · {game.created_by_username}
-                </p>
+            <div key={game.id} className="card">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">{game.name}</p>
+                  <p className="text-sm text-gray-400">
+                    {t('players')}: {game.player_count}/{game.max_players} · {game.created_by_username}
+                  </p>
+                </div>
+                {game.status === 'lobby' && game.player_count < game.max_players && (
+                  <button
+                    className="btn-primary text-sm"
+                    onClick={() => joiningGameId === game.id ? setJoiningGameId(null) : openJoin(game.id)}
+                  >
+                    {joiningGameId === game.id ? 'Cancel' : t('joinGame')}
+                  </button>
+                )}
+                {game.status === 'active' && (
+                  <button className="btn-secondary text-sm" onClick={() => navigate(`/game/${game.id}`)}>
+                    Spectate / Rejoin
+                  </button>
+                )}
               </div>
-              {game.status === 'lobby' && game.player_count < game.max_players && (
-                <button
-                  className="btn-primary text-sm"
-                  onClick={() => {
-                    const c = prompt('Choose color: red, blue, green, orange') ?? 'blue';
-                    joinGame(game.id, c);
-                  }}
-                >
-                  {t('joinGame')}
-                </button>
-              )}
-              {game.status === 'active' && (
-                <button className="btn-secondary text-sm" onClick={() => navigate(`/game/${game.id}`)}>
-                  Spectate / Rejoin
-                </button>
+
+              {/* Inline join color picker */}
+              {joiningGameId === game.id && (
+                <div className="mt-3 pt-3 border-t border-gray-700 space-y-2">
+                  <p className="text-sm text-gray-400">Pick your color:</p>
+                  <ColorPicker value={joinColor} onChange={setJoinColor} takenColors={joinTakenColors}/>
+                  <button className="btn-primary w-full text-sm" onClick={confirmJoin}>
+                    Join with this color
+                  </button>
+                </div>
               )}
             </div>
           ))}

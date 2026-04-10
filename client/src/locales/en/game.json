@@ -92,6 +92,7 @@
     "movedBandit": "{{player}} moved the Bandit",
     "bankTrade": "{{player}} traded with the bank",
     "endedTurn": "{{player}} ended their turn",
+    "turnTimedOut": "{{player}}'s turn timed out",
     "discarded": "{{player}} discarded {{count}} cards",
     "playerJoined": "{{player}} joined the game",
     "playerLeft": "{{player}} left the game",

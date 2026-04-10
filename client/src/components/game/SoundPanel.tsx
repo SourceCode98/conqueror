@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { wsService } from '../../services/wsService.js';
 import { useGameStore } from '../../store/gameStore.js';
 import { cn } from '../../lib/cn.js';
-import { musicEngine } from './musicEngine.js';
+import { musicEngine, TRACKS } from './musicEngine.js';
 
 const HORN_COOLDOWN_MS = 30_000;
 
@@ -125,6 +125,7 @@ export default function SoundPanel({ gameId, className }: Props) {
   const [musicVol, setMusicVol] = useState(0.45);
   const [hornDisabled, setHornDisabled] = useState(false);
   const [hornCooldown, setHornCooldown] = useState(0);
+  const [trackIdx, setTrackIdx] = useState(0);
   const { toasts } = useGameStore();
   const musicAutoStarted = useRef(false);
 
@@ -169,6 +170,12 @@ export default function SoundPanel({ gameId, className }: Props) {
     const next = !muted;
     setMuted(next);
     setGlobalMuted(next);
+  }
+
+  function changeTrack(delta: number) {
+    const next = (trackIdx + delta + TRACKS.length) % TRACKS.length;
+    setTrackIdx(next);
+    musicEngine.setTrack(next);
   }
 
   async function toggleMusic() {
@@ -231,6 +238,25 @@ export default function SoundPanel({ gameId, className }: Props) {
       >
         🎵
       </button>
+
+      {/* Track selector — only when music is on */}
+      {musicOn && (
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => changeTrack(-1)}
+            title="Previous track"
+            className="rounded px-1 py-1 text-xs text-violet-400 hover:text-violet-200 hover:bg-violet-900/40 transition-colors"
+          >◀</button>
+          <span className="text-xs text-violet-300 w-16 text-center truncate select-none">
+            {TRACKS[trackIdx].name}
+          </span>
+          <button
+            onClick={() => changeTrack(1)}
+            title="Next track"
+            className="rounded px-1 py-1 text-xs text-violet-400 hover:text-violet-200 hover:bg-violet-900/40 transition-colors"
+          >▶</button>
+        </div>
+      )}
 
       {/* Music volume slider — only when music is on */}
       {musicOn && (

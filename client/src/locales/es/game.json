@@ -92,6 +92,7 @@
     "movedBandit": "{{player}} movió el Bandido",
     "bankTrade": "{{player}} intercambió con el banco",
     "endedTurn": "{{player}} terminó su turno",
+    "turnTimedOut": "El turno de {{player}} expiró",
     "discarded": "{{player}} descartó {{count}} cartas",
     "playerJoined": "{{player}} se unió a la partida",
     "playerLeft": "{{player}} abandonó la partida",

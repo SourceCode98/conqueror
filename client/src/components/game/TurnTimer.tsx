@@ -31,7 +31,7 @@ export default function TurnTimer({ turnStartTime, turnTimeLimit, isMyTurn, game
 
       if (left === 0 && isMyTurn && !autoEndSentRef.current) {
         autoEndSentRef.current = true;
-        wsService.send({ type: 'END_TURN', payload: { gameId } });
+        wsService.send({ type: 'FORCE_END_TURN', payload: { gameId } });
       }
     };
 

@@ -29,7 +29,7 @@ export class GameOrchestrator {
   private db: Database.Database;
   private gameId: string;
 
-  constructor(gameId: string, db: Database.Database, players: GamePlayer[], seed?: number) {
+  constructor(gameId: string, db: Database.Database, players: GamePlayer[], seed?: number, turnTimeLimit: number | null = null) {
     this.gameId = gameId;
     this.db = db;
 
@@ -77,7 +77,7 @@ export class GameOrchestrator {
       log: [],
       winner: null,
       turnStartTime: Date.now(),
-      turnTimeLimit: null,
+      turnTimeLimit,
       lastAction: null,
     };
 

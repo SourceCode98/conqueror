@@ -1,13 +1,14 @@
 /**
  * Trade response panel — shown to all players when a trade offer is active.
  * - Offerer sees: all player accept/reject/pending statuses, can confirm with any acceptor
- * - Others see: the offer details, accept/decline, and can counter-offer
- * Counter-offer: cancel current trade, then open offer panel with inverted resources
+ * - Others see: the offer details, accept/decline, and can inline counter-offer
+ * Counter-offer: shown inline within the same panel; button only active when terms are changed.
+ * If the player has already declined, counter-offer is not available.
  */
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { ResourceType } from '@conqueror/shared';
-import { ALL_RESOURCES, EMPTY_RESOURCES } from '@conqueror/shared';
+import { ALL_RESOURCES } from '@conqueror/shared';
 import { wsService } from '../../services/wsService.js';
 import { useGameStore } from '../../store/gameStore.js';
 import { RESOURCE_ICON_MAP } from '../icons/GameIcons.js';
@@ -59,13 +60,56 @@ function ResourceRow({
   );
 }
 
+function CounterEditor({
+  label, accentColor, bundle, onChange,
+}: {
+  label: string;
+  accentColor: string;
+  bundle: Record<ResourceType, number>;
+  onChange: (r: ResourceType, delta: number) => void;
+}) {
+  return (
+    <div className="rounded-xl border border-gray-700 bg-gray-800 p-2">
+      <p className="text-[9px] font-bold uppercase tracking-widest mb-1.5" style={{ color: accentColor }}>{label}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {ALL_RESOURCES.map(r => (
+          <div key={r} className="flex flex-col items-center gap-0.5">
+            <div className="rounded-xl border flex flex-col items-center py-1 px-1.5"
+              style={{ backgroundColor: CARD_THEME[r].bg, borderColor: CARD_THEME[r].border }}>
+              {RESOURCE_ICON_MAP[r]?.({ size: 20 })}
+              <span className="text-[9px] font-bold tabular-nums" style={{ color: CARD_THEME[r].border }}>
+                ×{bundle[r]}
+              </span>
+            </div>
+            <div className="flex gap-0.5">
+              <button
+                className="w-5 h-5 rounded bg-gray-700 text-gray-300 text-xs hover:bg-gray-600 disabled:opacity-30"
+                disabled={bundle[r] <= 0}
+                onClick={() => onChange(r, -1)}
+              >−</button>
+              <button
+                className="w-5 h-5 rounded bg-gray-700 text-gray-300 text-xs hover:bg-gray-600"
+                onClick={() => onChange(r, +1)}
+              >+</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+type CounterBundle = Record<ResourceType, number>;
+
 interface Props { gameId: string }
 
 export default function TradeResponsePanel({ gameId }: Props) {
   const { gameState, myPlayer, openTradePanel } = useGameStore();
   const offer = gameState?.tradeOffer;
   const me = myPlayer();
-  const [counterMode, setCounterMode] = useState(false);
+
+  // counter: null = not in counter mode; object = inline editor state
+  const [counter, setCounter] = useState<{ give: CounterBundle; want: CounterBundle } | null>(null);
 
   if (!offer || !me) return null;
 
@@ -76,23 +120,52 @@ export default function TradeResponsePanel({ gameId }: Props) {
   const canFulfill = ALL_RESOURCES.every(r => myResources[r] >= offer.want[r]);
   const myResponse = offer.respondents[me.id];
   const alreadyResponded = myResponse === 'accept' || myResponse === 'reject';
+  const hasDeclined = myResponse === 'reject';
 
   const acceptors = Object.entries(offer.respondents).filter(([, s]) => s === 'accept');
-  const pending   = Object.entries(offer.respondents).filter(([, s]) => s === 'pending');
-  const rejected  = Object.entries(offer.respondents).filter(([, s]) => s === 'reject');
 
   function respond(response: 'accept' | 'reject') {
     wsService.send({ type: 'RESPOND_TRADE', payload: { gameId, response } });
   }
 
-  function sendCounterOffer() {
-    // Cancel current trade, then open TradeOfferPanel pre-configured
-    // We store the counter data in the store so TradeOfferPanel can pick it up
-    wsService.send({ type: 'CANCEL_TRADE', payload: { gameId } });
-    // Give a tiny delay for the state update then open the offer panel
-    setTimeout(() => openTradePanel('offer'), 150);
-    setCounterMode(false);
+  function openCounter() {
+    // Pre-fill with INVERTED offer: I give what they wanted, I want what they gave
+    setCounter({
+      give: { ...offer!.want as CounterBundle },
+      want: { ...offer!.give as CounterBundle },
+    });
   }
+
+  function adjustCounter(side: 'give' | 'want', r: ResourceType, delta: number) {
+    if (!counter) return;
+    setCounter(prev => {
+      if (!prev) return prev;
+      const cur = prev[side][r] + delta;
+      return { ...prev, [side]: { ...prev[side], [r]: Math.max(0, cur) } };
+    });
+  }
+
+  function sendCounter() {
+    if (!counter) return;
+    wsService.send({ type: 'CANCEL_TRADE', payload: { gameId } });
+    // Small delay to let the cancel propagate, then open the offer panel
+    // The counter data is passed via a one-time store setter so TradeOfferPanel can pre-fill
+    setTimeout(() => {
+      openTradePanel('offer');
+      // Store counter in sessionStorage for TradeOfferPanel to pick up
+      sessionStorage.setItem('counterOffer', JSON.stringify(counter));
+    }, 100);
+    setCounter(null);
+  }
+
+  // Is counter offer different from the inverted original?
+  const counterChanged = counter ? ALL_RESOURCES.some(r =>
+    counter.give[r] !== (offer.want as any)[r] ||
+    counter.want[r] !== (offer.give as any)[r]
+  ) : false;
+
+  const hasAnyCounter = counter ? ALL_RESOURCES.some(r => counter.give[r] > 0 || counter.want[r] > 0) : false;
+  const canSendCounter = counterChanged && hasAnyCounter;
 
   return (
     <motion.div
@@ -125,10 +198,10 @@ export default function TradeResponsePanel({ gameId }: Props) {
           )}
         </div>
 
-        {/* ── Offer summary ── */}
+        {/* ── Original offer summary ── */}
         <div className="grid grid-cols-2 gap-2">
-          <ResourceRow label="They give you" accentColor="#4ade80" bundle={offer.give as any} compact/>
-          <ResourceRow label="You give them" accentColor="#f97316" bundle={offer.want as any} compact/>
+          <ResourceRow label={isOfferer ? 'You give' : 'They give you'} accentColor="#4ade80" bundle={offer.give as any} compact/>
+          <ResourceRow label={isOfferer ? 'You want' : 'You give them'} accentColor="#f97316" bundle={offer.want as any} compact/>
         </div>
 
         {/* ── All player statuses ── */}
@@ -150,7 +223,6 @@ export default function TradeResponsePanel({ gameId }: Props) {
                       status === 'accept' ? 'text-green-400' : status === 'reject' ? 'text-red-400' : 'text-gray-500')}>
                       {status === 'accept' ? '✓ Accept' : status === 'reject' ? '✕ Decline' : '⏳ Deciding'}
                     </span>
-                    {/* Offerer can confirm trade with acceptors */}
                     {isOfferer && status === 'accept' && (
                       <button
                         className="text-[10px] bg-green-700 hover:bg-green-600 text-white rounded px-2 py-0.5 transition-colors"
@@ -166,10 +238,9 @@ export default function TradeResponsePanel({ gameId }: Props) {
           </div>
         </div>
 
-        {/* ── Responder actions ── */}
-        {!isOfferer && !alreadyResponded && (
+        {/* ── Responder actions (only when not yet responded) ── */}
+        {!isOfferer && !alreadyResponded && !counter && (
           <>
-            {/* Resource check */}
             {!canFulfill && (
               <div className="rounded-xl border border-red-900 bg-red-950/40 p-2">
                 <p className="text-red-400 text-xs font-medium">You don't have the required resources</p>
@@ -203,49 +274,64 @@ export default function TradeResponsePanel({ gameId }: Props) {
               </button>
             </div>
 
-            {/* Counter-offer */}
+            {/* Counter-offer trigger — only available before declining */}
             <button
               className="w-full py-2 rounded-xl text-sm font-semibold border border-amber-700 text-amber-400 hover:bg-amber-900/30 transition-colors"
-              onClick={() => setCounterMode(true)}
+              onClick={openCounter}
             >
-              ↩ Counter-offer
+              ↩ Make Counter-offer
             </button>
           </>
         )}
 
-        {/* Already responded */}
-        {!isOfferer && alreadyResponded && (
+        {/* ── Already responded (and not in counter mode) ── */}
+        {!isOfferer && alreadyResponded && !counter && (
           <p className="text-center text-gray-500 text-sm">
             {myResponse === 'accept' ? 'Waiting for the offerer to confirm…' : 'You declined this offer.'}
           </p>
         )}
 
-        {/* Counter-offer confirmation */}
+        {/* ── Inline counter-offer editor ── */}
         <AnimatePresence>
-          {counterMode && (
+          {counter && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden"
             >
-              <div className="rounded-xl border border-amber-700 bg-amber-950/30 p-3 space-y-2">
-                <p className="text-amber-300 text-sm font-semibold">Make a counter-offer?</p>
-                <p className="text-gray-400 text-xs">This will cancel their offer and open a new trade panel for you to offer instead.</p>
-                <div className="flex gap-2">
-                  <button
-                    className="flex-1 py-2 rounded-xl text-sm font-semibold bg-amber-700 hover:bg-amber-600 text-white transition-colors"
-                    onClick={sendCounterOffer}
-                  >
-                    Yes, counter-offer
-                  </button>
-                  <button
-                    className="flex-1 py-2 rounded-xl text-sm font-semibold border border-gray-700 text-gray-400 hover:bg-gray-800 transition-colors"
-                    onClick={() => setCounterMode(false)}
-                  >
-                    Cancel
-                  </button>
+              <div className="rounded-xl border border-amber-700 bg-amber-950/20 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-amber-300 text-sm font-semibold">↩ Counter-offer</p>
+                  <button className="text-gray-500 hover:text-gray-300 text-sm" onClick={() => setCounter(null)}>✕</button>
                 </div>
+                <p className="text-gray-500 text-xs">Adjust the terms and send a new offer. The original offer will be cancelled.</p>
+
+                <CounterEditor
+                  label="You give"
+                  accentColor="#f97316"
+                  bundle={counter.give}
+                  onChange={(r, d) => adjustCounter('give', r, d)}
+                />
+                <CounterEditor
+                  label="You want"
+                  accentColor="#4ade80"
+                  bundle={counter.want}
+                  onChange={(r, d) => adjustCounter('want', r, d)}
+                />
+
+                <button
+                  className={cn(
+                    'w-full py-2.5 rounded-xl text-sm font-semibold transition-colors',
+                    canSendCounter
+                      ? 'bg-amber-700 hover:bg-amber-600 text-white'
+                      : 'bg-gray-700 text-gray-500 cursor-not-allowed',
+                  )}
+                  disabled={!canSendCounter}
+                  onClick={sendCounter}
+                >
+                  Send Counter-offer
+                </button>
               </div>
             </motion.div>
           )}

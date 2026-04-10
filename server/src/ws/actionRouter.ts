@@ -12,6 +12,8 @@ import { handleOfferTrade, handleRespondTrade, handleAcceptPlayerTrade, handleCa
 import { handleBuyDevCard, handlePlayDevCard } from './actions/devCards.js';
 import { handleMoveBandit } from './actions/bandit.js';
 import { handleDiscardCards } from './actions/discard.js';
+import { handleEndGame } from './actions/endGame.js';
+import { handleForceEndTurn } from './actions/forceEndTurn.js';
 
 export interface ActionContext {
   broadcastToRoom: (msg: ServerMessage) => void;
@@ -29,7 +31,7 @@ export function handleGameAction(
   const state = orch.getState();
 
   // Validate it's this player's turn for most actions
-  const isTurnBased = !['RESPOND_TRADE', 'DISCARD_CARDS'].includes(msg.type);
+  const isTurnBased = !['RESPOND_TRADE', 'DISCARD_CARDS', 'END_GAME', 'FORCE_END_TURN'].includes(msg.type);
   if (isTurnBased && state.activePlayerId !== meta.userId) {
     ctx.sendTo(ws, {
       type: 'ERROR',
@@ -82,6 +84,12 @@ export function handleGameAction(
         break;
       case 'DISCARD_CARDS':
         handleDiscardCards(ws, msg.payload as any, meta, orch, ctx);
+        break;
+      case 'FORCE_END_TURN':
+        handleForceEndTurn(ws, msg.payload as any, meta, orch, ctx);
+        break;
+      case 'END_GAME':
+        handleEndGame(ws, msg.payload as any, meta, orch, ctx);
         break;
       default:
         ctx.sendTo(ws, {

@@ -461,12 +461,17 @@ export default function HexBoard({ state }: HexBoardProps) {
 
   function handleTileClick(coord: AxialCoord) {
     if (!myTurn) return;
-    if (boardMode === 'move_bandit') setPendingBanditCoord(coord);
+    if (boardMode === 'move_bandit') {
+      // Cannot place bandit on its current tile; silently ignore (happens when user taps bandit icon)
+      if (coord.q === state.banditLocation.q && coord.r === state.banditLocation.r) return;
+      setPendingBanditCoord(coord);
+    }
   }
 
   function handleBanditPointerDown(e: React.PointerEvent<SVGGElement>) {
     if (!myTurn || boardMode !== 'move_bandit' || !svgRef.current) return;
-    e.stopPropagation();
+    // Do NOT stopPropagation so that a tap (non-drag) on the bandit icon still
+    // falls through to the tile's onClick handler (which gracefully handles same-tile).
     const p = pageToSvg(svgRef.current, e.clientX, e.clientY);
     if (!p) return;
     setDragPiece({ type: 'bandit', svgX: p.x, svgY: p.y });
@@ -565,18 +570,22 @@ export default function HexBoard({ state }: HexBoardProps) {
           const isBandit = state.banditLocation.q === tile.coord.q && state.banditLocation.r === tile.coord.r;
           const isSnapTarget = showDragBandit && !isBandit &&
             validSnapTile?.q === tile.coord.q && validSnapTile?.r === tile.coord.r;
-          const clickable = isRobberClickable && !isBandit;
+          // All tiles (including bandit's tile) receive click events in ROBBER mode
+          // so that a tap on the bandit icon can fall through. handleTileClick guards same-tile.
+          const clickable = isRobberClickable;
 
           const isGlowing = glowCoords.has(`${tile.coord.q}:${tile.coord.r}`);
+          // Visual clickable (amber border + pointer cursor): non-bandit tiles only
+          const visuallyClickable = clickable && !isBandit;
 
           return (
             <g key={`${tile.coord.q}:${tile.coord.r}`}
               onClick={() => clickable && handleTileClick(tile.coord)}
-              style={{ cursor: clickable ? 'pointer' : 'default' }}>
+              style={{ cursor: visuallyClickable ? 'pointer' : 'default' }}>
               {/* Outer hex — dark border */}
               <polygon points={pts} fill={fillColor}
-                stroke={isSnapTarget ? '#ffcc00' : clickable ? '#ffcc00' : isGlowing ? '#fbbf24' : 'rgba(0,0,0,0.6)'}
-                strokeWidth={isSnapTarget ? 3 : clickable ? 2.5 : isGlowing ? 2 : 1.5}/>
+                stroke={isSnapTarget ? '#ffcc00' : visuallyClickable ? '#ffcc00' : isGlowing ? '#fbbf24' : 'rgba(0,0,0,0.6)'}
+                strokeWidth={isSnapTarget ? 3 : visuallyClickable ? 2.5 : isGlowing ? 2 : 1.5}/>
 
               {/* Inner highlight edge — simulates 3D bevel */}
               <polygon points={innerPts} fill="none"

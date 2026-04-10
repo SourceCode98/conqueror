@@ -13,6 +13,7 @@ import { wsService } from '../../services/wsService.js';
 import {
   SettlementIcon, CityIcon, RoadIcon, BanditIcon, DevCardIcon, RESOURCE_ICON_MAP,
 } from '../icons/GameIcons.js';
+import { resolvePlayerColor } from '../HexBoard/hexLayout.js';
 import { cn } from '../../lib/cn.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -226,7 +227,6 @@ export default function ContextBar({ gameState, gameId }: Props) {
       if (b && b.playerId !== myId) adjIds.add(b.playerId);
     }
     const victims = [...adjIds].map(pid => gameState.players.find(p => p.id === pid)).filter(Boolean);
-    const COLORS: Record<string, string> = { red: '#ef4444', blue: '#3b82f6', green: '#22c55e', orange: '#f97316' };
 
     return (
       <div className="bg-orange-950/30 px-3 py-2 space-y-2">
@@ -237,7 +237,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
               className="flex items-center gap-2 rounded-xl border border-gray-600 bg-gray-800 hover:border-amber-500 px-3 py-1.5 text-xs font-semibold transition-colors"
               onClick={() => { send('MOVE_BANDIT', { coord: pendingBanditCoord, stealFromPlayerId: p.id }); setPendingBanditCoord(null); }}
             >
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: COLORS[p.color] ?? '#888' }}/>
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: resolvePlayerColor(p.color) }}/>
               <span className="text-white">{p.username}</span>
               <span className="text-gray-400">{ALL_RESOURCES.reduce((s, r) => s + (p.resources as any)[r], 0)} cards</span>
             </button>
@@ -269,9 +269,34 @@ export default function ContextBar({ gameState, gameId }: Props) {
     );
   }
 
-  // ── TRADE_OFFER phase — non-offerer ──────────────────────────────────────
-  if (phase === 'TRADE_OFFER' && gameState.tradeOffer && gameState.tradeOffer.fromPlayerId !== myId) {
-    const offerer = gameState.players.find(p => p.id === gameState.tradeOffer!.fromPlayerId);
+  // ── TRADE_OFFER phase ────────────────────────────────────────────────────
+  if (phase === 'TRADE_OFFER' && gameState.tradeOffer) {
+    const offer = gameState.tradeOffer;
+    const offerer = gameState.players.find(p => p.id === offer.fromPlayerId);
+    if (offer.fromPlayerId === myId) {
+      // Offerer: show live response counts
+      const acceptCount  = Object.values(offer.respondents).filter(r => r === 'accept').length;
+      const pendingCount = Object.values(offer.respondents).filter(r => r === 'pending').length;
+      return (
+        <div className="bg-amber-950/30 px-4 py-3 flex items-center gap-2">
+          <span className="text-amber-200 text-sm font-medium">
+            🤝 Your offer —{' '}
+            {acceptCount > 0 && <span className="text-green-400">{acceptCount} accepted</span>}
+            {acceptCount > 0 && pendingCount > 0 && ', '}
+            {pendingCount > 0 && <span className="text-gray-400">{pendingCount} deciding</span>}
+            {acceptCount === 0 && pendingCount === 0 && <span className="text-red-400">all declined</span>}
+          </span>
+        </div>
+      );
+    }
+    const myResponse = myId ? offer.respondents[myId] : undefined;
+    if (myResponse === 'reject') {
+      return (
+        <div className="px-4 py-3">
+          <span className="text-gray-500 text-sm">You declined {offerer?.username}'s offer — waiting for others…</span>
+        </div>
+      );
+    }
     return (
       <div className="bg-amber-950/30 px-4 py-3">
         <span className="text-amber-200 text-sm font-medium">🤝 Trade offer from {offerer?.username} — see panel above</span>

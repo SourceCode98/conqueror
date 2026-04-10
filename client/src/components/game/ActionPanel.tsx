@@ -11,6 +11,7 @@ import {
   SettlementIcon, CityIcon, RoadIcon, BanditIcon,
   DevCardIcon, DiceIcon, FloatingDevCard, RESOURCE_ICON_MAP,
 } from '../icons/GameIcons.js';
+import { resolvePlayerColor } from '../HexBoard/hexLayout.js';
 import { cn } from '../../lib/cn.js';
 
 interface Props {
@@ -368,7 +369,7 @@ export default function ActionPanel({ gameState, gameId }: Props) {
               }}
             >
               <div className="size-3 rounded-full flex-shrink-0"
-                style={{ backgroundColor: { red:'#ef4444',blue:'#3b82f6',green:'#22c55e',orange:'#f97316' }[p.color] ?? '#888' }}/>
+                style={{ backgroundColor: resolvePlayerColor(p.color) }}/>
               <span className="font-medium text-white">{p.username}</span>
               <span className="ml-auto text-xs text-gray-400">
                 {ALL_RESOURCES.reduce((s, r) => s + (p.resources as any)[r], 0)} cards

@@ -20,6 +20,7 @@ import ActionToast from '../components/game/ActionToast.js';
 import TurnTimer from '../components/game/TurnTimer.js';
 import BuildCostTable from '../components/game/BuildCostTable.js';
 import SoundPanel from '../components/game/SoundPanel.js';
+import { musicEngine } from '../components/game/musicEngine.js';
 import DiscardPanel from '../components/game/DiscardPanel.js';
 import { resolvePlayerColor } from '../components/HexBoard/hexLayout.js';
 import { cn } from '../lib/cn.js';
@@ -103,9 +104,6 @@ interface LobbyInfo {
   players: Array<{ id: string; username: string; color: string; seat_order: number }>;
 }
 
-const COLOR_HEX: Record<string, string> = {
-  red: '#ef4444', blue: '#3b82f6', green: '#22c55e', orange: '#f97316',
-};
 
 // HAND_PEEK_H used for discard overlay safe area
 const HAND_PEEK_H = HAND_PEEK;
@@ -125,6 +123,7 @@ export default function GamePage() {
   const [lobbyInfo, setLobbyInfo] = useState<LobbyInfo | null>(null);
   const [startError, setStartError] = useState('');
   const [starting, setStarting] = useState(false);
+  const [turnTimeLimit, setTurnTimeLimit] = useState<number | null>(null); // seconds, null = no limit
   const [mobileSheet, setMobileSheet] = useState<'chat' | null>(null);
   const [showCostTable, setShowCostTable] = useState(false);
 
@@ -151,6 +150,7 @@ export default function GamePage() {
 
     return () => {
       wsService.disconnect();
+      musicEngine.stop();
       didConnect.current = false;
     };
   }, [gameId, token, user]);
@@ -174,7 +174,8 @@ export default function GamePage() {
     try {
       const res = await fetch(`/api/games/${gameId}/start`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ turnTimeLimit }),
       });
       const data = await res.json();
       if (!res.ok) setStartError(data.error ?? 'Failed to start game');
@@ -214,7 +215,7 @@ export default function GamePage() {
             <div className="space-y-2">
               {lobbyInfo?.players.map(p => (
                 <div key={p.id} className="flex items-center gap-3">
-                  <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: COLOR_HEX[p.color] ?? '#888' }}/>
+                  <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: resolvePlayerColor(p.color) }}/>
                   <span className="font-medium">{p.username}</span>
                   {p.username === lobbyInfo.created_by_username && (
                     <span className="text-xs text-amber-400">Host</span>
@@ -231,12 +232,35 @@ export default function GamePage() {
           </div>
 
           {isHost && (
-            <div>
+            <div className="space-y-3">
+              {/* Turn time limit selector */}
+              <div className="card py-2 px-3">
+                <label className="block text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wide">
+                  ⏱ Turn time limit
+                </label>
+                <div className="flex gap-2 flex-wrap">
+                  {[null, 60, 90, 120, 180].map(val => (
+                    <button
+                      key={String(val)}
+                      onClick={() => setTurnTimeLimit(val)}
+                      className={cn(
+                        'rounded-lg px-3 py-1.5 text-sm border transition-colors',
+                        turnTimeLimit === val
+                          ? 'border-amber-500 bg-amber-900/40 text-amber-300'
+                          : 'border-gray-700 text-gray-400 hover:border-gray-500',
+                      )}
+                    >
+                      {val === null ? 'No limit' : `${val}s`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {!canStart && (
-                <p className="text-yellow-500 text-sm text-center mb-2">Need at least 2 players to start</p>
+                <p className="text-yellow-500 text-sm text-center">Need at least 2 players to start</p>
               )}
               {startError && (
-                <p className="text-red-400 text-sm text-center mb-2">{startError}</p>
+                <p className="text-red-400 text-sm text-center">{startError}</p>
               )}
               <button
                 className="btn-primary w-full text-lg py-3"
@@ -264,12 +288,16 @@ export default function GamePage() {
   const localPlayer = gameState.players.find(p => p.id === localPlayerId);
   const isMyTurn = gameState.activePlayerId === localPlayerId;
   const phase = gameState.phase;
+  const isHost = lobbyInfo?.created_by_username === user?.username;
 
   const tradeOffer = gameState.tradeOffer;
-  // Show response panel for all non-offerers when TRADE_OFFER is active
+  // Show response panel for everyone during a trade offer:
+  //   - Offerer: always shown so they can click "Confirm ✓" on acceptors
+  //   - Others: shown unless they already declined
+  const myTradeResponse = localPlayerId ? tradeOffer?.respondents[localPlayerId] : undefined;
   const showResponsePanel = phase === 'TRADE_OFFER'
     && tradeOffer !== null
-    && tradeOffer.fromPlayerId !== localPlayerId;
+    && (tradeOffer.fromPlayerId === localPlayerId || myTradeResponse !== 'reject');
 
   const sheetOpen = mobileSheet !== null;
 
@@ -306,8 +334,12 @@ export default function GamePage() {
 
         {/* Mobile: phase + timer */}
         <div className="lg:hidden flex items-center gap-2">
-          <span className="text-xs text-gray-300 font-medium truncate max-w-[120px]">
-            {t(`phases.${phase}`)}
+          <span className="text-xs text-gray-300 font-medium truncate max-w-[140px]">
+            {(() => {
+              const activeName = gameState.players.find(p => p.id === gameState.activePlayerId)?.username ?? '';
+              if (phase === 'TRADE_OFFER' && tradeOffer) return `🤝 ${activeName}`;
+              return `${activeName} · ${t(`phases.${phase}`)}`;
+            })()}
           </span>
           {gameState.turnStartTime && gameState.turnTimeLimit && (
             <TurnTimer
@@ -320,9 +352,13 @@ export default function GamePage() {
         </div>
 
         <div className="flex items-center gap-1">
-          {/* Desktop: phase label + timer */}
+          {/* Desktop: active player + phase label + timer */}
           <span className="hidden lg:inline text-sm text-gray-400">
-            {t(`phases.${phase}`)}
+            {(() => {
+              const activeName = gameState.players.find(p => p.id === gameState.activePlayerId)?.username ?? '';
+              if (phase === 'TRADE_OFFER' && tradeOffer) return `🤝 ${activeName} · Trade`;
+              return `${activeName} · ${t(`phases.${phase}`)}`;
+            })()}
           </span>
           {gameState.turnStartTime && gameState.turnTimeLimit && (
             <TurnTimer
@@ -343,8 +379,36 @@ export default function GamePage() {
             📋
           </button>
 
+          {/* Host: end game button */}
+          {isHost && phase !== 'GAME_OVER' && (
+            <button
+              className="hidden lg:flex items-center gap-1 rounded px-2 py-1 text-xs text-red-400 hover:text-red-300 border border-red-800 hover:border-red-600 transition-colors"
+              onClick={() => {
+                if (confirm('End the game now? The player with the most VP wins.')) {
+                  wsService.send({ type: 'END_GAME', payload: { gameId: gameId! } });
+                }
+              }}
+            >
+              🏁 End Game
+            </button>
+          )}
+
           {/* Sound + Horn panel */}
           <SoundPanel gameId={gameId!} className="hidden lg:flex"/>
+
+          {/* Mobile: host end-game */}
+          {isHost && phase !== 'GAME_OVER' && (
+            <button
+              className="lg:hidden rounded-lg px-2 py-1.5 text-xs border border-red-800 text-red-400"
+              onClick={() => {
+                if (confirm('End the game now?')) {
+                  wsService.send({ type: 'END_GAME', payload: { gameId: gameId! } });
+                }
+              }}
+            >
+              🏁
+            </button>
+          )}
 
           {/* Mobile: chat toggle */}
           <button

@@ -52,9 +52,24 @@ export const VICTORY_POINTS_TO_WIN = 10;
 export const GRAND_ROAD_MIN_LENGTH = 5;
 export const SUPREME_ARMY_MIN_KNIGHTS = 3;
 
-/** Legacy named colors kept for backward-compat; server now accepts any #rrggbb hex */
+/** Selectable player colors (hex). Add more here to expand the palette. */
+export const PLAYER_COLOR_OPTIONS = [
+  '#ef4444', // red
+  '#3b82f6', // blue
+  '#22c55e', // green
+  '#f97316', // orange
+  '#a855f7', // purple
+  '#06b6d4', // cyan
+  '#ec4899', // pink
+  '#eab308', // yellow
+] as const;
+
+/** Legacy named colors accepted for backward compatibility */
+const LEGACY_COLORS = ['red', 'blue', 'green', 'orange'];
+
 export const PLAYER_COLORS = ['red', 'blue', 'green', 'orange'] as const;
-export const IS_VALID_PLAYER_COLOR = (c: string) => /^#[0-9a-fA-F]{6}$/.test(c);
+export const IS_VALID_PLAYER_COLOR = (c: string) =>
+  LEGACY_COLORS.includes(c) || (PLAYER_COLOR_OPTIONS as readonly string[]).includes(c);
 
 // Starting pieces per player
 export const STARTING_SETTLEMENTS = 5;

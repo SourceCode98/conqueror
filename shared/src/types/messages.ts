@@ -33,6 +33,8 @@ export type ClientMessage =
   | WSMessage<'MOVE_BANDIT',         { gameId: string; coord: AxialCoord; stealFromPlayerId?: string }>
   | WSMessage<'DISCARD_CARDS',       { gameId: string; cards: ResourceBundle }>
   | WSMessage<'END_TURN',            { gameId: string }>
+  | WSMessage<'FORCE_END_TURN',      { gameId: string }>
+  | WSMessage<'END_GAME',            { gameId: string }>
   | WSMessage<'CHAT',                { gameId: string; text: string }>
   | WSMessage<'HORN',                { gameId: string }>;
 

@@ -10,11 +10,13 @@ interface GamePlayer {
   seat_order: number;
 }
 
-export function startGame(gameId: string, players: GamePlayer[]): GameOrchestrator {
+export function startGame(gameId: string, players: GamePlayer[], turnTimeLimit: number | null = null): GameOrchestrator {
   const orch = new GameOrchestrator(
     gameId,
     db,
     players.map(p => ({ ...p, color: p.color as any })),
+    undefined,
+    turnTimeLimit,
   );
   registerOrchestrator(gameId, orch);
 

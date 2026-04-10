@@ -34,6 +34,19 @@ export default function TradeOfferPanel({ gameId }: Props) {
   const me = myPlayer();
   const hand = (me?.resources ?? {}) as Record<ResourceType, number>;
 
+  // Pre-fill from counter-offer if present (set by TradeResponsePanel)
+  useEffect(() => {
+    const raw = sessionStorage.getItem('counterOffer');
+    if (raw) {
+      try {
+        const { give: g, want: w } = JSON.parse(raw);
+        setGive(g);
+        setWant(w);
+      } catch { /* ignore */ }
+      sessionStorage.removeItem('counterOffer');
+    }
+  }, []);
+
   const totalGive = ALL_RESOURCES.reduce((s, r) => s + give[r], 0);
   const totalWant = ALL_RESOURCES.reduce((s, r) => s + want[r], 0);
   const canOffer = totalGive > 0 && totalWant > 0;

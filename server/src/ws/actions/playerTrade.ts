@@ -77,6 +77,16 @@ export function handleRespondTrade(
       : null,
   }));
 
+  // Auto-cancel if every non-offerer has rejected — no need for offerer to manually cancel
+  const updatedOffer = orch.getState().tradeOffer;
+  if (updatedOffer) {
+    const allRejected = Object.values(updatedOffer.respondents).every(r => r === 'reject');
+    if (allRejected) {
+      orch.updateState(s => ({ ...s, phase: 'ACTION', tradeOffer: null }));
+      ctx.broadcastToRoom({ type: 'TRADE_RESOLVED', payload: { accepted: false } });
+    }
+  }
+
   ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
 }
 
