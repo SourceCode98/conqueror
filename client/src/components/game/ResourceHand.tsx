@@ -4,7 +4,7 @@
  * When a trade panel is open, cards become clickable trade inputs.
  * Only rendered for the local player.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import type { ResourceBundle, ResourceType } from '@conqueror/shared';
 import { ALL_RESOURCES } from '@conqueror/shared';
@@ -22,24 +22,28 @@ const CARD_THEME: Record<ResourceType, { bg: string; borderColor: string; label:
 
 const CARD_W = 72;
 const CARD_H = 102;
+const CARD_W_SM = 54;
+const CARD_H_SM = 76;
 const STACK_OFFSET = 4;
 const PEEK_HEIGHT = 32;
-const TRADE_STRIP_H = 96; // total hand height when a trade panel is open
+const TRADE_STRIP_H = 96;
 
-function ResourceCard({ resource, count }: { resource: ResourceType; count: number }) {
+function ResourceCard({ resource, count, small }: { resource: ResourceType; count: number; small?: boolean }) {
   const theme = CARD_THEME[resource];
   const stackLayers = Math.min(count - 1, 3);
+  const cw = small ? CARD_W_SM : CARD_W;
+  const ch = small ? CARD_H_SM : CARD_H;
 
   return (
     <div
       className="relative flex-shrink-0"
-      style={{ width: CARD_W, height: CARD_H + stackLayers * STACK_OFFSET }}
+      style={{ width: cw, height: ch + stackLayers * STACK_OFFSET }}
     >
       {/* Shadow cards behind */}
       {Array.from({ length: stackLayers }, (_, i) => (
         <div key={i} className="absolute rounded-2xl"
           style={{
-            width: CARD_W, height: CARD_H,
+            width: cw, height: ch,
             top: (stackLayers - 1 - i) * STACK_OFFSET,
             left: (stackLayers - 1 - i) * 1,
             backgroundColor: theme.bg,
@@ -54,7 +58,7 @@ function ResourceCard({ resource, count }: { resource: ResourceType; count: numb
       <div
         className="absolute rounded-2xl flex flex-col overflow-hidden"
         style={{
-          width: CARD_W, height: CARD_H,
+          width: cw, height: ch,
           top: stackLayers * STACK_OFFSET,
           left: 0,
           backgroundColor: theme.bg,
@@ -64,25 +68,25 @@ function ResourceCard({ resource, count }: { resource: ResourceType; count: numb
         }}
       >
         {/* Corner index */}
-        <div className="flex items-start justify-between px-2 pt-1.5">
+        <div className="flex items-start justify-between px-1.5 pt-1">
           <div className="flex flex-col items-center leading-none">
-            <span className="text-[13px] font-bold tabular-nums leading-none" style={{ color: theme.borderColor }}>
+            <span className="text-[11px] font-bold tabular-nums leading-none" style={{ color: theme.borderColor }}>
               {count}
             </span>
-            <span className="text-[8px]" style={{ color: theme.borderColor, opacity: 0.5 }}>◆</span>
+            <span className="text-[7px]" style={{ color: theme.borderColor, opacity: 0.5 }}>◆</span>
           </div>
           <div className="opacity-20">
-            {RESOURCE_ICON_MAP[resource]?.({ size: 12 })}
+            {RESOURCE_ICON_MAP[resource]?.({ size: 10 })}
           </div>
         </div>
 
         {/* Center icon */}
         <div className="flex-1 flex items-center justify-center">
-          {RESOURCE_ICON_MAP[resource]?.({ size: 38 })}
+          {RESOURCE_ICON_MAP[resource]?.({ size: small ? 28 : 38 })}
         </div>
 
         {/* Bottom label */}
-        <div className="text-center py-1.5 text-[10px] font-bold uppercase tracking-widest"
+        <div className="text-center py-1 text-[9px] font-bold uppercase tracking-widest"
           style={{ color: theme.borderColor, background: `linear-gradient(transparent, rgba(0,0,0,0.4))` }}>
           {theme.label}
         </div>
@@ -98,14 +102,23 @@ interface Props {
 export default function ResourceHand({ resources }: Props) {
   const [pinned, setPinned] = useState(false);
   const [hovering, setHovering] = useState(false);
+  const [small, setSmall] = useState(() => window.innerWidth < 640);
   const { tradePanel, tradeSide, _tradeCardCb } = useGameStore();
+
+  useEffect(() => {
+    const check = () => setSmall(window.innerWidth < 640);
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   const held = ALL_RESOURCES.filter(r => resources[r] > 0);
   const total = ALL_RESOURCES.reduce((s, r) => s + resources[r], 0);
 
-  // Keep hand expanded when a trade panel is open
   const tradeOpen = tradePanel !== null;
   const expanded = pinned || hovering || tradeOpen;
+
+  const cardW = small ? CARD_W_SM : CARD_W;
+  const cardH = small ? CARD_H_SM : CARD_H;
 
   function fanAngle(idx: number, len: number): number {
     if (len <= 1) return 0;
@@ -119,7 +132,7 @@ export default function ResourceHand({ resources }: Props) {
       style={{ translateX: '-50%' }}
       onHoverStart={() => setHovering(true)}
       onHoverEnd={() => setHovering(false)}
-      animate={{ y: expanded ? 0 : CARD_H + STACK_OFFSET * 3 - PEEK_HEIGHT }}
+      animate={{ y: expanded ? 0 : cardH + STACK_OFFSET * 3 - PEEK_HEIGHT }}
       transition={{ type: 'spring', stiffness: 320, damping: 32 }}
     >
       {/* Toggle / peek bar */}
@@ -188,7 +201,7 @@ export default function ResourceHand({ resources }: Props) {
         /* Full poker hand — normal mode */
         <div
           className="bg-gray-900/95 border-x border-gray-700 px-8 pb-4 pt-3 backdrop-blur-sm"
-          style={{ minWidth: Math.max(320, held.length * (CARD_W + 12) + 64) }}
+          style={{ minWidth: Math.max(small ? 240 : 320, held.length * (cardW + 12) + 64), maxWidth: '100dvw' }}
         >
           {held.length === 0 ? (
             <div className="text-center py-4 text-gray-500 text-sm">No resources</div>
@@ -202,7 +215,7 @@ export default function ResourceHand({ resources }: Props) {
                   transition={{ type: 'spring', stiffness: 300, damping: 25 }}
                   whileHover={{ rotate: 0, scale: 1.08, zIndex: 10 }}
                 >
-                  <ResourceCard resource={r} count={resources[r]}/>
+                  <ResourceCard resource={r} count={resources[r]} small={small}/>
                 </motion.div>
               ))}
             </div>

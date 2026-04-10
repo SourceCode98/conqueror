@@ -173,7 +173,6 @@ function PortLabel({
 
   const key = resource ?? 'any';
   const theme = PORT_COLOR[key] ?? PORT_COLOR.any;
-  const label = `${ratio}:1`;
 
   return (
     <g>
@@ -184,9 +183,8 @@ function PortLabel({
       {/* Badge */}
       <rect x={lx - 15} y={ly - 12} width={30} height={24} rx={6}
         fill={theme.bg} stroke={theme.border} strokeWidth={1.5} opacity={0.92}/>
-      {/* Ratio */}
       <text x={lx} y={ly + 5} textAnchor="middle" fontSize={10} fontWeight="bold" fill="white">
-        {label}
+        {ratio}:1
       </text>
       {/* Resource dot */}
       <circle cx={lx + 12} cy={ly - 12} r={5}
@@ -370,7 +368,7 @@ export default function HexBoard({ state }: HexBoardProps) {
             stroke="rgba(255,255,255,0.02)" strokeWidth={1}/>
         ))}
 
-        {/* ── Ports ── */}
+        {/* ── Ports — rendered before tiles so badges float in the ocean ── */}
         {state.board.ports.map((port, i) => (
           <PortLabel key={i} vertices={port.vertices} resource={port.resource as ResourceType | null} ratio={port.ratio}/>
         ))}
