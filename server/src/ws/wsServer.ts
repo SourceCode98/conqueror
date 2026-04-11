@@ -157,6 +157,25 @@ function handleHorn(ws: WebSocket, payload: { gameId: string }): void {
     return;
   }
   hornLastUsed.set(key, now);
+
+  // Deduct 2 seconds from the active turn (if a time limit is set)
+  const orch = getOrLoadOrchestrator(meta.gameId);
+  if (orch) {
+    const state = orch.getState();
+    if (state.turnTimeLimit && state.turnStartTime && state.phase !== 'GAME_OVER') {
+      orch.updateState(s => ({
+        ...s,
+        turnStartTime: s.turnStartTime! - 2_000,
+      }));
+      broadcastPersonalizedGameState(meta.gameId, orch);
+      // Notify the active player that their time was cut
+      sendToPlayer(meta.gameId, state.activePlayerId, {
+        type: 'ACTION_TOAST',
+        payload: { playerId: meta.userId, username: meta.username, action: 'hurry_up', extra: '-2s' },
+      });
+    }
+  }
+
   broadcastToRoom(meta.gameId, {
     type: 'HORN_PLAYED',
     payload: { fromPlayerId: meta.userId, username: meta.username },

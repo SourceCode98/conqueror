@@ -160,6 +160,20 @@ export default function ActionToast({ gameState }: Props) {
                 builtCity: '🏙 upgraded to a city',
                 boughtDevCard: '🃏 bought a dev card',
               };
+              if (action === 'hurry_up') {
+                return (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">⏰</span>
+                    <div className="flex flex-col leading-tight">
+                      <span className="text-sm font-bold text-red-400">Hurry up!</span>
+                      <span className="text-[10px] text-gray-400">
+                        <span className="font-semibold" style={{ color }}>{toast.username}</span>
+                        {' '}honked — <span className="text-red-400 font-bold">−2s</span>
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
               return (
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold" style={{ color }}>{toast.username}</span>
