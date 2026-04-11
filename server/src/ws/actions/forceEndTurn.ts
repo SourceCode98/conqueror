@@ -55,6 +55,7 @@ export function handleForceEndTurn(
     turnStartTime: Date.now(),
     players: s.players.map(p => ({
       ...p,
+      devCardPlayedThisTurn: false,
       devCards: p.devCards.map(c => ({
         ...c,
         playedThisTurn: false,

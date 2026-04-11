@@ -25,6 +25,8 @@ export interface PlayerState {
     citiesLeft: number;
     roadsLeft: number;
     knightsPlayed: number;
+    devCardPlayedThisTurn: boolean;
+    longestRoadLength: number;
     hasSupremeArmy: boolean;
     hasGrandRoad: boolean;
     victoryPoints: number;

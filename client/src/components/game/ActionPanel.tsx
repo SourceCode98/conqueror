@@ -295,7 +295,7 @@ export default function ActionPanel({ gameState, gameId }: Props) {
           <DiceIcon size={22} color="white"/>
           {t('actions.rollDice')}
         </button>
-        {me?.devCards?.some(c => c.type === 'warrior' && !c.playedThisTurn && !c.boughtThisTurn) && (
+        {!me?.devCardPlayedThisTurn && me?.devCards?.some(c => c.type === 'warrior' && !c.playedThisTurn && !c.boughtThisTurn) && (
           <button
             className="btn-secondary w-full text-sm flex items-center gap-2"
             onClick={() => send('PLAY_DEV_CARD', { cardType: 'warrior' })}
@@ -467,7 +467,10 @@ export default function ActionPanel({ gameState, gameId }: Props) {
 
   // ── Action phase ──────────────────────────────────────────────────────────
   if (phase === 'ACTION') {
-    const playableCards = me?.devCards?.filter(c => !c.playedThisTurn && !c.boughtThisTurn && c.type !== 'victoryPoint') ?? [];
+    const alreadyPlayedCard = me?.devCardPlayedThisTurn ?? false;
+    const playableCards = alreadyPlayedCard
+      ? []
+      : (me?.devCards?.filter(c => !c.playedThisTurn && !c.boughtThisTurn && c.type !== 'victoryPoint') ?? []);
 
     return (
       <div className="space-y-3">
@@ -539,13 +542,16 @@ export default function ActionPanel({ gameState, gameId }: Props) {
               <section>
                 <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">
                   Your Cards
-                  {playableCards.length > 0 && !dragCard && (
-                    <span className="ml-1 text-blue-400 normal-case">— drag or click to play</span>
-                  )}
+                  {alreadyPlayedCard
+                    ? <span className="ml-1 text-gray-500 normal-case">— 1 per turn limit reached</span>
+                    : playableCards.length > 0 && !dragCard && (
+                        <span className="ml-1 text-blue-400 normal-case">— drag or click to play</span>
+                      )
+                  }
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {me.devCards.map((card, i) => {
-                    const used = card.playedThisTurn || card.boughtThisTurn || card.type === 'victoryPoint';
+                    const used = alreadyPlayedCard || card.playedThisTurn || card.boughtThisTurn || card.type === 'victoryPoint';
                     const meta = CARD_META[card.type];
                     const isBeingDragged = dragCard?.idx === i;
                     return (

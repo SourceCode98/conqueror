@@ -55,6 +55,8 @@ export class GameOrchestrator {
         citiesLeft: STARTING_CITIES,
         roadsLeft: STARTING_ROADS,
         knightsPlayed: 0,
+        devCardPlayedThisTurn: false,
+        longestRoadLength: 0,
         hasSupremeArmy: false,
         hasGrandRoad: false,
         victoryPoints: 0,

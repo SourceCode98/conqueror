@@ -60,42 +60,17 @@ function ResourceRow({
   );
 }
 
-function CounterEditor({
-  label, accentColor, bundle, onChange,
-}: {
-  label: string;
-  accentColor: string;
-  bundle: Record<ResourceType, number>;
-  onChange: (r: ResourceType, delta: number) => void;
-}) {
+// Pip: selected card, click to remove
+function CardPip({ r, onRemove }: { r: ResourceType; onRemove: () => void }) {
   return (
-    <div className="rounded-xl border border-gray-700 bg-gray-800 p-2">
-      <p className="text-[9px] font-bold uppercase tracking-widest mb-1.5" style={{ color: accentColor }}>{label}</p>
-      <div className="flex flex-wrap gap-1.5">
-        {ALL_RESOURCES.map(r => (
-          <div key={r} className="flex flex-col items-center gap-0.5">
-            <div className="rounded-xl border flex flex-col items-center py-1 px-1.5"
-              style={{ backgroundColor: CARD_THEME[r].bg, borderColor: CARD_THEME[r].border }}>
-              {RESOURCE_ICON_MAP[r]?.({ size: 20 })}
-              <span className="text-[9px] font-bold tabular-nums" style={{ color: CARD_THEME[r].border }}>
-                ×{bundle[r]}
-              </span>
-            </div>
-            <div className="flex gap-0.5">
-              <button
-                className="w-5 h-5 rounded bg-gray-700 text-gray-300 text-xs hover:bg-gray-600 disabled:opacity-30"
-                disabled={bundle[r] <= 0}
-                onClick={() => onChange(r, -1)}
-              >−</button>
-              <button
-                className="w-5 h-5 rounded bg-gray-700 text-gray-300 text-xs hover:bg-gray-600"
-                onClick={() => onChange(r, +1)}
-              >+</button>
-            </div>
-          </div>
-        ))}
+    <button onClick={onRemove} aria-label={`Remove ${r}`}
+      className="group relative rounded-lg border flex items-center justify-center size-9 transition-all hover:ring-2 hover:ring-red-500"
+      style={{ backgroundColor: CARD_THEME[r].bg, borderColor: CARD_THEME[r].border }}>
+      {RESOURCE_ICON_MAP[r]?.({ size: 18 })}
+      <div className="absolute inset-0 rounded-lg flex items-center justify-center bg-red-900/80 opacity-0 group-hover:opacity-100 transition-opacity">
+        <span className="text-white text-[10px] font-bold">×</span>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -104,7 +79,7 @@ type CounterBundle = Record<ResourceType, number>;
 interface Props { gameId: string }
 
 export default function TradeResponsePanel({ gameId }: Props) {
-  const { gameState, myPlayer, openTradePanel } = useGameStore();
+  const { gameState, myPlayer } = useGameStore();
   const offer = gameState?.tradeOffer;
   const me = myPlayer();
 
@@ -116,56 +91,56 @@ export default function TradeResponsePanel({ gameId }: Props) {
   const offerer = gameState?.players.find(p => p.id === offer.fromPlayerId);
   const myResources = me.resources as Record<ResourceType, number>;
   const isOfferer = offer.fromPlayerId === me.id;
+  const isCounter = offer.fromPlayerId !== gameState?.activePlayerId;
 
   const canFulfill = ALL_RESOURCES.every(r => myResources[r] >= offer.want[r]);
   const myResponse = offer.respondents[me.id];
   const alreadyResponded = myResponse === 'accept' || myResponse === 'reject';
-  const hasDeclined = myResponse === 'reject';
-
-  const acceptors = Object.entries(offer.respondents).filter(([, s]) => s === 'accept');
 
   function respond(response: 'accept' | 'reject') {
     wsService.send({ type: 'RESPOND_TRADE', payload: { gameId, response } });
   }
 
   function openCounter() {
-    // Pre-fill with INVERTED offer: I give what they wanted, I want what they gave
+    // Pre-fill inverted, but clamp "give" to what we actually have
+    const clampedGive = {} as CounterBundle;
+    for (const r of ALL_RESOURCES) {
+      clampedGive[r] = Math.min((offer!.want as CounterBundle)[r], myResources[r]);
+    }
     setCounter({
-      give: { ...offer!.want as CounterBundle },
+      give: clampedGive,
       want: { ...offer!.give as CounterBundle },
     });
   }
 
-  function adjustCounter(side: 'give' | 'want', r: ResourceType, delta: number) {
+  function addToGive(r: ResourceType) {
     if (!counter) return;
-    setCounter(prev => {
-      if (!prev) return prev;
-      const cur = prev[side][r] + delta;
-      return { ...prev, [side]: { ...prev[side], [r]: Math.max(0, cur) } };
-    });
+    const available = myResources[r] - counter.give[r];
+    if (available <= 0) return;
+    setCounter(prev => prev ? { ...prev, give: { ...prev.give, [r]: prev.give[r] + 1 } } : prev);
+  }
+  function removeFromGive(r: ResourceType) {
+    if (!counter) return;
+    setCounter(prev => prev ? { ...prev, give: { ...prev.give, [r]: Math.max(0, prev.give[r] - 1) } } : prev);
+  }
+  function addToWant(r: ResourceType) {
+    if (!counter) return;
+    setCounter(prev => prev ? { ...prev, want: { ...prev.want, [r]: prev.want[r] + 1 } } : prev);
+  }
+  function removeFromWant(r: ResourceType) {
+    if (!counter) return;
+    setCounter(prev => prev ? { ...prev, want: { ...prev.want, [r]: Math.max(0, prev.want[r] - 1) } } : prev);
   }
 
   function sendCounter() {
     if (!counter) return;
-    wsService.send({ type: 'CANCEL_TRADE', payload: { gameId } });
-    // Small delay to let the cancel propagate, then open the offer panel
-    // The counter data is passed via a one-time store setter so TradeOfferPanel can pre-fill
-    setTimeout(() => {
-      openTradePanel('offer');
-      // Store counter in sessionStorage for TradeOfferPanel to pick up
-      sessionStorage.setItem('counterOffer', JSON.stringify(counter));
-    }, 100);
+    wsService.send({ type: 'COUNTER_TRADE', payload: { gameId, give: counter.give, want: counter.want } });
     setCounter(null);
   }
 
-  // Is counter offer different from the inverted original?
-  const counterChanged = counter ? ALL_RESOURCES.some(r =>
-    counter.give[r] !== (offer.want as any)[r] ||
-    counter.want[r] !== (offer.give as any)[r]
-  ) : false;
-
-  const hasAnyCounter = counter ? ALL_RESOURCES.some(r => counter.give[r] > 0 || counter.want[r] > 0) : false;
-  const canSendCounter = counterChanged && hasAnyCounter;
+  const canSendCounter = counter
+    ? ALL_RESOURCES.some(r => counter.give[r] > 0) && ALL_RESOURCES.some(r => counter.want[r] > 0)
+    : false;
 
   return (
     <motion.div
@@ -186,7 +161,7 @@ export default function TradeResponsePanel({ gameId }: Props) {
         {/* ── Header ── */}
         <div className="flex items-center justify-between">
           <h2 className="text-amber-400 font-bold text-base">
-            🤝 Trade {isOfferer ? 'Offer' : `from ${offerer?.username}`}
+            {isCounter ? '↩' : '🤝'} {isCounter ? 'Counter-offer' : 'Trade Offer'}{!isOfferer && ` from ${offerer?.username}`}
           </h2>
           {isOfferer && (
             <button
@@ -305,20 +280,60 @@ export default function TradeResponsePanel({ gameId }: Props) {
                   <p className="text-amber-300 text-sm font-semibold">↩ Counter-offer</p>
                   <button className="text-gray-500 hover:text-gray-300 text-sm" onClick={() => setCounter(null)}>✕</button>
                 </div>
-                <p className="text-gray-500 text-xs">Adjust the terms and send a new offer. The original offer will be cancelled.</p>
 
-                <CounterEditor
-                  label="You give"
-                  accentColor="#f97316"
-                  bundle={counter.give}
-                  onChange={(r, d) => adjustCounter('give', r, d)}
-                />
-                <CounterEditor
-                  label="You want"
-                  accentColor="#4ade80"
-                  bundle={counter.want}
-                  onChange={(r, d) => adjustCounter('want', r, d)}
-                />
+                {/* Give side — capped to your hand */}
+                <div className="rounded-xl border border-gray-700 bg-gray-800 p-2 space-y-2">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-amber-400">You give ({ALL_RESOURCES.reduce((s,r) => s + counter.give[r], 0)})</p>
+                  {(() => {
+                    const selected = ALL_RESOURCES.flatMap(r => Array.from({ length: counter.give[r] }, () => r));
+                    return selected.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {selected.map((r, i) => <CardPip key={i} r={r} onRemove={() => removeFromGive(r)}/>)}
+                      </div>
+                    ) : <p className="text-[10px] text-gray-600 italic">None</p>;
+                  })()}
+                  {/* Picker: only resources you have, capped */}
+                  <div className="flex flex-wrap gap-1.5 pt-1 border-t border-gray-700">
+                    {ALL_RESOURCES.filter(r => myResources[r] > 0).map(r => {
+                      const available = myResources[r] - counter.give[r];
+                      return (
+                        <button key={r} disabled={available <= 0}
+                          onClick={() => addToGive(r)}
+                          className="flex flex-col items-center rounded-xl border p-1 w-10 disabled:opacity-30 hover:scale-105 transition-transform"
+                          style={{ backgroundColor: CARD_THEME[r].bg, borderColor: CARD_THEME[r].border }}>
+                          {RESOURCE_ICON_MAP[r]?.({ size: 18 })}
+                          <span className="text-[8px] font-bold tabular-nums mt-0.5" style={{ color: CARD_THEME[r].border }}>{available}</span>
+                        </button>
+                      );
+                    })}
+                    {ALL_RESOURCES.every(r => myResources[r] === 0) && (
+                      <p className="text-[10px] text-gray-600 italic">No resources</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Want side — any resource */}
+                <div className="rounded-xl border border-gray-700 bg-gray-800 p-2 space-y-2">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-green-400">You want ({ALL_RESOURCES.reduce((s,r) => s + counter.want[r], 0)})</p>
+                  {(() => {
+                    const selected = ALL_RESOURCES.flatMap(r => Array.from({ length: counter.want[r] }, () => r));
+                    return selected.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {selected.map((r, i) => <CardPip key={i} r={r} onRemove={() => removeFromWant(r)}/>)}
+                      </div>
+                    ) : <p className="text-[10px] text-gray-600 italic">None</p>;
+                  })()}
+                  <div className="flex flex-wrap gap-1.5 pt-1 border-t border-gray-700">
+                    {ALL_RESOURCES.map(r => (
+                      <button key={r} onClick={() => addToWant(r)}
+                        className="flex flex-col items-center rounded-xl border p-1 w-10 hover:scale-105 transition-transform"
+                        style={{ backgroundColor: CARD_THEME[r].bg, borderColor: CARD_THEME[r].border }}>
+                        {RESOURCE_ICON_MAP[r]?.({ size: 18 })}
+                        <span className="text-[8px] mt-0.5" style={{ color: CARD_THEME[r].border }}>{CARD_THEME[r].label.slice(0,3)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
                 <button
                   className={cn(

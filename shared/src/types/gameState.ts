@@ -35,6 +35,8 @@ export interface PlayerState {
   citiesLeft: number;      // remaining pieces (starts at 4)
   roadsLeft: number;       // remaining pieces (starts at 15)
   knightsPlayed: number;
+  devCardPlayedThisTurn: boolean;  // true once a dev card is played on the active player's turn
+  longestRoadLength: number;       // current longest road for this player (updated each recalculation)
   hasSupremeArmy: boolean;
   hasGrandRoad: boolean;
   victoryPoints: number;       // public VP visible to all

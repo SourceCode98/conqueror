@@ -30,6 +30,7 @@ export type ClientMessage =
   | WSMessage<'RESPOND_TRADE',       { gameId: string; response: 'accept' | 'reject' }>
   | WSMessage<'ACCEPT_PLAYER_TRADE', { gameId: string; fromPlayerId: string }>
   | WSMessage<'CANCEL_TRADE',        { gameId: string }>
+  | WSMessage<'COUNTER_TRADE',       { gameId: string; give: ResourceBundle; want: ResourceBundle }>
   | WSMessage<'MOVE_BANDIT',         { gameId: string; coord: AxialCoord; stealFromPlayerId?: string }>
   | WSMessage<'DISCARD_CARDS',       { gameId: string; cards: ResourceBundle }>
   | WSMessage<'END_TURN',            { gameId: string }>

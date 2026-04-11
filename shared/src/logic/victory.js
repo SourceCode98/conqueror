@@ -83,7 +83,9 @@ function recalculateSpecialCards(state) {
     // ─── Grand Road ───────────────────────────────────────────────────────────
     const roadLengths = {};
     for (const player of players) {
-        roadLengths[player.id] = calculateLongestRoad({ ...state, players }, player.id);
+        const len = calculateLongestRoad({ ...state, players }, player.id);
+        roadLengths[player.id] = len;
+        player.longestRoadLength = len;
     }
     const currentHolder = players.find(p => p.hasGrandRoad);
     const currentHolderLen = currentHolder ? roadLengths[currentHolder.id] : 0;

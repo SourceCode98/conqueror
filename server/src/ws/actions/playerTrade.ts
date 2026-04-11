@@ -145,7 +145,49 @@ export function handleCancelTrade(
   const state = orch.getState();
   if (!state.tradeOffer) return;
 
+  // Only the offerer (or active player) can cancel
+  if (state.tradeOffer.fromPlayerId !== meta.userId && state.activePlayerId !== meta.userId) {
+    ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'NOT_OFFERER', message: 'Only the offerer can cancel the trade' } });
+    return;
+  }
+
   orch.updateState(s => ({ ...s, phase: 'ACTION', tradeOffer: null }));
   ctx.broadcastToRoom({ type: 'TRADE_RESOLVED', payload: { accepted: false } });
+  ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
+}
+
+export function handleCounterTrade(
+  ws: WebSocket,
+  payload: { gameId: string; give: ResourceBundle; want: ResourceBundle },
+  meta: ClientMeta,
+  orch: GameOrchestrator,
+  ctx: ActionContext,
+): void {
+  const state = orch.getState();
+
+  if (!state.tradeOffer) {
+    ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'NO_TRADE_OFFER', message: 'No active trade offer' } });
+    return;
+  }
+  if (state.tradeOffer.fromPlayerId === meta.userId) {
+    ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'CANT_COUNTER_OWN', message: 'Cannot counter your own offer' } });
+    return;
+  }
+
+  const player = state.players.find(p => p.id === meta.userId)!;
+  if (!hasResources(player.resources, payload.give)) {
+    ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'INSUFFICIENT_RESOURCES', message: 'You do not have these resources' } });
+    return;
+  }
+
+  const respondents: Record<string, 'pending' | 'accept' | 'reject'> = {};
+  for (const p of state.players) {
+    if (p.id !== meta.userId) respondents[p.id] = 'pending';
+  }
+
+  const newOffer = { fromPlayerId: meta.userId, give: payload.give, want: payload.want, respondents };
+
+  orch.updateState(s => ({ ...s, phase: 'TRADE_OFFER', tradeOffer: newOffer }));
+  ctx.broadcastToRoom({ type: 'TRADE_OFFERED', payload: { offer: newOffer } });
   ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
 }

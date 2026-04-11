@@ -8,7 +8,7 @@ import { handlePlaceBuilding } from './actions/placeBuilding.js';
 import { handlePlaceRoad } from './actions/placeRoad.js';
 import { handleEndTurn } from './actions/endTurn.js';
 import { handleBankTrade } from './actions/bankTrade.js';
-import { handleOfferTrade, handleRespondTrade, handleAcceptPlayerTrade, handleCancelTrade } from './actions/playerTrade.js';
+import { handleOfferTrade, handleRespondTrade, handleAcceptPlayerTrade, handleCancelTrade, handleCounterTrade } from './actions/playerTrade.js';
 import { handleBuyDevCard, handlePlayDevCard } from './actions/devCards.js';
 import { handleMoveBandit } from './actions/bandit.js';
 import { handleDiscardCards } from './actions/discard.js';
@@ -31,7 +31,7 @@ export function handleGameAction(
   const state = orch.getState();
 
   // Validate it's this player's turn for most actions
-  const isTurnBased = !['RESPOND_TRADE', 'DISCARD_CARDS', 'END_GAME', 'FORCE_END_TURN'].includes(msg.type);
+  const isTurnBased = !['RESPOND_TRADE', 'COUNTER_TRADE', 'DISCARD_CARDS', 'END_GAME', 'FORCE_END_TURN'].includes(msg.type);
   if (isTurnBased && state.activePlayerId !== meta.userId) {
     ctx.sendTo(ws, {
       type: 'ERROR',
@@ -72,6 +72,9 @@ export function handleGameAction(
         break;
       case 'CANCEL_TRADE':
         handleCancelTrade(ws, msg.payload as any, meta, orch, ctx);
+        break;
+      case 'COUNTER_TRADE':
+        handleCounterTrade(ws, msg.payload as any, meta, orch, ctx);
         break;
       case 'BUY_DEV_CARD':
         handleBuyDevCard(ws, msg.payload as any, meta, orch, ctx);

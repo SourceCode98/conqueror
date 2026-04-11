@@ -27,9 +27,10 @@ import { RESOURCE_ICON_MAP } from '../components/icons/GameIcons.js';
 import { ALL_RESOURCES } from '@conqueror/shared';
 import { cn } from '../lib/cn.js';
 
-// Board padding: top = ResourceHand peek bar, bottom = ContextBar height
+// Board padding: top = ResourceHand peek bar, bottom = ContextBar + chat strip
 const MOBILE_BOARD_PT = HAND_PEEK; // 32px — peek bar sits above board
-const MOBILE_BOARD_PB = 56;        // ContextBar height
+const MOBILE_CHAT_H   = 44;        // compact chat input strip height
+const MOBILE_BOARD_PB = 56 + MOBILE_CHAT_H; // ContextBar + chat strip
 
 // ── Floating instruction pill shown over the board when in a board-tap mode ──
 function BoardHint({ hint, onCancel, hideOnMobile }: { hint: string | null; onCancel: () => void; hideOnMobile?: boolean }) {
@@ -96,6 +97,57 @@ function MobileDiceWidget({ diceRoll, phase, gameId }: {
       </div>
       {/* SoundPanel */}
       <SoundPanel gameId={gameId}/>
+    </div>
+  );
+}
+
+// ── Persistent mobile chat input strip ──────────────────────────────────────
+function MobileChatBar({ gameId }: { gameId: string }) {
+  const { chatMessages } = useGameStore();
+  const [text, setText] = useState('');
+  const lastMsg = chatMessages[chatMessages.length - 1];
+
+  function send() {
+    if (!text.trim()) return;
+    wsService.send({ type: 'CHAT', payload: { gameId, text: text.trim() } });
+    setText('');
+  }
+
+  return (
+    <div
+      className="lg:hidden fixed inset-x-0 z-[51] bg-gray-900/95 border-t border-gray-700 flex items-center gap-2 px-2"
+      style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 56px)', height: MOBILE_CHAT_H, backdropFilter: 'blur(6px)' }}
+    >
+      {/* Last message preview */}
+      {lastMsg && (
+        <p className="flex-1 text-[10px] text-gray-500 truncate min-w-0">
+          <span className="text-amber-400 font-medium">{lastMsg.username}:</span> {lastMsg.text}
+        </p>
+      )}
+      {!lastMsg && (
+        <p className="flex-1 text-[10px] text-gray-600 italic">No messages yet</p>
+      )}
+
+      {/* Input + send */}
+      <form
+        className="flex items-center gap-1 shrink-0"
+        onSubmit={e => { e.preventDefault(); send(); }}
+      >
+        <input
+          className="w-28 rounded-lg bg-gray-800 border border-gray-700 px-2 py-1 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-gray-500"
+          placeholder="Message…"
+          value={text}
+          onChange={e => setText(e.target.value)}
+          maxLength={200}
+        />
+        <button
+          type="submit"
+          disabled={!text.trim()}
+          className="rounded-lg bg-amber-700 hover:bg-amber-600 disabled:opacity-40 px-2.5 py-1 text-xs font-semibold text-white transition-colors"
+        >
+          ↑
+        </button>
+      </form>
     </div>
   );
 }
@@ -539,41 +591,49 @@ export default function GamePage() {
               return (
                 <div
                   key={p.id}
-                  className="flex items-center gap-1.5 rounded-lg px-2 py-1"
+                  className="rounded-lg px-2 py-1 space-y-0.5"
                   style={{
-                    background: isActive ? 'rgba(17,24,39,0.85)' : 'rgba(17,24,39,0.55)',
-                    border: isActive ? `1px solid ${color}` : '1px solid transparent',
+                    background: isActive ? 'rgba(17,24,39,0.88)' : 'rgba(17,24,39,0.55)',
+                    border: isActive ? `1px solid ${color}` : '1px solid rgba(75,85,99,0.3)',
                     backdropFilter: 'blur(4px)',
                     opacity: (p as any).connected === false ? 0.5 : 1,
+                    minWidth: 130,
                   }}
                 >
-                  <span
-                    className="shrink-0 rounded-full"
-                    style={{
+                  {/* Row 1: dot + name + VP */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="shrink-0 rounded-full" style={{
                       width: 7, height: 7,
                       backgroundColor: isActive ? color : '#4b5563',
                       boxShadow: isActive ? `0 0 5px ${color}` : 'none',
-                    }}
-                  />
-                  <span
-                    className="text-xs font-semibold leading-none truncate max-w-[80px]"
-                    style={{ color: isActive ? '#fff' : '#9ca3af' }}
-                  >
-                    {p.username}{isMe ? ' ✦' : ''}
-                  </span>
-                  <span
-                    className="text-[10px] font-bold tabular-nums shrink-0 ml-auto pl-1"
-                    style={{ color: isActive ? '#fbbf24' : '#6b7280' }}
-                  >
-                    {p.victoryPoints}VP
-                  </span>
-                  {/* Special cards */}
-                  {p.hasGrandRoad && (
-                    <span className="text-[9px] bg-yellow-800/80 text-yellow-200 rounded px-0.5" title="Grand Road">🛣</span>
-                  )}
-                  {p.hasSupremeArmy && (
-                    <span className="text-[9px] bg-red-900/80 text-red-200 rounded px-0.5" title="Supreme Army">⚔️</span>
-                  )}
+                    }}/>
+                    <span className="text-xs font-semibold leading-none truncate max-w-[72px]"
+                      style={{ color: isActive ? '#fff' : '#9ca3af' }}>
+                      {p.username}{isMe ? ' ✦' : ''}
+                    </span>
+                    <span className="text-[10px] font-bold tabular-nums ml-auto shrink-0"
+                      style={{ color: isActive ? '#fbbf24' : '#6b7280' }}>
+                      {p.victoryPoints}VP
+                    </span>
+                    {p.hasGrandRoad && (
+                      <span className="text-[9px] bg-yellow-800/80 text-yellow-200 rounded px-0.5" title="Grand Road">🛣</span>
+                    )}
+                    {p.hasSupremeArmy && (
+                      <span className="text-[9px] bg-red-900/80 text-red-200 rounded px-0.5" title="Supreme Army">⚔️</span>
+                    )}
+                  </div>
+                  {/* Row 2: stats */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] tabular-nums text-gray-500 flex items-center gap-0.5" title="Knights played">
+                      ⚔️ <span className="font-bold text-gray-300">{p.knightsPlayed}</span>
+                    </span>
+                    <span className="text-[9px] tabular-nums text-gray-500 flex items-center gap-0.5" title="Dev cards in hand">
+                      🃏 <span className="font-bold text-gray-300">{p.devCardCount}</span>
+                    </span>
+                    <span className="text-[9px] tabular-nums text-gray-500 flex items-center gap-0.5" title="Longest road">
+                      🛤 <span className="font-bold text-gray-300">{p.longestRoadLength}</span>
+                    </span>
+                  </div>
                 </div>
               );
             })}
@@ -739,6 +799,9 @@ export default function GamePage() {
           </div>
         </div>
       )}
+
+      {/* ── Mobile: compact always-visible chat input ── */}
+      <MobileChatBar gameId={gameId!} />
 
       {/* ── Mobile: ContextBar — fixed at the very bottom ── */}
       <div className="lg:hidden fixed inset-x-0 bottom-0 z-[52] bg-gray-900 border-t border-gray-700"

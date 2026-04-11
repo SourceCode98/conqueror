@@ -88,28 +88,82 @@ export function handlePlayDevCard(
     return;
   }
 
+  // Only warrior can be played before rolling
+  if (state.phase === 'ROLL' && payload.cardType !== 'warrior') {
+    ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'WRONG_PHASE', message: 'Only a Warrior card can be played before rolling' } });
+    return;
+  }
+
+  // Victory point cards cannot be manually played
+  if (payload.cardType === 'victoryPoint') {
+    ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'AUTO_VP', message: 'VP cards are revealed automatically' } });
+    return;
+  }
+
   const player = state.players.find(p => p.id === meta.userId)!;
+
+  // Enforce 1 dev card per turn
+  if (player.devCardPlayedThisTurn) {
+    ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'ALREADY_PLAYED', message: 'You already played a dev card this turn' } });
+    return;
+  }
+
   const cardIdx = player.devCards.findIndex(
     c => c.type === payload.cardType && !c.playedThisTurn && !c.boughtThisTurn
   );
 
   if (cardIdx === -1) {
-    ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'NO_CARD', message: 'You do not have this card or already played one this turn' } });
+    ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'NO_CARD', message: 'You do not have this card available to play' } });
     return;
   }
 
-// Remove the played card
-orch.updateState(s => ({
-  ...s,
-  players: s.players.map(p =>
-    p.id === meta.userId
-      ? {
-          ...p,
-          devCards: p.devCards.filter((_, i) => i !== cardIdx),
-        }
-      : p
-  ),
-}));
+  // Validate params BEFORE removing the card so it is never lost on bad input
+  if (payload.cardType === 'yearOfPlenty') {
+    const resources = payload.params?.resources;
+    if (!resources || resources.length !== 2) {
+      ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'INVALID_PARAMS', message: 'Must select 2 resources' } });
+      return;
+    }
+    for (const r of resources) {
+      if (!ALL_RESOURCES.includes(r as any)) {
+        ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'INVALID_RESOURCE', message: `Invalid resource: ${r}` } });
+        return;
+      }
+    }
+  }
+
+  if (payload.cardType === 'monopoly') {
+    const resource = payload.params?.resource;
+    if (!resource || !ALL_RESOURCES.includes(resource as any)) {
+      ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'INVALID_RESOURCE', message: 'Must select a valid resource' } });
+      return;
+    }
+  }
+
+  if (payload.cardType === 'roadBuilding') {
+    const edges: EdgeId[] = Array.isArray(payload.params?.edges) ? payload.params.edges : [];
+    for (const edgeId of edges.slice(0, 2)) {
+      const v = canPlaceRoad(state, meta.userId, edgeId);
+      if (!v.valid) {
+        ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'INVALID_ROAD', message: v.reason! } });
+        return;
+      }
+    }
+  }
+
+  // Remove the played card and mark player as having played this turn
+  orch.updateState(s => ({
+    ...s,
+    players: s.players.map(p =>
+      p.id === meta.userId
+        ? {
+            ...p,
+            devCards: p.devCards.filter((_, i) => i !== cardIdx),
+            devCardPlayedThisTurn: true,
+          }
+        : p
+    ),
+  }));
 
   switch (payload.cardType) {
     case 'warrior':
@@ -124,9 +178,6 @@ orch.updateState(s => ({
     case 'monopoly':
       playMonopoly(ws, payload.params, meta, orch, ctx);
       break;
-    case 'victoryPoint':
-      ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'AUTO_VP', message: 'VP cards are revealed automatically' } });
-      return;
   }
 
   orch.addLogEntry(`log.played${payload.cardType.charAt(0).toUpperCase() + payload.cardType.slice(1)}`, { player: meta.username }, meta.userId);
@@ -145,17 +196,7 @@ function playWarrior(ws: WebSocket, meta: ClientMeta, orch: GameOrchestrator, ct
 }
 
 function playRoadBuilding(ws: WebSocket, params: { edges?: EdgeId[] }, meta: ClientMeta, orch: GameOrchestrator, ctx: ActionContext): void {
-  const edges = params?.edges ?? [];
-  const state = orch.getState();
-
-  // Validate and place up to 2 roads for free
-  for (const edgeId of edges.slice(0, 2)) {
-    const v = canPlaceRoad(state, meta.userId, edgeId);
-    if (!v.valid) {
-      ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'INVALID_ROAD', message: v.reason! } });
-      return;
-    }
-  }
+  const edges: EdgeId[] = Array.isArray(params?.edges) ? params.edges! : [];
 
   orch.updateState(s => {
     let newRoads = { ...s.roads };
@@ -171,17 +212,9 @@ function playRoadBuilding(ws: WebSocket, params: { edges?: EdgeId[] }, meta: Cli
 }
 
 function playYearOfPlenty(ws: WebSocket, params: { resources?: [string, string] }, meta: ClientMeta, orch: GameOrchestrator, ctx: ActionContext): void {
-  const resources = params?.resources;
-  if (!resources || resources.length !== 2) {
-    ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'INVALID_PARAMS', message: 'Must select 2 resources' } });
-    return;
-  }
+  const resources = params.resources!;
   const bonus: ResourceBundle = { ...EMPTY_RESOURCES };
   for (const r of resources) {
-    if (!ALL_RESOURCES.includes(r as any)) {
-      ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'INVALID_RESOURCE', message: `Invalid resource: ${r}` } });
-      return;
-    }
     (bonus as any)[r] += 1;
   }
   orch.updateState(s => ({
@@ -193,11 +226,7 @@ function playYearOfPlenty(ws: WebSocket, params: { resources?: [string, string] 
 }
 
 function playMonopoly(ws: WebSocket, params: { resource?: string }, meta: ClientMeta, orch: GameOrchestrator, ctx: ActionContext): void {
-  const resource = params?.resource;
-  if (!resource || !ALL_RESOURCES.includes(resource as any)) {
-    ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'INVALID_RESOURCE', message: 'Must select a valid resource' } });
-    return;
-  }
+  const resource = params.resource!;
 
   orch.updateState(s => {
     let totalStolen = 0;

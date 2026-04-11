@@ -3,7 +3,7 @@
  * Self-contained: reads hand from the store.
  * Uses the ResourceHand at the bottom for card selection.
  */
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import type { ResourceBundle, ResourceType } from '@conqueror/shared';
@@ -11,7 +11,6 @@ import { ALL_RESOURCES, EMPTY_RESOURCES } from '@conqueror/shared';
 import { wsService } from '../../services/wsService.js';
 import { useGameStore } from '../../store/gameStore.js';
 import { RESOURCE_ICON_MAP } from '../icons/GameIcons.js';
-import { cn } from '../../lib/cn.js';
 
 const CARD_THEME: Record<ResourceType, { bg: string; border: string; label: string }> = {
   timber: { bg: '#0f2e14', border: '#22c55e', label: 'Timber' },
@@ -27,45 +26,16 @@ interface Props {
 
 export default function TradeOfferPanel({ gameId }: Props) {
   const { t } = useTranslation('game');
-  const { closeTradePanel, setTradeCardCb, tradeSide, setTradeSide, myPlayer } = useGameStore();
+  const { closeTradePanel, myPlayer } = useGameStore();
   const [give, setGive] = useState<ResourceBundle>({ ...EMPTY_RESOURCES });
   const [want, setWant] = useState<ResourceBundle>({ ...EMPTY_RESOURCES });
 
   const me = myPlayer();
   const hand = (me?.resources ?? {}) as Record<ResourceType, number>;
 
-  // Pre-fill from counter-offer if present (set by TradeResponsePanel)
-  useEffect(() => {
-    const raw = sessionStorage.getItem('counterOffer');
-    if (raw) {
-      try {
-        const { give: g, want: w } = JSON.parse(raw);
-        setGive(g);
-        setWant(w);
-      } catch { /* ignore */ }
-      sessionStorage.removeItem('counterOffer');
-    }
-  }, []);
-
   const totalGive = ALL_RESOURCES.reduce((s, r) => s + give[r], 0);
   const totalWant = ALL_RESOURCES.reduce((s, r) => s + want[r], 0);
   const canOffer = totalGive > 0 && totalWant > 0;
-
-  // Register callback for ResourceHand card clicks
-  useEffect(() => {
-    setTradeCardCb((r: ResourceType) => {
-      if (tradeSide === 'give') {
-        setGive(prev => {
-          const available = hand[r] - prev[r];
-          if (available <= 0) return prev;
-          return { ...prev, [r]: prev[r] + 1 };
-        });
-      } else {
-        setWant(prev => ({ ...prev, [r]: prev[r] + 1 }));
-      }
-    });
-    return () => setTradeCardCb(null);
-  }, [tradeSide, hand]);
 
   function removeFromGive(r: ResourceType) {
     setGive(prev => ({ ...prev, [r]: Math.max(0, prev[r] - 1) }));
@@ -117,39 +87,9 @@ export default function TradeOfferPanel({ gameId }: Props) {
           <button className="text-gray-500 hover:text-white text-sm" onClick={closeTradePanel} aria-label="Close">✕</button>
         </div>
 
-        {/* Mode toggle */}
-        <div className="flex rounded-lg overflow-hidden border border-gray-700 text-xs font-semibold">
-          <button
-            className={cn(
-              'flex-1 py-2 transition-colors',
-              tradeSide === 'give' ? 'bg-amber-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700',
-            )}
-            onClick={() => setTradeSide('give')}
-          >
-            ↑ Give {totalGive > 0 && `(${totalGive})`}
-          </button>
-          <button
-            className={cn(
-              'flex-1 py-2 transition-colors',
-              tradeSide === 'want' ? 'bg-green-800 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700',
-            )}
-            onClick={() => setTradeSide('want')}
-          >
-            ↓ Want {totalWant > 0 && `(${totalWant})`}
-          </button>
-        </div>
-
-        {/* Instructions */}
-        <p className="text-gray-400 text-sm text-pretty">
-          {tradeSide === 'give'
-            ? '👇 Tap a resource card in your hand below to add to Give'
-            : '👇 Tap a card in your hand below, or pick any resource:'
-          }
-        </p>
-
-        {/* Give pile */}
-        <div className="rounded-xl border border-gray-700 bg-gray-800 p-3">
-          <p className="text-[10px] font-bold text-amber-400 uppercase tracking-widest mb-2">
+        {/* Give pile + picker */}
+        <div className="rounded-xl border border-gray-700 bg-gray-800 p-3 space-y-2">
+          <p className="text-[10px] font-bold text-amber-400 uppercase tracking-widest">
             Give ({totalGive})
           </p>
           {giveCards.length === 0 ? (
@@ -161,11 +101,32 @@ export default function TradeOfferPanel({ gameId }: Props) {
               ))}
             </div>
           )}
+          {/* Resource picker — from your hand */}
+          <div className="flex gap-2 flex-wrap pt-1 border-t border-gray-700">
+            {ALL_RESOURCES.filter(r => hand[r] > 0).map(r => {
+              const available = hand[r] - give[r];
+              return (
+                <button key={r}
+                  disabled={available <= 0}
+                  onClick={() => setGive(prev => ({ ...prev, [r]: prev[r] + 1 }))}
+                  className="flex flex-col items-center rounded-xl border p-1.5 w-11 disabled:opacity-30 hover:scale-105 transition-transform"
+                  style={{ backgroundColor: CARD_THEME[r].bg, borderColor: CARD_THEME[r].border }}>
+                  {RESOURCE_ICON_MAP[r]?.({ size: 22 })}
+                  <span className="text-[8px] mt-0.5 font-bold tabular-nums" style={{ color: CARD_THEME[r].border }}>
+                    {available}
+                  </span>
+                </button>
+              );
+            })}
+            {ALL_RESOURCES.every(r => hand[r] === 0) && (
+              <p className="text-xs text-gray-600 italic">No resources in hand</p>
+            )}
+          </div>
         </div>
 
-        {/* Want pile */}
-        <div className="rounded-xl border border-gray-700 bg-gray-800 p-3">
-          <p className="text-[10px] font-bold text-green-400 uppercase tracking-widest mb-2">
+        {/* Want pile + picker */}
+        <div className="rounded-xl border border-gray-700 bg-gray-800 p-3 space-y-2">
+          <p className="text-[10px] font-bold text-green-400 uppercase tracking-widest">
             Want ({totalWant})
           </p>
           {wantCards.length === 0 ? (
@@ -177,25 +138,19 @@ export default function TradeOfferPanel({ gameId }: Props) {
               ))}
             </div>
           )}
-        </div>
-
-        {/* Want: quick-pick any resource */}
-        {tradeSide === 'want' && (
-          <div>
-            <p className="text-[10px] text-gray-600 uppercase tracking-widest mb-2">Add to Want:</p>
-            <div className="flex gap-2 justify-center flex-wrap">
-              {ALL_RESOURCES.map(r => (
-                <button key={r}
-                  onClick={() => setWant(prev => ({ ...prev, [r]: prev[r] + 1 }))}
-                  className="flex flex-col items-center rounded-xl border p-2 w-12 hover:scale-105 transition-transform"
-                  style={{ backgroundColor: CARD_THEME[r].bg, borderColor: CARD_THEME[r].border }}>
-                  {RESOURCE_ICON_MAP[r]?.({ size: 24 })}
-                  <span className="text-[7px] mt-0.5" style={{ color: CARD_THEME[r].border }}>{CARD_THEME[r].label}</span>
-                </button>
-              ))}
-            </div>
+          {/* Quick-pick any resource */}
+          <div className="flex gap-2 flex-wrap pt-1 border-t border-gray-700">
+            {ALL_RESOURCES.map(r => (
+              <button key={r}
+                onClick={() => setWant(prev => ({ ...prev, [r]: prev[r] + 1 }))}
+                className="flex flex-col items-center rounded-xl border p-1.5 w-11 hover:scale-105 transition-transform"
+                style={{ backgroundColor: CARD_THEME[r].bg, borderColor: CARD_THEME[r].border }}>
+                {RESOURCE_ICON_MAP[r]?.({ size: 22 })}
+                <span className="text-[8px] mt-0.5" style={{ color: CARD_THEME[r].border }}>{CARD_THEME[r].label}</span>
+              </button>
+            ))}
           </div>
-        )}
+        </div>
 
         {/* Confirm */}
         <button

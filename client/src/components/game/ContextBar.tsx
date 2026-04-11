@@ -203,7 +203,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
 
   // ── ROLL phase ───────────────────────────────────────────────────────────
   if (phase === 'ROLL' && myTurn) {
-    const hasWarrior = me?.devCards?.some(c => c.type === 'warrior' && !c.playedThisTurn && !c.boughtThisTurn);
+    const hasWarrior = !me?.devCardPlayedThisTurn && me?.devCards?.some(c => c.type === 'warrior' && !c.playedThisTurn && !c.boughtThisTurn);
     return (
       <div className="px-3 py-2 flex gap-2">
         <button
@@ -367,7 +367,10 @@ export default function ContextBar({ gameState, gameId }: Props) {
     const canRoad    = canAfford('road') && roadsLeft > 0;
     const canCity    = canAfford('city') && citiesLeft > 0;
     const canDevBuy  = canAfford('devCard') && gameState.devCardDeckCount > 0;
-    const playable   = me?.devCards?.filter(c => !c.playedThisTurn && !c.boughtThisTurn && c.type !== 'victoryPoint') ?? [];
+    const alreadyPlayedCard = me?.devCardPlayedThisTurn ?? false;
+    const playable   = alreadyPlayedCard
+      ? []
+      : (me?.devCards?.filter(c => !c.playedThisTurn && !c.boughtThisTurn && c.type !== 'victoryPoint') ?? []);
 
     return (
       <div className="bg-gray-900">
