@@ -220,6 +220,18 @@ export default function GamePage() {
     return () => window.removeEventListener('hand-anchor-change', handler);
   }, []);
 
+  // Lock document scroll while game is mounted — prevents iOS keyboard from scrolling the page
+  useEffect(() => {
+    const prev = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = 'hidden';
+    const onScroll = () => window.scrollTo(0, 0);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      document.documentElement.style.overflow = prev;
+      window.removeEventListener('scroll', onScroll);
+    };
+  }, []);
+
   const fetchLobbyInfo = useCallback(async () => {
     if (!gameId || !token) return;
     const res = await fetch(`/api/games/${gameId}`, {
@@ -421,7 +433,7 @@ export default function GamePage() {
   };
 
   return (
-    <div className="h-dvh bg-gray-900 flex flex-col overflow-hidden">
+    <div className="h-screen bg-gray-900 flex flex-col overflow-hidden">
 
       {/* ── Header ── */}
       <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700">
