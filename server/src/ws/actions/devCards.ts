@@ -142,12 +142,16 @@ export function handlePlayDevCard(
 
   if (payload.cardType === 'roadBuilding') {
     const edges: EdgeId[] = Array.isArray(payload.params?.edges) ? payload.params.edges : [];
+    // Validate roads free of cost; simulate placing edge[0] before validating edge[1]
+    let simState = state;
     for (const edgeId of edges.slice(0, 2)) {
-      const v = canPlaceRoad(state, meta.userId, edgeId);
+      const v = canPlaceRoad(simState, meta.userId, edgeId, undefined, true);
       if (!v.valid) {
         ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'INVALID_ROAD', message: v.reason! } });
         return;
       }
+      // Simulate placing this road so the next edge can connect through it
+      simState = { ...simState, roads: { ...simState.roads, [edgeId]: { playerId: meta.userId } } };
     }
   }
 

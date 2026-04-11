@@ -91,6 +91,7 @@ export function canPlaceRoad(
   playerId: string,
   edgeId: EdgeId,
   setupVertexId?: VertexId, // during setup, which vertex to connect from
+  free?: boolean,           // skip resource check (e.g. Road Building card)
 ): ValidationResult {
   if (!state.board.edges.includes(edgeId)) return fail('Invalid edge');
   if (state.roads[edgeId]) return fail('Edge already has a road');
@@ -108,8 +109,8 @@ export function canPlaceRoad(
     return ok();
   }
 
-  // Must afford it
-  if (!hasResources(player.resources, BUILD_COSTS.road)) return fail('Insufficient resources');
+  // Must afford it (unless free, e.g. Road Building card)
+  if (!free && !hasResources(player.resources, BUILD_COSTS.road)) return fail('Insufficient resources');
 
   // Must connect to player's existing road or building without being blocked by opponent
   const [v1, v2] = edgeVertices(edgeId);

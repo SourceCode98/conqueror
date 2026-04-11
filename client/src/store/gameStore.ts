@@ -60,6 +60,10 @@ interface GameStore {
   stolenReveal: { resource: ResourceType; thiefName: string } | null;
   clearStolenReveal: () => void;
 
+  // Final scores revealed at game over (includes hidden VP cards for all players)
+  finalScores: Record<string, number> | null;
+  setFinalScores: (scores: Record<string, number>) => void;
+
   // Setters
   setLocalPlayerId: (id: string) => void;
   resetGame: () => void;
@@ -78,6 +82,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   chatMessages: [],
   toasts: [],
   stolenReveal: null,
+  finalScores: null,
   boardMode: null,
   roadBuildingEdges: null,
   pendingBanditCoord: null,
@@ -87,6 +92,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   _tradeCardCb: null,
 
   clearStolenReveal: () => set({ stolenReveal: null }),
+  setFinalScores: (scores) => set({ finalScores: scores }),
 
   setLocalPlayerId: (id) => set({ localPlayerId: id }),
 
@@ -101,6 +107,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     chatMessages: [],
     toasts: [],
     stolenReveal: null,
+    finalScores: null,
     boardMode: null,
     roadBuildingEdges: null,
     pendingBanditCoord: null,

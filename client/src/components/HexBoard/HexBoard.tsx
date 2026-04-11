@@ -360,7 +360,14 @@ export default function HexBoard({ state }: HexBoardProps) {
   try {
     if (boardMode === 'place_settlement' && myTurn) validSettVerts = validSettlementVerts(state, myId);
     if (boardMode === 'place_city'       && myTurn) validCityVerts_ = validCityVerts(state, myId);
-    if (boardMode === 'place_road'       && myTurn) validEdges = validRoadEdges(state, myId);
+    if (boardMode === 'place_road'       && myTurn) {
+      // When using Road Building card, simulate already-selected edges so the second
+      // road can be highlighted even if it only connects through the first.
+      const simState = roadBuildingEdges?.length
+        ? { ...state, roads: { ...state.roads, ...Object.fromEntries(roadBuildingEdges.map(e => [e, { playerId: myId }])) } }
+        : state;
+      validEdges = validRoadEdges(simState, myId);
+    }
   } catch { /* fall back to showing all positions */ }
 
   const snapVertex: VertexId | null =

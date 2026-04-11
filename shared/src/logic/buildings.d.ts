@@ -19,5 +19,5 @@ export declare function canPlaceCity(state: GameState, playerId: string, vertexI
  * During setup: connects to the last placed settlement (no road-to-road required).
  * During main: must connect to existing road or building; cannot be blocked by opponent building at junction.
  */
-export declare function canPlaceRoad(state: GameState, playerId: string, edgeId: EdgeId, setupVertexId?: VertexId): ValidationResult;
+export declare function canPlaceRoad(state: GameState, playerId: string, edgeId: EdgeId, setupVertexId?: VertexId, free?: boolean): ValidationResult;
 //# sourceMappingURL=buildings.d.ts.map

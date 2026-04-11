@@ -164,6 +164,10 @@ class WSService {
         }
         break;
       }
+      case 'GAME_OVER': {
+        store.setFinalScores(msg.payload.finalScores);
+        break;
+      }
     }
 
     // Notify extra handlers (for components that subscribe directly)

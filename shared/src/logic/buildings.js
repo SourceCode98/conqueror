@@ -80,7 +80,7 @@ function canPlaceCity(state, playerId, vertexId) {
  * During setup: connects to the last placed settlement (no road-to-road required).
  * During main: must connect to existing road or building; cannot be blocked by opponent building at junction.
  */
-function canPlaceRoad(state, playerId, edgeId, setupVertexId) {
+function canPlaceRoad(state, playerId, edgeId, setupVertexId, free) {
     if (!state.board.edges.includes(edgeId))
         return fail('Invalid edge');
     if (state.roads[edgeId])
@@ -98,8 +98,8 @@ function canPlaceRoad(state, playerId, edgeId, setupVertexId) {
             return fail('Road must connect to your settlement');
         return ok();
     }
-    // Must afford it
-    if (!(0, resources_js_1.hasResources)(player.resources, board_js_2.BUILD_COSTS.road))
+    // Must afford it (unless free, e.g. Road Building card)
+    if (!free && !(0, resources_js_1.hasResources)(player.resources, board_js_2.BUILD_COSTS.road))
         return fail('Insufficient resources');
     // Must connect to player's existing road or building without being blocked by opponent
     const [v1, v2] = (0, board_js_1.edgeVertices)(edgeId);

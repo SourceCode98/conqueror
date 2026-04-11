@@ -11,11 +11,13 @@ import DiceRoller from '../components/game/DiceRoller.js';
 import { Die, useDiceAnimation } from '../components/game/DiceRoller.js';
 import ContextBar from '../components/game/ContextBar.js';
 import ResourceHand, { HAND_HEADER_H, HAND_PEEK_H as HAND_PEEK, ResourceCard, DevCardMini } from '../components/game/ResourceHand.js';
+import type { HandAnchor } from '../components/game/ResourceHand.js';
 import BankTradePanel from '../components/game/BankTradePanel.js';
 import TradeOfferPanel from '../components/game/TradeOfferPanel.js';
 import TradeResponsePanel from '../components/game/TradeResponsePanel.js';
 import GameLog from '../components/game/GameLog.js';
 import ChatPanel from '../components/game/ChatPanel.js';
+import WinCelebration from '../components/game/WinCelebration.js';
 import ActionToast from '../components/game/ActionToast.js';
 import TurnTimer from '../components/game/TurnTimer.js';
 import BuildCostTable from '../components/game/BuildCostTable.js';
@@ -27,10 +29,13 @@ import { RESOURCE_ICON_MAP } from '../components/icons/GameIcons.js';
 import { ALL_RESOURCES } from '@conqueror/shared';
 import { cn } from '../lib/cn.js';
 
-// Board padding: top = ResourceHand peek bar, bottom = ContextBar + chat strip
-const MOBILE_BOARD_PT = HAND_PEEK; // 32px — peek bar sits above board
+// Board padding: bottom = ContextBar + chat strip (top varies by hand anchor)
 const MOBILE_CHAT_H   = 44;        // compact chat input strip height
 const MOBILE_BOARD_PB = 56 + MOBILE_CHAT_H; // ContextBar + chat strip
+
+function getHandAnchor(): HandAnchor {
+  try { return (localStorage.getItem('hand-anchor') as HandAnchor) ?? 'top'; } catch { return 'top'; }
+}
 
 // ── Floating instruction pill shown over the board when in a board-tap mode ──
 function BoardHint({ hint, onCancel, hideOnMobile }: { hint: string | null; onCancel: () => void; hideOnMobile?: boolean }) {
@@ -44,8 +49,8 @@ function BoardHint({ hint, onCancel, hideOnMobile }: { hint: string | null; onCa
           exit={{ opacity: 0, y: -8, scale: 0.95 }}
           transition={{ type: 'spring', stiffness: 400, damping: 30 }}
           className={cn(
-            'absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 flex items-center gap-2 rounded-2xl px-4 py-2.5 shadow-2xl pointer-events-auto select-none',
-            hideOnMobile && 'hidden lg:flex',
+            'absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 items-center gap-2 rounded-2xl px-4 py-2.5 shadow-2xl pointer-events-auto select-none',
+            hideOnMobile ? 'hidden lg:flex' : 'flex',
           )}
           style={{
             background: 'rgba(10,14,26,0.92)',
@@ -105,7 +110,24 @@ function MobileDiceWidget({ diceRoll, phase, gameId }: {
 function MobileChatBar({ gameId }: { gameId: string }) {
   const { chatMessages } = useGameStore();
   const [text, setText] = useState('');
+  const [kbOffset, setKbOffset] = useState(0);
   const lastMsg = chatMessages[chatMessages.length - 1];
+
+  // Track keyboard height via Visual Viewport API (iOS Safari + fallback)
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    function update() {
+      const offset = window.innerHeight - vv!.offsetTop - vv!.height;
+      setKbOffset(Math.max(0, offset));
+    }
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+    };
+  }, []);
 
   function send() {
     if (!text.trim()) return;
@@ -116,7 +138,12 @@ function MobileChatBar({ gameId }: { gameId: string }) {
   return (
     <div
       className="lg:hidden fixed inset-x-0 z-[51] bg-gray-900/95 border-t border-gray-700 flex items-center gap-2 px-2"
-      style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 56px)', height: MOBILE_CHAT_H, backdropFilter: 'blur(6px)' }}
+      style={{
+        bottom: `calc(env(safe-area-inset-bottom, 0px) + 56px + ${kbOffset}px)`,
+        height: MOBILE_CHAT_H,
+        backdropFilter: 'blur(6px)',
+        transition: kbOffset > 0 ? 'bottom 0.05s linear' : 'bottom 0.2s ease-out',
+      }}
     >
       {/* Last message preview */}
       {lastMsg && (
@@ -184,6 +211,14 @@ export default function GamePage() {
   const [mobileSheet, setMobileSheet] = useState<'chat' | null>(null);
   const [showCostTable, setShowCostTable] = useState(false);
   const [showMobileCostTable, setShowMobileCostTable] = useState(false);
+  const [handAnchor, setHandAnchor] = useState<HandAnchor>(getHandAnchor);
+
+  // Sync hand anchor from ResourceHand via custom event
+  useEffect(() => {
+    const handler = (e: Event) => setHandAnchor((e as CustomEvent<HandAnchor>).detail);
+    window.addEventListener('hand-anchor-change', handler);
+    return () => window.removeEventListener('hand-anchor-change', handler);
+  }, []);
 
   const fetchLobbyInfo = useCallback(async () => {
     if (!gameId || !token) return;
@@ -578,7 +613,7 @@ export default function GamePage() {
         {/* Center — hex board (full width, players overlay on top) */}
         <div
           className="relative flex-1 flex items-center justify-center bg-[#060e1c] overflow-hidden"
-          style={{ paddingTop: MOBILE_BOARD_PT, paddingBottom: MOBILE_BOARD_PB }}
+          style={{ paddingTop: handAnchor.startsWith('top') ? HAND_PEEK : 0, paddingBottom: handAnchor.startsWith('bottom') ? MOBILE_BOARD_PB + HAND_PEEK : MOBILE_BOARD_PB }}
         >
           <HexBoard state={gameState} />
 
@@ -640,7 +675,7 @@ export default function GamePage() {
           </div>
 
           {/* ── Board instruction hint pill ── */}
-          <BoardHint hint={boardHint} onCancel={cancelHint} hideOnMobile={_boardMode === 'place_road'}/>
+          <BoardHint hint={boardHint} onCancel={cancelHint} hideOnMobile/>
 
           {/* ── Mobile: compact dice result widget + SoundPanel ── */}
           <MobileDiceWidget
@@ -808,6 +843,11 @@ export default function GamePage() {
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
         <ContextBar gameState={gameState} gameId={gameId!}/>
       </div>
+
+      {/* ── Win celebration overlay ── */}
+      {gameState.phase === 'GAME_OVER' && gameState.winner && (
+        <WinCelebration gameState={gameState} localPlayerId={localPlayerId}/>
+      )}
 
       {/* ── Mobile bottom sheet (chat only) ── */}
       <AnimatePresence>
