@@ -98,20 +98,18 @@ export function handlePlayDevCard(
     return;
   }
 
-  // Mark card as played
-  orch.updateState(s => ({
-    ...s,
-    players: s.players.map(p =>
-      p.id === meta.userId
-        ? {
-            ...p,
-            devCards: p.devCards.map((c, i) =>
-              i === cardIdx ? { ...c, playedThisTurn: true } : c
-            ),
-          }
-        : p
-    ),
-  }));
+// Remove the played card
+orch.updateState(s => ({
+  ...s,
+  players: s.players.map(p =>
+    p.id === meta.userId
+      ? {
+          ...p,
+          devCards: p.devCards.filter((_, i) => i !== cardIdx),
+        }
+      : p
+  ),
+}));
 
   switch (payload.cardType) {
     case 'warrior':
