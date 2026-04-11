@@ -38,7 +38,7 @@ const CARD_W_SM = 50;
 const CARD_H_SM = 70;
 const STACK_OFFSET = 3;
 
-function ResourceCard({ resource, count, small }: { resource: ResourceType; count: number; small?: boolean }) {
+export function ResourceCard({ resource, count, small }: { resource: ResourceType; count: number; small?: boolean }) {
   const theme = CARD_THEME[resource];
   const stackLayers = Math.min(count - 1, 3);
   const cw = small ? CARD_W_SM : CARD_W;
@@ -85,7 +85,7 @@ function ResourceCard({ resource, count, small }: { resource: ResourceType; coun
   );
 }
 
-function DevCardMini({ card, small }: { card: DevCard; small?: boolean }) {
+export function DevCardMini({ card, small }: { card: DevCard; small?: boolean }) {
   const meta = DEV_META[card.type] ?? DEV_META.victoryPoint;
   const used = card.playedThisTurn || card.boughtThisTurn;
   const cw = small ? 44 : 56;

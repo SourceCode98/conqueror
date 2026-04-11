@@ -56,6 +56,10 @@ interface GameStore {
   _tradeCardCb: ((r: ResourceType) => void) | null;
   setTradeCardCb: (fn: ((r: ResourceType) => void) | null) => void;
 
+  // Stolen card reveal (shown to victim after being robbed)
+  stolenReveal: { resource: ResourceType; thiefName: string } | null;
+  clearStolenReveal: () => void;
+
   // Setters
   setLocalPlayerId: (id: string) => void;
   resetGame: () => void;
@@ -73,6 +77,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   localPlayerId: null,
   chatMessages: [],
   toasts: [],
+  stolenReveal: null,
   boardMode: null,
   roadBuildingEdges: null,
   pendingBanditCoord: null,
@@ -80,6 +85,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   tradePanel: null,
   tradeSide: 'give',
   _tradeCardCb: null,
+
+  clearStolenReveal: () => set({ stolenReveal: null }),
 
   setLocalPlayerId: (id) => set({ localPlayerId: id }),
 
@@ -93,6 +100,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     gameState: null,
     chatMessages: [],
     toasts: [],
+    stolenReveal: null,
     boardMode: null,
     roadBuildingEdges: null,
     pendingBanditCoord: null,
@@ -135,6 +143,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             username: thiefPlayer?.username ?? 'Someone',
             data: { resource: lost },
           });
+          set({ stolenReveal: { resource: lost, thiefName: thiefPlayer?.username ?? 'Someone' } });
         }
       }
     }

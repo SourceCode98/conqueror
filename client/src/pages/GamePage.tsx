@@ -10,7 +10,7 @@ import ActionPanel from '../components/game/ActionPanel.js';
 import DiceRoller from '../components/game/DiceRoller.js';
 import { Die, useDiceAnimation } from '../components/game/DiceRoller.js';
 import ContextBar from '../components/game/ContextBar.js';
-import ResourceHand, { HAND_HEADER_H, HAND_PEEK_H as HAND_PEEK } from '../components/game/ResourceHand.js';
+import ResourceHand, { HAND_HEADER_H, HAND_PEEK_H as HAND_PEEK, ResourceCard, DevCardMini } from '../components/game/ResourceHand.js';
 import BankTradePanel from '../components/game/BankTradePanel.js';
 import TradeOfferPanel from '../components/game/TradeOfferPanel.js';
 import TradeResponsePanel from '../components/game/TradeResponsePanel.js';
@@ -32,7 +32,7 @@ const MOBILE_BOARD_PT = HAND_PEEK; // 32px — peek bar sits above board
 const MOBILE_BOARD_PB = 56;        // ContextBar height
 
 // ── Floating instruction pill shown over the board when in a board-tap mode ──
-function BoardHint({ hint, onCancel }: { hint: string | null; onCancel: () => void }) {
+function BoardHint({ hint, onCancel, hideOnMobile }: { hint: string | null; onCancel: () => void; hideOnMobile?: boolean }) {
   return (
     <AnimatePresence>
       {hint && (
@@ -42,7 +42,10 @@ function BoardHint({ hint, onCancel }: { hint: string | null; onCancel: () => vo
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -8, scale: 0.95 }}
           transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-          className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 flex items-center gap-2 rounded-2xl px-4 py-2.5 shadow-2xl pointer-events-auto select-none"
+          className={cn(
+            'absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 flex items-center gap-2 rounded-2xl px-4 py-2.5 shadow-2xl pointer-events-auto select-none',
+            hideOnMobile && 'hidden lg:flex',
+          )}
           style={{
             background: 'rgba(10,14,26,0.92)',
             border: '1px solid rgba(251,191,36,0.35)',
@@ -115,7 +118,7 @@ export default function GamePage() {
   const { t } = useTranslation('game');
   const navigate = useNavigate();
   const { token, user } = useAuthStore();
-  const { gameState, localPlayerId, setLocalPlayerId, resetGame, tradePanel, closeTradePanel } = useGameStore();
+  const { gameState, localPlayerId, setLocalPlayerId, resetGame, tradePanel, closeTradePanel, stolenReveal, clearStolenReveal } = useGameStore();
   const _boardMode    = useGameStore(s => s.boardMode);
   const _roadEdges    = useGameStore(s => s.roadBuildingEdges);
   const _cancelRoad   = useGameStore(s => s.cancelRoadBuilding);
@@ -128,6 +131,7 @@ export default function GamePage() {
   const [turnTimeLimit, setTurnTimeLimit] = useState<number | null>(null); // seconds, null = no limit
   const [mobileSheet, setMobileSheet] = useState<'chat' | null>(null);
   const [showCostTable, setShowCostTable] = useState(false);
+  const [showMobileCostTable, setShowMobileCostTable] = useState(false);
 
   const fetchLobbyInfo = useCallback(async () => {
     if (!gameId || !token) return;
@@ -168,6 +172,13 @@ export default function GamePage() {
   useEffect(() => {
     if (tradePanel !== null) setMobileSheet(null);
   }, [tradePanel]);
+
+  // Auto-dismiss stolen reveal after 4s
+  useEffect(() => {
+    if (!stolenReveal) return;
+    const t = setTimeout(clearStolenReveal, 4000);
+    return () => clearTimeout(t);
+  }, [stolenReveal]);
 
   async function startGame() {
     if (!gameId || !token) return;
@@ -433,6 +444,65 @@ export default function GamePage() {
       {/* Toast notifications */}
       <ActionToast gameState={gameState}/>
 
+      {/* Victim stolen-card reveal modal */}
+      <AnimatePresence>
+        {stolenReveal && (() => {
+          const CARD_THEME: Record<string, { bg: string; border: string; label: string }> = {
+            timber: { bg: '#0f2e14', border: '#22c55e', label: 'Timber' },
+            clay:   { bg: '#3b1004', border: '#f97316', label: 'Clay'   },
+            iron:   { bg: '#131c2b', border: '#94a3b8', label: 'Iron'   },
+            grain:  { bg: '#2e1d02', border: '#fbbf24', label: 'Grain'  },
+            wool:   { bg: '#092b1b', border: '#86efac', label: 'Wool'   },
+          };
+          const theme = CARD_THEME[stolenReveal.resource];
+          return (
+            <motion.div
+              key="stolen-reveal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[70] flex items-center justify-center"
+              style={{ background: 'rgba(0,0,0,0.75)' }}
+              onClick={clearStolenReveal}
+            >
+              <motion.div
+                initial={{ scale: 0.7, opacity: 0, y: 30 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.85, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 380, damping: 26 }}
+                onClick={e => e.stopPropagation()}
+                className="bg-gray-900 rounded-3xl border border-gray-700 shadow-2xl px-8 py-6 text-center max-w-xs w-full mx-4"
+              >
+                <p className="text-red-400 font-bold text-lg mb-1">Robbed!</p>
+                <p className="text-gray-400 text-sm mb-4">
+                  <span className="text-white font-semibold">{stolenReveal.thiefName}</span> stole from you
+                </p>
+                <div className="flex justify-center mb-4">
+                  <motion.div
+                    initial={{ rotateY: 90 }}
+                    animate={{ rotateY: 0 }}
+                    transition={{ type: 'spring', stiffness: 260, damping: 20, delay: 0.15 }}
+                    className="rounded-2xl border-2 flex flex-col items-center px-6 py-4"
+                    style={{ backgroundColor: theme.bg, borderColor: theme.border }}
+                  >
+                    {RESOURCE_ICON_MAP[stolenReveal.resource as any]?.({ size: 52 })}
+                    <span className="text-sm font-bold mt-2" style={{ color: theme.border }}>
+                      {theme.label}
+                    </span>
+                  </motion.div>
+                </div>
+                <button
+                  className="text-xs text-gray-500 hover:text-gray-300 underline"
+                  onClick={clearStolenReveal}
+                >
+                  Dismiss
+                </button>
+              </motion.div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
+
       {/* Trade panel backdrop */}
       <AnimatePresence>
         {(tradePanel !== null || showResponsePanel) && (
@@ -510,7 +580,7 @@ export default function GamePage() {
           </div>
 
           {/* ── Board instruction hint pill ── */}
-          <BoardHint hint={boardHint} onCancel={cancelHint}/>
+          <BoardHint hint={boardHint} onCancel={cancelHint} hideOnMobile={_boardMode === 'place_road'}/>
 
           {/* ── Mobile: compact dice result widget + SoundPanel ── */}
           <MobileDiceWidget
@@ -532,98 +602,129 @@ export default function GamePage() {
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* ── Mobile: build cost toggle + panel — fixed left side ── */}
+          <div className="lg:hidden absolute left-0 top-1/2 -translate-y-1/2 z-20 flex flex-row items-center">
+            {/* Toggle tab on left edge */}
+            <button
+              onClick={() => setShowMobileCostTable(s => !s)}
+              className={cn(
+                'rounded-r-xl border-y border-r shadow-xl backdrop-blur-sm transition-all active:scale-95 px-1.5 py-3 flex flex-col items-center gap-1',
+                showMobileCostTable
+                  ? 'bg-amber-700/90 border-amber-500 text-white'
+                  : 'bg-gray-900/90 border-gray-700 text-gray-300',
+              )}
+            >
+              <span className="text-base leading-none">🏗</span>
+              <span className={cn(
+                'text-[8px] font-bold uppercase tracking-wide',
+                '[writing-mode:vertical-rl] rotate-180 leading-none',
+                showMobileCostTable ? 'text-amber-200' : 'text-gray-500',
+              )}>
+                {showMobileCostTable ? '✕' : 'Costs'}
+              </span>
+            </button>
+
+            {/* Collapsible cost panel slides right from the tab */}
+            <AnimatePresence>
+              {showMobileCostTable && (
+                <motion.div
+                  initial={{ opacity: 0, x: -12, scaleX: 0.85 }}
+                  animate={{ opacity: 1, x: 0, scaleX: 1 }}
+                  exit={{ opacity: 0, x: -12, scaleX: 0.85 }}
+                  style={{ originX: 0 }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+                  className="rounded-r-2xl border-y border-r border-gray-700 bg-gray-900/95 shadow-2xl backdrop-blur-sm px-3 py-3 space-y-3"
+                >
+                  {([
+                    { label: 'Road',       icon: '🛣',  cost: { timber: 1, clay: 1 } },
+                    { label: 'Settlement', icon: '🏠',  cost: { timber: 1, clay: 1, grain: 1, wool: 1 } },
+                    { label: 'City',       icon: '🏙',  cost: { iron: 3, grain: 2 } },
+                    { label: 'Dev Card',   icon: '🃏',  cost: { iron: 1, grain: 1, wool: 1 } },
+                  ] as Array<{ label: string; icon: string; cost: Partial<Record<string, number>> }>).map(item => (
+                    <div key={item.label} className="flex items-center gap-2">
+                      <span className="text-2xl w-8 text-center shrink-0">{item.icon}</span>
+                      <div className="min-w-0">
+                        <span className="text-[11px] font-semibold text-gray-200 block mb-1">{item.label}</span>
+                        <div className="flex gap-1 flex-wrap">
+                          {(Object.entries(item.cost) as [string, number][]).map(([r, n]) =>
+                            Array.from({ length: n }, (_, i) => (
+                              <span key={`${r}-${i}`} className="flex items-center justify-center rounded-lg bg-gray-800 border border-gray-600 w-7 h-7">
+                                {RESOURCE_ICON_MAP[r as any]?.({ size: 18 })}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
 
         {/* Right sidebar — desktop only */}
-        <div className="hidden lg:flex w-72 flex-shrink-0 bg-gray-800 border-l border-gray-700 flex-col">
+        <div className="hidden lg:flex w-72 flex-shrink-0 bg-gray-800 border-l border-gray-700 flex-col overflow-hidden">
 
-          {/* ── Pinned top: dice + hand ── always fully visible, never scrolls */}
-          <div className="flex-shrink-0 p-3 space-y-2 border-b border-gray-700">
+          {/* ── Dice ── */}
+          <div className="flex-shrink-0 px-3 pt-3 pb-2 border-b border-gray-700">
             <DiceRoller
               diceRoll={gameState.diceRoll}
               phase={phase}
               isMyTurn={isMyTurn}
             />
-
-            {/* Resource hand */}
-            {localPlayer && (() => {
-              const CARD_THEME: Record<string, { bg: string; border: string }> = {
-                timber: { bg: '#0f2e14', border: '#22c55e' },
-                clay:   { bg: '#3b1004', border: '#f97316' },
-                iron:   { bg: '#131c2b', border: '#94a3b8' },
-                grain:  { bg: '#2e1d02', border: '#fbbf24' },
-                wool:   { bg: '#092b1b', border: '#86efac' },
-              };
-              const held = ALL_RESOURCES.filter(r => (localPlayer.resources as any)[r] > 0);
-              const total = ALL_RESOURCES.reduce((s, r) => s + (localPlayer.resources as any)[r], 0);
-              const devCards = localPlayer.devCards ?? [];
-              return (
-                <div className="rounded-xl border border-gray-700 bg-gray-800/60 p-2 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Your Hand</p>
-                    <span className={cn('text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded-full',
-                      total > 0 ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-400')}>
-                      {total} cards
-                    </span>
-                  </div>
-                  {held.length === 0
-                    ? <p className="text-xs text-gray-600 italic">No resources</p>
-                    : (
-                      <div className="flex flex-wrap gap-1">
-                        {held.map(r => {
-                          const count = (localPlayer.resources as any)[r];
-                          const { bg, border } = CARD_THEME[r];
-                          return (
-                            <div key={r}
-                              className="flex flex-col items-center rounded-lg border py-1 px-1.5 min-w-[34px]"
-                              style={{ backgroundColor: bg, borderColor: border }}>
-                              {RESOURCE_ICON_MAP[r]?.({ size: 18 })}
-                              <span className="text-[9px] font-bold tabular-nums" style={{ color: border }}>×{count}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )
-                  }
-                  {devCards.length > 0 && (
-                    <div className="pt-1 border-t border-gray-700 flex flex-wrap gap-1">
-                      {devCards.map((c, i) => (
-                        <div key={i}
-                          className={cn('rounded border px-1.5 py-0.5 text-[9px] font-semibold flex items-center gap-0.5',
-                            c.playedThisTurn ? 'opacity-30' : c.boughtThisTurn ? 'opacity-60' : '')}
-                          style={{
-                            backgroundColor: '#0c1a2e',
-                            borderColor: c.type === 'victoryPoint' ? '#fbbf24' : '#3b82f6',
-                            color: c.type === 'victoryPoint' ? '#fbbf24' : '#93c5fd',
-                          }}
-                        >
-                          {c.type === 'warrior' ? '⚔️' : c.type === 'victoryPoint' ? '⭐' :
-                           c.type === 'roadBuilding' ? '🛣️' : c.type === 'yearOfPlenty' ? '🌟' : '💰'}
-                          <span>{c.type === 'roadBuilding' ? 'Road×2' : c.type === 'yearOfPlenty' ? 'Plenty' :
-                            c.type === 'victoryPoint' ? '+1VP' : c.type}</span>
-                          {c.boughtThisTurn && !c.playedThisTurn && <span className="text-green-400 text-[7px]">NEW</span>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
           </div>
 
-          {/* ── Middle: action panel — scrollable without visible bar ── */}
-          <div
-            className="flex-1 min-h-0 overflow-y-auto p-3"
-            style={{ scrollbarWidth: 'none' }}
-          >
+          {/* ── Hand — card style matching mobile ── */}
+          {localPlayer && (() => {
+            const held     = ALL_RESOURCES.filter(r => (localPlayer.resources as any)[r] > 0);
+            const total    = ALL_RESOURCES.reduce((s, r) => s + (localPlayer.resources as any)[r], 0);
+            const devCards = localPlayer.devCards ?? [];
+            return (
+              <div className="flex-shrink-0 px-3 py-2 border-b border-gray-700 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Your Hand</span>
+                  <span className={cn('text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded-full',
+                    total > 0 ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-400')}>
+                    {total}
+                  </span>
+                </div>
+
+                {/* Resource cards */}
+                {held.length === 0
+                  ? <p className="text-xs text-gray-600 italic">No resources</p>
+                  : (
+                    <div className="flex items-end gap-2 flex-wrap">
+                      {held.map(r => (
+                        <ResourceCard key={r} resource={r} count={(localPlayer.resources as any)[r]} small />
+                      ))}
+                    </div>
+                  )
+                }
+
+                {/* Dev cards */}
+                {devCards.length > 0 && (
+                  <div className="flex gap-1.5 flex-wrap pt-1 border-t border-gray-700">
+                    {devCards.map((c, i) => (
+                      <DevCardMini key={i} card={c} small />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* ── Action panel — fills remaining space, no scroll ── */}
+          <div className="flex-1 min-h-0 overflow-hidden p-3">
             <ActionPanel gameState={gameState} gameId={gameId!} />
           </div>
 
-          {/* ── Bottom: log + chat — each has its own hidden-scrollbar scroll ── */}
-          <div className="h-28 flex-shrink-0 border-t border-gray-700">
+          {/* ── Log + chat — fixed compact height ── */}
+          <div className="h-20 flex-shrink-0 border-t border-gray-700">
             <GameLog log={gameState.log} />
           </div>
-          <div className="h-28 flex-shrink-0 border-t border-gray-700">
+          <div className="h-20 flex-shrink-0 border-t border-gray-700">
             <ChatPanel gameId={gameId!} />
           </div>
         </div>

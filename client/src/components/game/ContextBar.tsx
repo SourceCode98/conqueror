@@ -95,7 +95,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
   const [yopPicks, setYopPicks]       = useState<ResourceType[]>([]);
   const [monoPicking, setMonoPicking] = useState(false);
   const [showCards, setShowCards]     = useState(false);
-  const [mobileStealVictim, setMobileStealVictim] = useState<{ id: string; cardCount: number } | null>(null);
+  const [mobileStealVictim, setMobileStealVictim] = useState<{ id: string; cardCount: number; coord: NonNullable<typeof pendingBanditCoord> } | null>(null);
   const savedCoordRef                 = useRef<typeof pendingBanditCoord>(null);
 
   const myTurn = isMyTurn();
@@ -116,14 +116,27 @@ export default function ContextBar({ gameState, gameId }: Props) {
     }
   }, [roadBuildingEdges]);
 
-  // Reset card picker on phase / turn change
+  // Reset card picker on phase / turn change (but not steal victim — it manages its own lifecycle)
   useEffect(() => {
     setYopPicking(false); setYopPicks([]); setMonoPicking(false); setShowCards(false);
-    setMobileStealVictim(null);
   }, [gameState.activePlayerId, gameState.phase]);
 
   function send(type: string, extra?: object) {
     wsService.send({ type: type as any, payload: { gameId, ...extra } });
+  }
+
+  // ── Steal modal — rendered before all phase guards so it survives phase transitions ──
+  if (mobileStealVictim) {
+    return (
+      <StealCardModal
+        victimId={mobileStealVictim.id}
+        cardCount={mobileStealVictim.cardCount}
+        onSteal={() => {
+          send('MOVE_BANDIT', { coord: mobileStealVictim.coord, stealFromPlayerId: mobileStealVictim.id });
+        }}
+        onClose={() => setMobileStealVictim(null)}
+      />
+    );
   }
 
   // ── Year of Plenty picker ────────────────────────────────────────────────
@@ -251,7 +264,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
                 className="flex items-center gap-2 rounded-xl border border-gray-600 bg-gray-800 hover:border-amber-500 px-3 py-1.5 text-xs font-semibold transition-colors"
                 onClick={() => {
                   const count = ALL_RESOURCES.reduce((s, r) => s + (p.resources as any)[r], 0);
-                  setMobileStealVictim({ id: p.id, cardCount: count });
+                  setMobileStealVictim({ id: p.id, cardCount: count, coord: pendingBanditCoord! });
                 }}
               >
                 <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: resolvePlayerColor(p.color) }}/>
@@ -267,18 +280,6 @@ export default function ContextBar({ gameState, gameId }: Props) {
             </button>
           </div>
         </div>
-        {mobileStealVictim && (
-          <StealCardModal
-            victimId={mobileStealVictim.id}
-            cardCount={mobileStealVictim.cardCount}
-            onSteal={() => {
-              send('MOVE_BANDIT', { coord: pendingBanditCoord!, stealFromPlayerId: mobileStealVictim.id });
-              setPendingBanditCoord(null);
-              setMobileStealVictim(null);
-            }}
-            onClose={() => setMobileStealVictim(null)}
-          />
-        )}
       </>
     );
   }
