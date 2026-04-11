@@ -34,7 +34,7 @@ const MOBILE_CHAT_H   = 44;        // compact chat input strip height
 const MOBILE_BOARD_PB = 56 + MOBILE_CHAT_H; // ContextBar + chat strip
 
 function getHandAnchor(): HandAnchor {
-  try { return (localStorage.getItem('hand-anchor') as HandAnchor) ?? 'top'; } catch { return 'top'; }
+  try { return (localStorage.getItem('hand-anchor') as HandAnchor) ?? 'top-center'; } catch { return 'top-center'; }
 }
 
 // ── Floating instruction pill shown over the board when in a board-tap mode ──
