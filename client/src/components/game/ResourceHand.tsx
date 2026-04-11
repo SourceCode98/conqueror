@@ -284,7 +284,7 @@ export default function ResourceHand({ resources, devCards }: Props) {
   const held      = ALL_RESOURCES.filter(r => resources[r] > 0);
   const total     = ALL_RESOURCES.reduce((s, r) => s + resources[r], 0);
   const devCount  = devCards?.length ?? 0;
-  const tradeOpen = tradePanel !== null;
+  const tradeOpen = false;
   const expanded  = pinned || hovering || tradeOpen;
 
   const cardH = small ? CARD_H_SM : CARD_H;
