@@ -2,11 +2,12 @@
  * Sound panel: horn button (anti-spam) + mute toggle + music toggle.
  * Uses Web Audio API to generate simple sounds — no external audio files needed.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { wsService } from '../../services/wsService.js';
 import { useGameStore } from '../../store/gameStore.js';
 import { cn } from '../../lib/cn.js';
 import { musicEngine, TRACKS } from './musicEngine.js';
+import { VICTORY_POINTS_TO_WIN } from '@conqueror/shared';
 
 const DEFAULT_HORN_COOLDOWN_MS = 30_000;
 
@@ -112,6 +113,17 @@ export function safePlay(fn: () => void) {
   if (!globalMuted) fn();
 }
 
+// ── Music track selection based on leading VP ────────────────────────────────
+
+function vpToTrackIdx(vp: number): number {
+  const ratio = vp / VICTORY_POINTS_TO_WIN;
+  if (ratio >= 0.9) return 3; // BATTLE  152 BPM — imminent win
+  if (ratio >= 0.7) return 2; // DUNGEON  96 BPM — dark tension
+  if (ratio >= 0.5) return 0; // CONQUEST 132 BPM — energetic
+  if (ratio >= 0.3) return 4; // TAVERN  118 BPM — bouncy
+  return 1;                   // VILLAGE 100 BPM — peaceful opening
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -166,6 +178,23 @@ export default function SoundPanel({ gameId, className }: Props) {
   useEffect(() => {
     musicEngine.setVolume(musicVol);
   }, [musicVol]);
+
+  // Auto-select track based on leading player's VP
+  const leadingVP = useMemo(() => {
+    if (!gameState || gameState.phase === 'GAME_OVER') return 0;
+    return Math.max(...gameState.players.map(p => p.victoryPoints));
+  }, [gameState]);
+
+  useEffect(() => {
+    if (!musicEngine.isRunning) return;
+    const idx = vpToTrackIdx(leadingVP);
+    if (idx !== trackIdx) {
+      setTrackIdx(idx);
+      musicEngine.setTrack(idx);
+    }
+  // trackIdx intentionally excluded — we only want to react to VP changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leadingVP]);
 
   function toggleMute() {
     const next = !muted;
