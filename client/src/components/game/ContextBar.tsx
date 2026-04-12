@@ -196,9 +196,29 @@ export default function ContextBar({ gameState, gameId }: Props) {
     );
   }
 
-  // ── Active board mode / road building — hint shown on board, bar is empty ──
+  // ── Active board mode / road building — show cancel bar on mobile ──
   if ((boardMode && boardMode !== 'move_bandit') || roadBuildingEdges !== null) {
-    return null;
+    const hintText =
+      boardMode === 'place_settlement' ? 'Tap an intersection to place your Settlement' :
+      boardMode === 'place_city'       ? 'Tap your settlement to upgrade to a City' :
+      boardMode === 'place_road'       ? 'Tap an edge to place your Road' :
+      roadBuildingEdges !== null       ? `Road Building — pick edge ${(roadBuildingEdges?.length ?? 0) + 1}/2` :
+      'Select a location';
+    const cancel = () => {
+      if (roadBuildingEdges !== null) cancelRoadBuilding();
+      else setBoardMode(null);
+    };
+    return (
+      <div className="px-3 py-2 flex items-center gap-3">
+        <span className="flex-1 text-xs text-amber-300 font-medium">{hintText}</span>
+        <button
+          className="shrink-0 rounded-xl border border-gray-600 bg-gray-800 text-gray-300 text-sm font-semibold px-4 py-2 active:scale-95 transition-transform"
+          onClick={cancel}
+        >
+          Cancel
+        </button>
+      </div>
+    );
   }
 
   // ── ROLL phase ───────────────────────────────────────────────────────────

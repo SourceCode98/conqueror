@@ -8,7 +8,7 @@ import { useGameStore } from '../../store/gameStore.js';
 import { cn } from '../../lib/cn.js';
 import { musicEngine, TRACKS } from './musicEngine.js';
 
-const HORN_COOLDOWN_MS = 30_000;
+const DEFAULT_HORN_COOLDOWN_MS = 30_000;
 
 // ── Web Audio sound generators ───────────────────────────────────────────────
 
@@ -126,7 +126,8 @@ export default function SoundPanel({ gameId, className }: Props) {
   const [hornDisabled, setHornDisabled] = useState(false);
   const [hornCooldown, setHornCooldown] = useState(0);
   const [trackIdx, setTrackIdx] = useState(0);
-  const { toasts } = useGameStore();
+  const { toasts, gameState } = useGameStore();
+  const hornCooldownMs = ((gameState?.hornCooldownSecs) ?? 30) * 1000;
   const musicAutoStarted = useRef(false);
 
   // Play SFX sounds when new toasts arrive
@@ -194,7 +195,7 @@ export default function SoundPanel({ gameId, className }: Props) {
     wsService.send({ type: 'HORN', payload: { gameId } });
     safePlay(playHornSound);
     setHornDisabled(true);
-    let remaining = HORN_COOLDOWN_MS / 1000;
+    let remaining = hornCooldownMs / 1000;
     setHornCooldown(remaining);
     const iv = setInterval(() => {
       remaining -= 1;

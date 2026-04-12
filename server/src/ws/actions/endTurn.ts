@@ -1,8 +1,8 @@
 import { WebSocket } from 'ws';
-import { checkWinCondition } from '@conqueror/shared';
 import type { GameOrchestrator } from '../../game/GameOrchestrator.js';
 import type { ClientMeta } from '../types.js';
 import type { ActionContext } from '../actionRouter.js';
+import { checkAndHandleWin } from './winCheck.js';
 
 export function handleEndTurn(
   ws: WebSocket,
@@ -18,14 +18,7 @@ export function handleEndTurn(
     return;
   }
 
-  const winner = checkWinCondition(state);
-  if (winner) {
-    orch.updateState(s => ({ ...s, phase: 'GAME_OVER', winner }));
-    const finalScores: Record<string, number> = {};
-    for (const p of orch.getState().players) {
-      finalScores[p.id] = p.victoryPoints + p.victoryPointCards;
-    }
-    ctx.broadcastToRoom({ type: 'GAME_OVER', payload: { winnerId: winner, finalScores } });
+  if (checkAndHandleWin(orch, ctx)) {
     ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
     return;
   }

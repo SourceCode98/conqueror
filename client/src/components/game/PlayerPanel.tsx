@@ -92,9 +92,18 @@ export default function PlayerPanel({ player, isActive }: Props) {
             <span className="tabular-nums">{player.settlementsLeft}</span>
           </span>
           <span
-            className={`size-1.5 rounded-full ${player.connected ? 'bg-green-400' : 'bg-red-500'}`}
-            title={player.connected ? 'Connected' : 'Disconnected'}
-          />
+            className="relative flex items-center justify-center size-2.5"
+            title={player.connected ? 'Online' : 'Offline'}
+          >
+            {player.connected ? (
+              <>
+                <span className="absolute inline-flex size-full rounded-full bg-green-400 opacity-50 animate-ping" />
+                <span className="relative inline-flex size-1.5 rounded-full bg-green-400" />
+              </>
+            ) : (
+              <span className="relative inline-flex size-2 rounded-full bg-red-500" />
+            )}
+          </span>
         </div>
       </div>
     </div>

@@ -103,6 +103,7 @@ export interface GameState {
   winner: string | null;
   turnStartTime: number | null;    // ms timestamp when current turn started
   turnTimeLimit: number | null;    // seconds per turn, null = no limit
+  hornCooldownSecs: number;        // seconds between horn uses per player
   lastAction: LastAction | null;   // last notable action for toasts
 }
 

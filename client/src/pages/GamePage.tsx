@@ -197,7 +197,7 @@ export default function GamePage() {
   const { t } = useTranslation('game');
   const navigate = useNavigate();
   const { token, user } = useAuthStore();
-  const { gameState, localPlayerId, setLocalPlayerId, resetGame, tradePanel, closeTradePanel, stolenReveal, clearStolenReveal } = useGameStore();
+  const { gameState, localPlayerId, setLocalPlayerId, resetGame, tradePanel, closeTradePanel, stolenReveal, clearStolenReveal, wsConnected } = useGameStore();
   const _boardMode    = useGameStore(s => s.boardMode);
   const _roadEdges    = useGameStore(s => s.roadBuildingEdges);
   const _cancelRoad   = useGameStore(s => s.cancelRoadBuilding);
@@ -208,6 +208,7 @@ export default function GamePage() {
   const [startError, setStartError] = useState('');
   const [starting, setStarting] = useState(false);
   const [turnTimeLimit, setTurnTimeLimit] = useState<number | null>(null); // seconds, null = no limit
+  const [hornCooldownSecs, setHornCooldownSecs] = useState<number>(30);   // seconds between horn uses
   const [mobileSheet, setMobileSheet] = useState<'chat' | null>(null);
   const [showCostTable, setShowCostTable] = useState(false);
   const [showMobileCostTable, setShowMobileCostTable] = useState(false);
@@ -287,7 +288,7 @@ export default function GamePage() {
       const res = await fetch(`/api/games/${gameId}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ turnTimeLimit }),
+        body: JSON.stringify({ turnTimeLimit, hornCooldownSecs }),
       });
       const data = await res.json();
       if (!res.ok) setStartError(data.error ?? 'Failed to start game');
@@ -363,6 +364,29 @@ export default function GamePage() {
                       )}
                     >
                       {val === null ? 'No limit' : `${val}s`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Horn cooldown selector */}
+              <div className="card py-2 px-3">
+                <label className="block text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wide">
+                  📯 Horn cooldown
+                </label>
+                <div className="flex gap-2 flex-wrap">
+                  {[10, 30, 60, 120].map(val => (
+                    <button
+                      key={val}
+                      onClick={() => setHornCooldownSecs(val)}
+                      className={cn(
+                        'rounded-lg px-3 py-1.5 text-sm border transition-colors',
+                        hornCooldownSecs === val
+                          ? 'border-amber-500 bg-amber-900/40 text-amber-300'
+                          : 'border-gray-700 text-gray-400 hover:border-gray-500',
+                      )}
+                    >
+                      {val}s
                     </button>
                   ))}
                 </div>
@@ -658,6 +682,17 @@ export default function GamePage() {
                       style={{ color: isActive ? '#fff' : '#9ca3af' }}>
                       {p.username}{isMe ? ' ✦' : ''}
                     </span>
+                    {/* Connection status */}
+                    <span className="relative flex shrink-0 size-2" title={(p as any).connected !== false ? 'Online' : 'Offline'}>
+                      {(p as any).connected !== false ? (
+                        <>
+                          <span className="absolute inset-0 rounded-full bg-green-400 opacity-50 animate-ping" style={{ animationDuration: '2s' }} />
+                          <span className="relative size-2 rounded-full bg-green-400" />
+                        </>
+                      ) : (
+                        <span className="size-2 rounded-full bg-red-500" />
+                      )}
+                    </span>
                     <span className="text-[10px] font-bold tabular-nums ml-auto shrink-0"
                       style={{ color: isActive ? '#fbbf24' : '#6b7280' }}>
                       {p.victoryPoints}VP
@@ -900,6 +935,40 @@ export default function GamePage() {
               </div>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* ── Reconnecting overlay ── */}
+      <AnimatePresence>
+        {!wsConnected && (
+          <motion.div
+            key="reconnecting"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              className="bg-gray-900 border border-gray-700 rounded-2xl px-8 py-7 flex flex-col items-center gap-4 shadow-2xl"
+            >
+              <div className="relative size-12">
+                <motion.div
+                  className="absolute inset-0 rounded-full border-4 border-amber-500/30"
+                  animate={{ rotate: 360 }}
+                  transition={{ repeat: Infinity, duration: 1.2, ease: 'linear' }}
+                  style={{ borderTopColor: '#f59e0b' }}
+                />
+              </div>
+              <div className="text-center">
+                <p className="text-white font-semibold text-base">Reconnecting…</p>
+                <p className="text-gray-400 text-sm mt-1">Trying to restore connection</p>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

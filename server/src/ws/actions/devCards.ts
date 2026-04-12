@@ -6,7 +6,6 @@ import {
   addResources,
   canPlaceRoad,
   recalculateSpecialCards,
-  checkWinCondition,
   BUILD_COSTS,
   EMPTY_RESOURCES,
   ALL_RESOURCES,
@@ -14,6 +13,7 @@ import {
 import type { GameOrchestrator } from '../../game/GameOrchestrator.js';
 import type { ClientMeta } from '../types.js';
 import type { ActionContext } from '../actionRouter.js';
+import { checkAndHandleWin } from './winCheck.js';
 
 export function handleBuyDevCard(
   ws: WebSocket,
@@ -61,13 +61,7 @@ export function handleBuyDevCard(
   ctx.sendPrivate(meta.userId, { type: 'DEV_CARD_DRAWN', payload: { cardType: drawnCard } });
 
   // Check win condition (in case of VP card)
-  const winner = checkWinCondition(orch.getState());
-  if (winner) {
-    orch.updateState(s => ({ ...s, phase: 'GAME_OVER', winner }));
-    const finalScores: Record<string, number> = {};
-    for (const p of orch.getState().players) finalScores[p.id] = p.victoryPoints + p.victoryPointCards;
-    ctx.broadcastToRoom({ type: 'GAME_OVER', payload: { winnerId: winner, finalScores } });
-  }
+  checkAndHandleWin(orch, ctx);
 
   orch.addLogEntry('log.boughtDevCard', { player: meta.username }, meta.userId);
   ctx.broadcastToRoom({ type: 'ACTION_TOAST', payload: { playerId: meta.userId, username: meta.username, action: 'boughtDevCard' } });
@@ -169,6 +163,8 @@ export function handlePlayDevCard(
     ),
   }));
 
+  let toastExtra: string | undefined;
+
   switch (payload.cardType) {
     case 'warrior':
       playWarrior(ws, meta, orch, ctx);
@@ -180,11 +176,12 @@ export function handlePlayDevCard(
       playYearOfPlenty(ws, payload.params, meta, orch, ctx);
       break;
     case 'monopoly':
-      playMonopoly(ws, payload.params, meta, orch, ctx);
+      toastExtra = playMonopoly(ws, payload.params, meta, orch, ctx);
       break;
   }
 
   orch.addLogEntry(`log.played${payload.cardType.charAt(0).toUpperCase() + payload.cardType.slice(1)}`, { player: meta.username }, meta.userId);
+  ctx.broadcastToRoom({ type: 'ACTION_TOAST', payload: { playerId: meta.userId, username: meta.username, action: `played_${payload.cardType}`, extra: toastExtra } });
   ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
 }
 
@@ -229,24 +226,28 @@ function playYearOfPlenty(ws: WebSocket, params: { resources?: [string, string] 
   }));
 }
 
-function playMonopoly(ws: WebSocket, params: { resource?: string }, meta: ClientMeta, orch: GameOrchestrator, ctx: ActionContext): void {
+function playMonopoly(ws: WebSocket, params: { resource?: string }, meta: ClientMeta, orch: GameOrchestrator, ctx: ActionContext): string {
   const resource = params.resource!;
+  let totalStolen = 0;
 
   orch.updateState(s => {
-    let totalStolen = 0;
+    let stolen = 0;
     const newPlayers = s.players.map(p => {
       if (p.id === meta.userId) return p;
       const amount = (p.resources as any)[resource] as number;
-      totalStolen += amount;
+      stolen += amount;
       return { ...p, resources: { ...p.resources, [resource]: 0 } };
     });
+    totalStolen = stolen;
     return {
       ...s,
       players: newPlayers.map(p =>
         p.id === meta.userId
-          ? { ...p, resources: { ...p.resources, [resource]: (p.resources as any)[resource] + totalStolen } }
+          ? { ...p, resources: { ...p.resources, [resource]: (p.resources as any)[resource] + stolen } }
           : p
       ),
     };
   });
+
+  return `${resource}:${totalStolen}`;
 }

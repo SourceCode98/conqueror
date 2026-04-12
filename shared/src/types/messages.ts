@@ -37,7 +37,8 @@ export type ClientMessage =
   | WSMessage<'FORCE_END_TURN',      { gameId: string }>
   | WSMessage<'END_GAME',            { gameId: string }>
   | WSMessage<'CHAT',                { gameId: string; text: string }>
-  | WSMessage<'HORN',                { gameId: string }>;
+  | WSMessage<'HORN',                { gameId: string }>
+  | WSMessage<'PLAY_AGAIN_VOTE',     { gameId: string; accept: boolean }>;
 
 // ─── Server → Client ──────────────────────────────────────────────────────────
 
@@ -54,4 +55,7 @@ export type ServerMessage =
   | WSMessage<'PLAYER_DISCONNECTED', { playerId: string }>
   | WSMessage<'BANK_TRADE_EXECUTED', { playerId: string; username: string; give: ResourceBundle; want: ResourceBundle }>
   | WSMessage<'HORN_PLAYED',         { fromPlayerId: string; username: string }>
-  | WSMessage<'ACTION_TOAST',        { playerId: string; username: string; action: string; extra?: string }>;
+  | WSMessage<'ACTION_TOAST',        { playerId: string; username: string; action: string; extra?: string }>
+  | WSMessage<'PLAY_AGAIN_POLL',     { votes: Record<string, boolean | null>; secondsLeft: number }>
+  | WSMessage<'PLAY_AGAIN_START',    { newGameId: string }>
+  | WSMessage<'GAME_CLOSED',         { reason: string }>;

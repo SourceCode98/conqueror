@@ -84,7 +84,7 @@ gamesRouter.get('/:id', (req, res) => {
 gamesRouter.post('/:id/start', (req, res) => {
   const gameId = req.params.id;
   const userId = req.user.userId;
-  const { turnTimeLimit = null } = req.body as { turnTimeLimit?: number | null };
+  const { turnTimeLimit = null, hornCooldownSecs = 30 } = req.body as { turnTimeLimit?: number | null; hornCooldownSecs?: number };
 
   const game = db.prepare('SELECT id, status, max_players, created_by FROM games WHERE id = ?')
     .get(gameId) as { id: string; status: string; max_players: number; created_by: string } | undefined;
@@ -116,7 +116,8 @@ gamesRouter.post('/:id/start', (req, res) => {
   }
 
   const limitSec = typeof turnTimeLimit === 'number' && turnTimeLimit > 0 ? turnTimeLimit : null;
-  startGame(gameId, players, limitSec);
+  const cooldownSecs = typeof hornCooldownSecs === 'number' && hornCooldownSecs > 0 ? Math.min(hornCooldownSecs, 300) : 30;
+  startGame(gameId, players, limitSec, cooldownSecs);
 
   db.prepare('UPDATE games SET status = ? WHERE id = ?').run('active', gameId);
   res.json({ ok: true });

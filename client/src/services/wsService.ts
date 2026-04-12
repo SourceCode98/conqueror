@@ -59,6 +59,7 @@ class WSService {
 
     this.ws.onopen = () => {
       this.reconnectDelay = 1000; // reset on successful connection
+      useGameStore.getState().setWsConnected(true);
       // Join game first
       this.ws!.send(JSON.stringify({
         type: 'JOIN_GAME',
@@ -80,6 +81,7 @@ class WSService {
 
     this.ws.onclose = () => {
       if (this.intentionallyClosed) return;
+      useGameStore.getState().setWsConnected(false);
       setTimeout(() => {
         this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.maxReconnectDelay);
         this.openConnection();
@@ -166,6 +168,18 @@ class WSService {
       }
       case 'GAME_OVER': {
         store.setFinalScores(msg.payload.finalScores);
+        break;
+      }
+      case 'PLAY_AGAIN_POLL': {
+        store.setPlayAgainPoll(msg.payload.votes, msg.payload.secondsLeft);
+        break;
+      }
+      case 'PLAY_AGAIN_START': {
+        store.setPlayAgainResult({ type: 'start', newGameId: msg.payload.newGameId });
+        break;
+      }
+      case 'GAME_CLOSED': {
+        store.setPlayAgainResult({ type: 'closed' });
         break;
       }
     }

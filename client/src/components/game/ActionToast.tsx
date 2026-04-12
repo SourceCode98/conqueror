@@ -150,15 +150,19 @@ export default function ActionToast({ gameState }: Props) {
               );
             })()}
 
-            {/* Player action (build road/settlement/city) */}
+            {/* Player action (build road/settlement/city/devcard) */}
             {toast.type === 'action' && (() => {
-              const { action } = toast.data as { action: string };
+              const { action, extra } = toast.data as { action: string; extra?: string };
               const color = playerColor(toast.playerId);
               const actionLabel: Record<string, string> = {
                 builtRoad: '🛣 built a road',
                 builtSettlement: '🏠 placed a settlement',
                 builtCity: '🏙 upgraded to a city',
                 boughtDevCard: '🃏 bought a dev card',
+                played_warrior: '⚔️ played a Warrior',
+                played_roadBuilding: '🛣️ played Road Building',
+                played_yearOfPlenty: '🌟 played Year of Plenty',
+                played_monopoly: '💰 played Monopoly',
               };
               if (action === 'hurry_up') {
                 return (
@@ -171,6 +175,16 @@ export default function ActionToast({ gameState }: Props) {
                         {' '}honked — <span className="text-red-400 font-bold">−2s</span>
                       </span>
                     </div>
+                  </div>
+                );
+              }
+              if (action === 'played_monopoly' && extra) {
+                const [resource, count] = extra.split(':');
+                return (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold" style={{ color }}>{toast.username}</span>
+                    <span className="text-xs text-gray-300">💰 played Monopoly</span>
+                    <span className="text-xs text-yellow-400 font-semibold">({resource} ×{count})</span>
                   </div>
                 );
               }

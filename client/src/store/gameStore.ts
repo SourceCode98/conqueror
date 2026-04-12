@@ -64,6 +64,17 @@ interface GameStore {
   finalScores: Record<string, number> | null;
   setFinalScores: (scores: Record<string, number>) => void;
 
+  // WebSocket connection status
+  wsConnected: boolean;
+  setWsConnected: (connected: boolean) => void;
+
+  // Play-again voting
+  playAgainPoll: { votes: Record<string, boolean | null>; secondsLeft: number } | null;
+  playAgainResult: { type: 'start'; newGameId: string } | { type: 'closed' } | null;
+  setPlayAgainPoll: (votes: Record<string, boolean | null>, secondsLeft: number) => void;
+  setPlayAgainResult: (result: { type: 'start'; newGameId: string } | { type: 'closed' }) => void;
+  clearPlayAgain: () => void;
+
   // Setters
   setLocalPlayerId: (id: string) => void;
   resetGame: () => void;
@@ -91,6 +102,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
   tradeSide: 'give',
   _tradeCardCb: null,
 
+  wsConnected: true,
+  setWsConnected: (connected) => set({ wsConnected: connected }),
+
+  playAgainPoll: null,
+  playAgainResult: null,
+  setPlayAgainPoll: (votes, secondsLeft) => set({ playAgainPoll: { votes, secondsLeft } }),
+  setPlayAgainResult: (result) => set({ playAgainPoll: null, playAgainResult: result }),
+  clearPlayAgain: () => set({ playAgainPoll: null, playAgainResult: null }),
+
   clearStolenReveal: () => set({ stolenReveal: null }),
   setFinalScores: (scores) => set({ finalScores: scores }),
 
@@ -115,6 +135,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     tradePanel: null,
     tradeSide: 'give',
     _tradeCardCb: null,
+    playAgainPoll: null,
+    playAgainResult: null,
   }),
 
   applyGameState: (state) => {

@@ -1,10 +1,12 @@
 import { WebSocketServer, WebSocket, type RawData } from 'ws';
+import { randomUUID } from 'crypto';
 import type { IncomingMessage } from 'http';
 import type { ClientMessage, ServerMessage } from '@conqueror/shared';
 import db from '../db/index.js';
 import { validateWsToken } from '../middleware/auth.js';
 import { handleGameAction } from './actionRouter.js';
-import { getOrchestrator } from '../game/orchestratorRegistry.js';
+import { getOrchestrator, registerOrchestrator } from '../game/orchestratorRegistry.js';
+import { GameOrchestrator } from '../game/GameOrchestrator.js';
 import type { ClientMeta } from './types.js';
 
 // Room registry: gameId → connected clients
@@ -13,7 +15,150 @@ const rooms = new Map<string, Set<WebSocket>>();
 const clientMeta = new WeakMap<WebSocket, ClientMeta>();
 // Horn rate limiting: `${gameId}:${userId}` → last horn timestamp
 const hornLastUsed = new Map<string, number>();
-const HORN_COOLDOWN_MS = 30_000; // 30 seconds
+
+// ─── Play-again sessions ──────────────────────────────────────────────────────
+
+interface PlayAgainSession {
+  playerIds: string[];
+  votes: Map<string, boolean>;
+  startedAt: number;
+  timer: ReturnType<typeof setTimeout>;
+  turnTimeLimit: number | null;
+  hornCooldownSecs: number;
+}
+
+const playAgainSessions = new Map<string, PlayAgainSession>();
+const PLAY_AGAIN_TIMEOUT_MS = 60_000;
+const PLAY_AGAIN_MIN_PLAYERS = 2;
+
+function startPlayAgainSession(gameId: string, playerIds: string[], turnTimeLimit: number | null, hornCooldownSecs: number): void {
+  const existing = playAgainSessions.get(gameId);
+  if (existing) { clearTimeout(existing.timer); playAgainSessions.delete(gameId); }
+
+  const session: PlayAgainSession = {
+    playerIds,
+    votes: new Map(),
+    startedAt: Date.now(),
+    turnTimeLimit,
+    hornCooldownSecs,
+    timer: setTimeout(() => resolvePlayAgain(gameId, false), PLAY_AGAIN_TIMEOUT_MS),
+  };
+  playAgainSessions.set(gameId, session);
+  broadcastPlayAgainPoll(gameId, session);
+}
+
+function broadcastPlayAgainPoll(gameId: string, session: PlayAgainSession): void {
+  const secondsLeft = Math.max(0, Math.round((PLAY_AGAIN_TIMEOUT_MS - (Date.now() - session.startedAt)) / 1000));
+  const votes: Record<string, boolean | null> = {};
+  for (const pid of session.playerIds) {
+    votes[pid] = session.votes.has(pid) ? (session.votes.get(pid) as boolean) : null;
+  }
+  broadcastToRoom(gameId, { type: 'PLAY_AGAIN_POLL', payload: { votes, secondsLeft } });
+}
+
+function handlePlayAgainVote(gameId: string, playerId: string, accept: boolean): void {
+  const session = playAgainSessions.get(gameId);
+  if (!session || !session.playerIds.includes(playerId)) return;
+
+  session.votes.set(playerId, accept);
+  broadcastPlayAgainPoll(gameId, session);
+
+  // Early resolution checks
+  const acceptCount = [...session.votes.values()].filter(v => v === true).length;
+  const declineCount = [...session.votes.values()].filter(v => v === false).length;
+  const pending = session.playerIds.length - acceptCount - declineCount;
+
+  // Can't possibly reach MIN_PLAYERS → fail now
+  if (acceptCount + pending < PLAY_AGAIN_MIN_PLAYERS) {
+    resolvePlayAgain(gameId, false);
+    return;
+  }
+  // All voted and enough said yes → succeed
+  if (pending === 0 && acceptCount >= PLAY_AGAIN_MIN_PLAYERS) {
+    resolvePlayAgain(gameId, true);
+  }
+}
+
+function resolvePlayAgain(gameId: string, success: boolean): void {
+  const session = playAgainSessions.get(gameId);
+  if (!session) return;
+  clearTimeout(session.timer);
+  playAgainSessions.delete(gameId);
+
+  if (success) {
+    launchRematch(gameId, session);
+  } else {
+    broadcastToRoom(gameId, { type: 'GAME_CLOSED', payload: { reason: 'not_enough_players' } });
+    // Delete the finished game from the DB
+    db.prepare('DELETE FROM games WHERE id = ?').run(gameId);
+  }
+}
+
+function launchRematch(gameId: string, session: PlayAgainSession): void {
+  const acceptedIds = session.playerIds.filter(pid => session.votes.get(pid) === true);
+
+  if (acceptedIds.length < PLAY_AGAIN_MIN_PLAYERS) {
+    broadcastToRoom(gameId, { type: 'GAME_CLOSED', payload: { reason: 'not_enough_players' } });
+    db.prepare('DELETE FROM games WHERE id = ?').run(gameId);
+    return;
+  }
+
+  // Fetch player details for accepted players
+  const placeholders = acceptedIds.map(() => '?').join(',');
+  type PlayerRow = { id: string; username: string; color: string; seat_order: number };
+  const players = db.prepare(`
+    SELECT gp.user_id as id, u.username, gp.color, gp.seat_order
+    FROM game_players gp
+    JOIN users u ON u.id = gp.user_id
+    WHERE gp.game_id = ? AND gp.user_id IN (${placeholders})
+    ORDER BY gp.seat_order
+  `).all(gameId, ...acceptedIds) as PlayerRow[];
+
+  // Get old game metadata
+  const oldGame = db.prepare('SELECT name, max_players, created_by FROM games WHERE id = ?')
+    .get(gameId) as { name: string; max_players: number; created_by: string } | undefined;
+
+  if (!oldGame || players.length < PLAY_AGAIN_MIN_PLAYERS) {
+    broadcastToRoom(gameId, { type: 'GAME_CLOSED', payload: { reason: 'not_enough_players' } });
+    db.prepare('DELETE FROM games WHERE id = ?').run(gameId);
+    return;
+  }
+
+  // Determine host: first accepting player, or keep original if they accepted
+  const newHostId = acceptedIds.includes(oldGame.created_by)
+    ? oldGame.created_by
+    : acceptedIds[0];
+
+  // Create new game
+  const newGameId = randomUUID();
+  db.prepare('INSERT INTO games (id, name, status, max_players, created_by) VALUES (?, ?, ?, ?, ?)')
+    .run(newGameId, oldGame.name, 'active', oldGame.max_players, newHostId);
+
+  // Insert players with reassigned seat order
+  players.forEach((p, i) => {
+    db.prepare('INSERT INTO game_players (game_id, user_id, color, seat_order) VALUES (?, ?, ?, ?)')
+      .run(newGameId, p.id, p.color, i);
+  });
+
+  // Create and register the new orchestrator
+  const orch = new GameOrchestrator(
+    newGameId,
+    db,
+    players.map((p, i) => ({ id: p.id, username: p.username, color: p.color as any, seat_order: i })),
+    undefined,
+    session.turnTimeLimit,
+    session.hornCooldownSecs,
+  );
+  registerOrchestrator(newGameId, orch);
+
+  // Tell all clients in the old room to navigate to the new game
+  broadcastToRoom(gameId, { type: 'PLAY_AGAIN_START', payload: { newGameId } });
+
+  // Clean up old game
+  db.prepare('DELETE FROM games WHERE id = ?').run(gameId);
+}
+
+// ─── Core handlers ────────────────────────────────────────────────────────────
 
 function getOrLoadOrchestrator(gameId: string) {
   return getOrchestrator(gameId);
@@ -58,6 +203,12 @@ function handleMessage(ws: WebSocket, data: RawData): void {
     return;
   }
 
+  if (msg.type === 'PLAY_AGAIN_VOTE') {
+    const { accept } = msg.payload as { gameId: string; accept: boolean };
+    handlePlayAgainVote(meta.gameId, meta.userId, accept);
+    return;
+  }
+
   const orch = getOrLoadOrchestrator(meta.gameId);
   if (!orch) {
     sendTo(ws, { type: 'ERROR', payload: { code: 'GAME_NOT_FOUND', message: 'Game not found' } });
@@ -72,6 +223,11 @@ function handleMessage(ws: WebSocket, data: RawData): void {
         broadcastPersonalizedGameState(meta.gameId, orch);
       } else {
         broadcastToRoom(meta.gameId, outMsg);
+        // Start play-again voting whenever a game ends
+        if (outMsg.type === 'GAME_OVER') {
+          const state = orch.getState();
+          startPlayAgainSession(meta.gameId, state.players.map(p => p.id), state.turnTimeLimit, state.hornCooldownSecs ?? 30);
+        }
       }
     },
     sendTo,
@@ -127,6 +283,17 @@ function handleJoinGame(
       type: 'PLAYER_CONNECTED',
       payload: { playerId: authPayload.userId },
     }, ws);
+
+    // If there's an active play-again poll, resend it to this player
+    const session = playAgainSessions.get(payload.gameId);
+    if (session) {
+      const secondsLeft = Math.max(0, Math.round((PLAY_AGAIN_TIMEOUT_MS - (Date.now() - session.startedAt)) / 1000));
+      const votes: Record<string, boolean | null> = {};
+      for (const pid of session.playerIds) {
+        votes[pid] = session.votes.has(pid) ? (session.votes.get(pid) as boolean) : null;
+      }
+      sendTo(ws, { type: 'PLAY_AGAIN_POLL', payload: { votes, secondsLeft } });
+    }
   }
   // If lobby: client is registered in the room. When host calls POST /start,
   // the server will broadcast GAME_STATE to everyone in the room.
@@ -149,17 +316,19 @@ function handleHorn(ws: WebSocket, payload: { gameId: string }): void {
   const key = `${meta.gameId}:${meta.userId}`;
   const last = hornLastUsed.get(key) ?? 0;
   const now = Date.now();
-  if (now - last < HORN_COOLDOWN_MS) {
+
+  // Deduct 2 seconds from the active turn (if a time limit is set)
+  const orch = getOrLoadOrchestrator(meta.gameId);
+  const hornCooldownMs = ((orch?.getState().hornCooldownSecs) ?? 30) * 1000;
+
+  if (now - last < hornCooldownMs) {
     sendTo(ws, {
       type: 'ERROR',
-      payload: { code: 'HORN_COOLDOWN', message: `Wait ${Math.ceil((HORN_COOLDOWN_MS - (now - last)) / 1000)}s before honking again` },
+      payload: { code: 'HORN_COOLDOWN', message: `Wait ${Math.ceil((hornCooldownMs - (now - last)) / 1000)}s before honking again` },
     });
     return;
   }
   hornLastUsed.set(key, now);
-
-  // Deduct 2 seconds from the active turn (if a time limit is set)
-  const orch = getOrLoadOrchestrator(meta.gameId);
   if (orch) {
     const state = orch.getState();
     if (state.turnTimeLimit && state.turnStartTime && state.phase !== 'GAME_OVER') {
