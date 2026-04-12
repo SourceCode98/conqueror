@@ -1,7 +1,7 @@
 import db from '../db/index.js';
 import { GameOrchestrator } from '../game/GameOrchestrator.js';
 import { registerOrchestrator } from '../game/orchestratorRegistry.js';
-import { broadcastPersonalizedGameState } from './wsServer.js';
+import { broadcastPersonalizedGameState, getConnectedUserIds } from './wsServer.js';
 
 interface GamePlayer {
   id: string;
@@ -20,6 +20,13 @@ export function startGame(gameId: string, players: GamePlayer[], turnTimeLimit: 
     hornCooldownSecs,
   );
   registerOrchestrator(gameId, orch);
+
+  // Mark players already in the WS room as connected before the first broadcast
+  // (they joined via WebSocket during the lobby phase but connected: false is the default)
+  const connectedIds = getConnectedUserIds(gameId);
+  for (const id of connectedIds) {
+    orch.setConnected(id, true);
+  }
 
   // Broadcast personalised game state to each connected player
   broadcastPersonalizedGameState(gameId, orch);

@@ -509,3 +509,17 @@ export function sendTo(ws: WebSocket, message: ServerMessage): void {
 export function getOrchestratorForGame(gameId: string) {
   return getOrLoadOrchestrator(gameId);
 }
+
+/** Returns the set of user IDs currently connected via WebSocket for a given game. */
+export function getConnectedUserIds(gameId: string): Set<string> {
+  const room = rooms.get(gameId);
+  if (!room) return new Set();
+  const ids = new Set<string>();
+  for (const client of room) {
+    if (client.readyState === WebSocket.OPEN) {
+      const meta = clientMeta.get(client);
+      if (meta) ids.add(meta.userId);
+    }
+  }
+  return ids;
+}
