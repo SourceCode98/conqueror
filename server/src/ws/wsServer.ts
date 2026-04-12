@@ -172,7 +172,8 @@ function scheduleTurnTimer(gameId: string): void {
   if (!orch) return;
 
   const state = orch.getState();
-  if (!state.turnTimeLimit || !state.turnStartTime || state.phase === 'GAME_OVER') return;
+  // Don't schedule during setup or game over — setup turns have no server-side auto-advance
+  if (!state.turnTimeLimit || !state.turnStartTime || state.phase === 'GAME_OVER' || state.phase === 'SETUP_FORWARD' || state.phase === 'SETUP_REVERSE') return;
 
   const elapsed = Date.now() - state.turnStartTime;
   const remaining = Math.max(0, state.turnTimeLimit * 1000 - elapsed);

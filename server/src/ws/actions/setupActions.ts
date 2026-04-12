@@ -115,20 +115,21 @@ function advanceSetupTurn(orch: GameOrchestrator, currentPlayerId: string, edgeI
 
     const numPlayers = s.players.length;
 
+    const now = Date.now();
     if (s.phase === 'SETUP_FORWARD') {
       if (currentIdx < numPlayers - 1) {
         // Next player in forward order
-        return { ...s, roads: newRoads, players: newPlayers, activePlayerId: s.players[currentIdx + 1].id };
+        return { ...s, roads: newRoads, players: newPlayers, activePlayerId: s.players[currentIdx + 1].id, turnStartTime: now };
       } else {
         // Last player — start reverse
-        return { ...s, roads: newRoads, players: newPlayers, phase: 'SETUP_REVERSE', setupRound: 2 };
+        return { ...s, roads: newRoads, players: newPlayers, phase: 'SETUP_REVERSE', setupRound: 2, turnStartTime: now };
       }
     } else {
       // SETUP_REVERSE
       if (currentIdx > 0) {
-        return { ...s, roads: newRoads, players: newPlayers, activePlayerId: s.players[currentIdx - 1].id };
+        return { ...s, roads: newRoads, players: newPlayers, activePlayerId: s.players[currentIdx - 1].id, turnStartTime: now };
       } else {
-        // Setup done — start main game
+        // Setup done — start main game with a fresh turn clock
         return {
           ...s,
           roads: newRoads,
@@ -136,6 +137,7 @@ function advanceSetupTurn(orch: GameOrchestrator, currentPlayerId: string, edgeI
           phase: 'ROLL',
           activePlayerId: s.players[0].id,
           turn: 1,
+          turnStartTime: now,
         };
       }
     }
