@@ -12,6 +12,7 @@ class WSService {
   private token: string | null = null;
   private extraHandlers: MessageHandler[] = [];
   private intentionallyClosed = false;
+  private visibilityHandler: (() => void) | null = null;
   // Dedup: key → timestamp of last processing (prevents double-fire from reconnects)
   private recentKeys = new Map<string, number>();
 
@@ -28,6 +29,18 @@ class WSService {
     this.token = token;
     this.intentionallyClosed = false;
     this.openConnection();
+
+    // Reconnect when the user returns to the tab/app (mobile background → foreground)
+    this.visibilityHandler = () => {
+      if (document.visibilityState === 'visible' && !this.intentionallyClosed) {
+        const state = this.ws?.readyState;
+        if (state !== WebSocket.OPEN && state !== WebSocket.CONNECTING) {
+          this.reconnectDelay = 1000;
+          this.openConnection();
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', this.visibilityHandler);
   }
 
   disconnect(): void {
@@ -36,6 +49,10 @@ class WSService {
     this.ws = null;
     this.messageQueue = [];
     this.reconnectDelay = 1000;
+    if (this.visibilityHandler) {
+      document.removeEventListener('visibilitychange', this.visibilityHandler);
+      this.visibilityHandler = null;
+    }
   }
 
   send(msg: ClientMessage): void {

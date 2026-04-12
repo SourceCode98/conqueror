@@ -213,6 +213,7 @@ export default function GamePage() {
   const [showCostTable, setShowCostTable] = useState(false);
   const [showMobileCostTable, setShowMobileCostTable] = useState(false);
   const [handAnchor, setHandAnchor] = useState<HandAnchor>(getHandAnchor);
+  const [showReconnectOverlay, setShowReconnectOverlay] = useState(false);
 
   // Sync hand anchor from ResourceHand via custom event
   useEffect(() => {
@@ -220,6 +221,16 @@ export default function GamePage() {
     window.addEventListener('hand-anchor-change', handler);
     return () => window.removeEventListener('hand-anchor-change', handler);
   }, []);
+
+  // Delay the reconnecting overlay by 2s to avoid flickers on mobile (brief WS drops)
+  useEffect(() => {
+    if (!wsConnected) {
+      const t = setTimeout(() => setShowReconnectOverlay(true), 2000);
+      return () => clearTimeout(t);
+    } else {
+      setShowReconnectOverlay(false);
+    }
+  }, [wsConnected]);
 
   // Lock document scroll while game is mounted — prevents iOS keyboard from scrolling the page
   useEffect(() => {
@@ -457,7 +468,7 @@ export default function GamePage() {
   };
 
   return (
-    <div className="h-screen bg-gray-900 flex flex-col overflow-hidden">
+    <div className="h-dvh bg-gray-900 flex flex-col overflow-hidden">
 
       {/* ── Header ── */}
       <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700">
@@ -938,15 +949,15 @@ export default function GamePage() {
         )}
       </AnimatePresence>
 
-      {/* ── Reconnecting overlay ── */}
+      {/* ── Reconnecting overlay (delayed 2s to avoid mobile flicker) ── */}
       <AnimatePresence>
-        {!wsConnected && (
+        {showReconnectOverlay && (
           <motion.div
             key="reconnecting"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-gray-950/95"
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
@@ -967,6 +978,12 @@ export default function GamePage() {
                 <p className="text-white font-semibold text-base">Reconnecting…</p>
                 <p className="text-gray-400 text-sm mt-1">Trying to restore connection</p>
               </div>
+              <button
+                className="text-xs text-gray-500 hover:text-gray-300 underline mt-1"
+                onClick={() => window.location.reload()}
+              >
+                Refresh page
+              </button>
             </motion.div>
           </motion.div>
         )}

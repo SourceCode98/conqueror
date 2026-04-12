@@ -2,7 +2,7 @@
  * Turn countdown timer.
  * When the timer expires and it's the local player's turn, auto-sends END_TURN.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { wsService } from '../../services/wsService.js';
 import { cn } from '../../lib/cn.js';
 
@@ -19,7 +19,7 @@ export default function TurnTimer({ turnStartTime, turnTimeLimit, isMyTurn, game
     const elapsed = (Date.now() - turnStartTime) / 1000;
     return Math.max(0, Math.ceil(turnTimeLimit - elapsed));
   });
-  const autoEndSentRef = { current: false };
+  const autoEndSentRef = useRef(false);
 
   useEffect(() => {
     autoEndSentRef.current = false;

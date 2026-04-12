@@ -8,6 +8,7 @@ import { handleGameAction } from './actionRouter.js';
 import { getOrchestrator, registerOrchestrator } from '../game/orchestratorRegistry.js';
 import { GameOrchestrator } from '../game/GameOrchestrator.js';
 import type { ClientMeta } from './types.js';
+import { checkAndHandleWin } from './actions/winCheck.js';
 
 // Room registry: gameId → connected clients
 const rooms = new Map<string, Set<WebSocket>>();
@@ -15,6 +16,8 @@ const rooms = new Map<string, Set<WebSocket>>();
 const clientMeta = new WeakMap<WebSocket, ClientMeta>();
 // Horn rate limiting: `${gameId}:${userId}` → last horn timestamp
 const hornLastUsed = new Map<string, number>();
+// Server-side turn timers: gameId → timeout handle
+const turnTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 // ─── Play-again sessions ──────────────────────────────────────────────────────
 
@@ -156,6 +159,88 @@ function launchRematch(gameId: string, session: PlayAgainSession): void {
 
   // Clean up old game
   db.prepare('DELETE FROM games WHERE id = ?').run(gameId);
+}
+
+// ─── Server-side turn timer ───────────────────────────────────────────────────
+
+function scheduleTurnTimer(gameId: string): void {
+  const existing = turnTimers.get(gameId);
+  if (existing) clearTimeout(existing);
+  turnTimers.delete(gameId);
+
+  const orch = getOrchestrator(gameId);
+  if (!orch) return;
+
+  const state = orch.getState();
+  if (!state.turnTimeLimit || !state.turnStartTime || state.phase === 'GAME_OVER') return;
+
+  const elapsed = Date.now() - state.turnStartTime;
+  const remaining = Math.max(0, state.turnTimeLimit * 1000 - elapsed);
+  const expectedTurnStart = state.turnStartTime;
+
+  const timer = setTimeout(() => {
+    turnTimers.delete(gameId);
+    serverAutoEndTurn(gameId, expectedTurnStart);
+  }, remaining);
+
+  turnTimers.set(gameId, timer);
+}
+
+function serverAutoEndTurn(gameId: string, expectedTurnStart: number): void {
+  const orch = getOrchestrator(gameId);
+  if (!orch) return;
+
+  const state = orch.getState();
+  // If the turn already advanced (player acted in time), do nothing
+  if (state.turnStartTime !== expectedTurnStart) return;
+  if (state.phase === 'GAME_OVER' || state.phase === 'SETUP_FORWARD' || state.phase === 'SETUP_REVERSE') return;
+
+  const activePlayer = state.players.find(p => p.id === state.activePlayerId);
+  if (!activePlayer) return;
+
+  // Build a minimal ActionContext for checkAndHandleWin
+  const ctx: import('./actionRouter.js').ActionContext = {
+    broadcastToRoom: (outMsg) => {
+      if (outMsg.type === 'GAME_STATE') {
+        broadcastPersonalizedGameState(gameId, orch);
+      } else {
+        broadcastToRoom(gameId, outMsg);
+        if (outMsg.type === 'GAME_OVER') {
+          const s = orch.getState();
+          startPlayAgainSession(gameId, s.players.map(p => p.id), s.turnTimeLimit, s.hornCooldownSecs ?? 30);
+        }
+      }
+    },
+    sendTo: (_ws, _msg) => { /* no target client for server-initiated action */ },
+    sendPrivate: (targetPlayerId, outMsg) => sendToPlayer(gameId, targetPlayerId, outMsg),
+  };
+
+  // Edge case: player somehow reached win threshold
+  if (checkAndHandleWin(orch, ctx)) return;
+
+  const currentIdx = state.players.findIndex(p => p.id === state.activePlayerId);
+  const nextIdx = (currentIdx + 1) % state.players.length;
+  const nextPlayer = state.players[nextIdx];
+
+  orch.updateState(s => ({
+    ...s,
+    phase: 'ROLL',
+    turn: s.turn + 1,
+    activePlayerId: nextPlayer.id,
+    diceRoll: null,
+    tradeOffer: null,
+    discardsPending: {},
+    turnStartTime: Date.now(),
+    players: s.players.map(p => ({
+      ...p,
+      devCardPlayedThisTurn: false,
+      devCards: p.devCards.map(c => ({ ...c, playedThisTurn: false, boughtThisTurn: false })),
+    })),
+  }));
+
+  orch.addLogEntry('log.turnTimedOut', { player: activePlayer.username }, activePlayer.id);
+  // broadcastPersonalizedGameState already calls scheduleTurnTimer internally
+  broadcastPersonalizedGameState(gameId, orch);
 }
 
 // ─── Core handlers ────────────────────────────────────────────────────────────
@@ -388,6 +473,7 @@ export function broadcastToRoom(gameId: string, message: ServerMessage, exclude?
 /**
  * Send each connected player their own personalised GAME_STATE so that
  * dev cards and VP cards are only visible to the owning player.
+ * Also reschedules the server-side turn timer whenever state is broadcast.
  */
 export function broadcastPersonalizedGameState(gameId: string, orch: import('../game/GameOrchestrator.js').GameOrchestrator): void {
   const room = rooms.get(gameId);
@@ -398,6 +484,8 @@ export function broadcastPersonalizedGameState(gameId: string, orch: import('../
     const state = orch.getPublicState(meta?.userId);
     client.send(JSON.stringify({ type: 'GAME_STATE', payload: { state } }));
   }
+  // Keep server-side turn timer in sync with game state
+  scheduleTurnTimer(gameId);
 }
 
 export function sendToPlayer(gameId: string, playerId: string, message: ServerMessage): void {
