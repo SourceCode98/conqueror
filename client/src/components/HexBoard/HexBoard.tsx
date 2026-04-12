@@ -314,21 +314,43 @@ function PortLabel({
   const key = resource ?? 'any';
   const theme = PORT_COLOR[key] ?? PORT_COLOR.any;
 
+  const isSpecific = resource !== null;
+  // Specific ports: taller badge with icon on top + ratio below
+  // Any ports:      original-size badge with "✦ 3:1" centered
+  const bW = 34;
+  const bH = isSpecific ? 38 : 26;
+  const bX = lx - bW / 2;
+  const bY = ly - bH / 2;
+
   return (
     <g>
       {/* Dock — connects the two coastal vertices */}
       <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
         stroke={theme.border} strokeWidth={3} opacity={0.7}
         strokeLinecap="round"/>
-      {/* Badge */}
-      <rect x={lx - 15} y={ly - 12} width={30} height={24} rx={6}
-        fill={theme.bg} stroke={theme.border} strokeWidth={1.5} opacity={0.92}/>
-      <text x={lx} y={ly + 5} textAnchor="middle" fontSize={10} fontWeight="bold" fill="white">
-        {ratio}:1
-      </text>
-      {/* Resource dot */}
-      <circle cx={lx + 12} cy={ly - 12} r={5}
-        fill={theme.border} stroke="#0a0a0a" strokeWidth={1}/>
+      {/* Badge background */}
+      <rect x={bX} y={bY} width={bW} height={bH} rx={7}
+        fill={theme.bg} stroke={theme.border} strokeWidth={1.5} opacity={0.95}/>
+      {isSpecific ? (
+        <>
+          {/* Emoji icon — upper portion of badge */}
+          <text x={lx} y={ly - 4} textAnchor="middle" fontSize={15} style={{ userSelect: 'none' }}>
+            {theme.icon}
+          </text>
+          {/* Divider */}
+          <line x1={bX + 4} y1={ly + 6} x2={bX + bW - 4} y2={ly + 6}
+            stroke={theme.border} strokeWidth={0.8} opacity={0.4}/>
+          {/* Ratio — lower portion */}
+          <text x={lx} y={ly + 16} textAnchor="middle" fontSize={9} fontWeight="bold" fill={theme.border} style={{ userSelect: 'none' }}>
+            {ratio}:1
+          </text>
+        </>
+      ) : (
+        /* Any port: symbol + ratio side by side */
+        <text x={lx} y={ly + 5} textAnchor="middle" fontSize={10} fontWeight="bold" fill={theme.border} style={{ userSelect: 'none' }}>
+          {theme.icon} {ratio}:1
+        </text>
+      )}
     </g>
   );
 }
