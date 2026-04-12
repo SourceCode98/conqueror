@@ -13,7 +13,7 @@ i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
-    fallbackLng: 'en',
+    fallbackLng: 'es',
     supportedLngs: ['en', 'es'],
     ns: ['common', 'game', 'errors'],
     defaultNS: 'common',
@@ -22,7 +22,7 @@ i18n
       es: { common: esCommon, game: esGame, errors: esErrors },
     },
     detection: {
-      order: ['localStorage', 'navigator'],
+      order: ['localStorage'],
       caches: ['localStorage'],
     },
     interpolation: {

@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PublicGameState, VertexId, EdgeId, AxialCoord, HexTile, ResourceType } from '@conqueror/shared';
-import { edgeVertices, adjacentVertices } from '@conqueror/shared';
+import { edgeVertices, adjacentVertices, roadDistanceToVertex } from '@conqueror/shared';
 import { useGameStore } from '../../store/gameStore.js';
 import { wsService } from '../../services/wsService.js';
 import { SettlementSvg, CitySvg, BanditSvg } from '../icons/GameIcons.js';
@@ -88,8 +88,8 @@ function validSettlementVerts(state: PublicGameState, playerId: string): Set<Ver
 function validCityVerts(state: PublicGameState, playerId: string): Set<VertexId> {
   const valid = new Set<VertexId>();
   for (const vid of state.board.vertices as VertexId[]) {
-    const b = state.buildings[vid];
-    if (b && b.playerId === playerId && b.type === 'settlement') valid.add(vid);
+    const b = state.buildings[vid] as any;
+    if (b && b.playerId === playerId && b.type === 'settlement' && !b.sieged) valid.add(vid);
   }
   return valid;
 }
@@ -370,6 +370,7 @@ export default function HexBoard({ state }: HexBoardProps) {
     dragPiece, setDragPiece,
     cancelRoadBuilding,
     localPlayerId,
+    setAttackTargetVertex,
   } = useGameStore();
 
   const myTurn = isMyTurn();
@@ -471,7 +472,25 @@ export default function HexBoard({ state }: HexBoardProps) {
   }, [handleDragMove, handleDragEnd]);
 
   function handleVertexClick(vertexId: VertexId) {
-    if (!myTurn || dragPiece) return;
+    if (dragPiece) return;
+
+    // War: recruit soldier (own building, any turn — gated by server)
+    if (boardMode === 'recruit_soldier' && myTurn) {
+      wsService.send({ type: 'RECRUIT_SOLDIER', payload: { gameId: state.gameId, vertexId } });
+      setBoardMode(null);
+      return;
+    }
+
+    // War: select attack target (enemy building)
+    if (boardMode === 'attack' && myTurn) {
+      const building = (state.buildings as any)[vertexId];
+      if (building && building.playerId !== localPlayerId) {
+        setAttackTargetVertex(vertexId);
+      }
+      return;
+    }
+
+    if (!myTurn) return;
     if (boardMode === 'place_settlement' || boardMode === 'place_city') {
       wsService.send({ type: 'PLACE_BUILDING', payload: {
         gameId: state.gameId, vertexId, type: boardMode === 'place_city' ? 'city' : 'settlement',
@@ -528,7 +547,7 @@ export default function HexBoard({ state }: HexBoardProps) {
   }, [state.diceRoll]);
 
   const isRobberClickable = boardMode === 'move_bandit' && myTurn && !dragPiece;
-  const isVertexClickable = (boardMode === 'place_settlement' || boardMode === 'place_city') && myTurn && !dragPiece;
+  const isVertexClickable = (boardMode === 'place_settlement' || boardMode === 'place_city' || boardMode === 'recruit_soldier' || boardMode === 'attack') && myTurn && !dragPiece;
   const isEdgeClickable   = boardMode === 'place_road' && myTurn && !dragPiece;
   const showDragVertex    = dragPiece && (dragPiece.type === 'settlement' || dragPiece.type === 'city');
   const showDragEdge      = dragPiece?.type === 'road';
@@ -692,9 +711,51 @@ export default function HexBoard({ state }: HexBoardProps) {
           const pos = vertexToPixel(vertexId as VertexId);
           const playerColor = state.players.find(p => p.id === building.playerId)?.color ?? 'red';
           const fill = resolvePlayerColor(playerColor);
-          return building.type === 'settlement'
-            ? <SettlementSvg key={vertexId} cx={pos.x} cy={pos.y} fill={fill}/>
-            : <CitySvg       key={vertexId} cx={pos.x} cy={pos.y} fill={fill}/>;
+          const bld = building as any;
+          const soldiers: number = bld.soldiers ?? 0;
+          const sieged: boolean = !!bld.sieged;
+          return (
+            <g key={vertexId}>
+              {/* Siege ring */}
+              {sieged && (
+                <circle cx={pos.x} cy={pos.y} r={18}
+                  fill="none" stroke="#ef4444" strokeWidth={2.5} opacity={0.85}
+                  strokeDasharray="5 3"/>
+              )}
+              {building.type === 'settlement'
+                ? <SettlementSvg cx={pos.x} cy={pos.y} fill={fill}/>
+                : <CitySvg       cx={pos.x} cy={pos.y} fill={fill}/>
+              }
+              {/* Soldier helmets — 🪖 emoji per soldier, dashed ring for empty slots */}
+              {(state as any).warMode && (() => {
+                const max = building.type === 'city' ? 3 : 2;
+                if (soldiers === 0 && !sieged) return null;
+                const spacing = 14;
+                const totalW = (max - 1) * spacing;
+                const rowCY = pos.y + (building.type === 'city' ? 14 : 17);
+                const bgW = totalW + 22;
+                return (
+                  <g style={{ pointerEvents: 'none' }}>
+                    <rect x={pos.x - bgW / 2} y={rowCY - 9} width={bgW} height={17} rx={8}
+                      fill="rgba(2,6,23,0.85)" stroke="rgba(255,255,255,0.12)" strokeWidth={0.5}/>
+                    {Array.from({ length: max }, (_, i) => {
+                      const cx = pos.x - totalW / 2 + i * spacing;
+                      return i < soldiers ? (
+                        <text key={i} x={cx} y={rowCY + 4} textAnchor="middle" fontSize={11}
+                          style={{ userSelect: 'none' }}>
+                          🪖
+                        </text>
+                      ) : (
+                        <circle key={i} cx={cx} cy={rowCY} r={4}
+                          fill="none" stroke="rgba(107,114,128,0.6)" strokeWidth={1}
+                          strokeDasharray="2 2"/>
+                      );
+                    })}
+                  </g>
+                );
+              })()}
+            </g>
+          );
         })}
 
         {/* ── Drag ghosts ── */}
@@ -714,6 +775,49 @@ export default function HexBoard({ state }: HexBoardProps) {
 
         {/* ── Click vertex overlays ── */}
         {isVertexClickable && state.board.vertices.map(vid => {
+          if (boardMode === 'recruit_soldier') {
+            // Show own buildings with capacity
+            const b = (state.buildings as any)[vid];
+            if (!b || b.playerId !== localPlayerId || b.sieged) return null;
+            const max = b.type === 'city' ? 3 : 2;
+            if ((b.soldiers ?? 0) >= max) return null;
+            const pos = vertexToPixel(vid as VertexId);
+            return (
+              <circle key={vid} cx={pos.x} cy={pos.y} r={12}
+                fill="rgba(251,191,36,0.3)" stroke="#fbbf24" strokeWidth={2}
+                style={{ cursor: 'pointer' }}
+                onClick={() => handleVertexClick(vid as VertexId)}/>
+            );
+          }
+          if (boardMode === 'attack') {
+            const b = (state.buildings as any)[vid];
+            if (!b || b.playerId === localPlayerId) return null;
+            const victim = state.players.find((p: any) => p.id === b.playerId);
+            const victimVP = (victim?.victoryPoints ?? 0) + (victim?.victoryPointCards ?? 0);
+            const dist = roadDistanceToVertex(state as any, localPlayerId!, vid as VertexId);
+            const outOfRange = dist > 2;
+            const vpProtected = victimVP <= 2;
+            const canTarget = !outOfRange && !vpProtected;
+            const pos = vertexToPixel(vid as VertexId);
+            const reason = outOfRange ? 'Out of range (>2 roads)' : vpProtected ? 'Protected (≤2 VP)' : null;
+            return (
+              <g key={vid}>
+                <circle cx={pos.x} cy={pos.y} r={14}
+                  fill={canTarget ? 'rgba(239,68,68,0.25)' : 'rgba(107,114,128,0.15)'}
+                  stroke={canTarget ? '#ef4444' : '#6b7280'}
+                  strokeWidth={canTarget ? 2 : 1.5}
+                  strokeDasharray={canTarget ? undefined : '3 2'}
+                  style={{ cursor: canTarget ? 'crosshair' : 'not-allowed' }}
+                  onClick={() => canTarget ? handleVertexClick(vid as VertexId) : undefined}/>
+                {reason && (
+                  <text x={pos.x} y={pos.y - 18} textAnchor="middle" fontSize={8}
+                    fill="#9ca3af" style={{ pointerEvents: 'none', userSelect: 'none' }}>
+                    {reason}
+                  </text>
+                )}
+              </g>
+            );
+          }
           const isValid = boardMode === 'place_settlement'
             ? validSettVerts?.has(vid as VertexId)
             : validCityVerts_?.has(vid as VertexId);
@@ -776,7 +880,9 @@ export default function HexBoard({ state }: HexBoardProps) {
             {boardMode === 'place_road' && (roadBuildingEdges !== null
               ? `Road Building: road ${roadBuildingEdges.length + 1}/2`
               : t('actions.buildRoad'))}
-            {boardMode === 'move_bandit' && t('bandit.selectTile')}
+            {boardMode === 'move_bandit'      && t('bandit.selectTile')}
+            {boardMode === 'recruit_soldier'  && '🪖 Select a building to recruit'}
+            {boardMode === 'attack'           && '⚔️ Select an enemy building to attack'}
           </span>
           {boardMode === 'move_bandit'
             ? <span className="text-xs opacity-60">Drag or click a tile</span>

@@ -1,4 +1,5 @@
 import { WebSocket } from 'ws';
+import { applyWarTurnStart } from '@conqueror/shared';
 import type { GameOrchestrator } from '../../game/GameOrchestrator.js';
 import type { ClientMeta } from '../types.js';
 import type { ActionContext } from '../actionRouter.js';
@@ -64,6 +65,7 @@ export function handleForceEndTurn(
     })),
   }));
 
+  applyWarTurnStart(orch);
   orch.addLogEntry('log.turnTimedOut', { player: meta.username }, meta.userId);
   ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
 }

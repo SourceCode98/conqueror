@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket, type RawData } from 'ws';
 import { randomUUID } from 'crypto';
 import type { IncomingMessage } from 'http';
 import type { ClientMessage, ServerMessage } from '@conqueror/shared';
+import { applyWarTurnStart } from '@conqueror/shared';
 import db from '../db/index.js';
 import { validateWsToken } from '../middleware/auth.js';
 import { handleGameAction } from './actionRouter.js';
@@ -239,6 +240,7 @@ function serverAutoEndTurn(gameId: string, expectedTurnStart: number): void {
     })),
   }));
 
+  applyWarTurnStart(orch);
   orch.addLogEntry('log.turnTimedOut', { player: activePlayer.username }, activePlayer.id);
   // broadcastPersonalizedGameState already calls scheduleTurnTimer internally
   broadcastPersonalizedGameState(gameId, orch);

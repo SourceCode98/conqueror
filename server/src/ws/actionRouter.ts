@@ -14,6 +14,7 @@ import { handleMoveBandit } from './actions/bandit.js';
 import { handleDiscardCards } from './actions/discard.js';
 import { handleEndGame } from './actions/endGame.js';
 import { handleForceEndTurn } from './actions/forceEndTurn.js';
+import { handleRecruitSoldier, handleAttack, handleCombatRoll, handleChooseDestruction, handleReconstruct } from './actions/war.js';
 
 export interface ActionContext {
   broadcastToRoom: (msg: ServerMessage) => void;
@@ -31,7 +32,8 @@ export function handleGameAction(
   const state = orch.getState();
 
   // Validate it's this player's turn for most actions
-  const isTurnBased = !['RESPOND_TRADE', 'COUNTER_TRADE', 'DISCARD_CARDS', 'END_GAME', 'FORCE_END_TURN'].includes(msg.type);
+  // CHOOSE_DESTRUCTION is phase-gated (only attacker can use it) and handled within the action itself
+  const isTurnBased = !['RESPOND_TRADE', 'COUNTER_TRADE', 'DISCARD_CARDS', 'END_GAME', 'FORCE_END_TURN', 'CHOOSE_DESTRUCTION', 'COMBAT_ROLL'].includes(msg.type);
   if (isTurnBased && state.activePlayerId !== meta.userId) {
     ctx.sendTo(ws, {
       type: 'ERROR',
@@ -93,6 +95,21 @@ export function handleGameAction(
         break;
       case 'END_GAME':
         handleEndGame(ws, msg.payload as any, meta, orch, ctx);
+        break;
+      case 'RECRUIT_SOLDIER':
+        handleRecruitSoldier(ws, msg.payload as any, meta, orch, ctx);
+        break;
+      case 'ATTACK':
+        handleAttack(ws, msg.payload as any, meta, orch, ctx);
+        break;
+      case 'COMBAT_ROLL':
+        handleCombatRoll(ws, msg.payload as any, meta, orch, ctx);
+        break;
+      case 'CHOOSE_DESTRUCTION':
+        handleChooseDestruction(ws, msg.payload as any, meta, orch, ctx);
+        break;
+      case 'RECONSTRUCT':
+        handleReconstruct(ws, msg.payload as any, meta, orch, ctx);
         break;
       default:
         ctx.sendTo(ws, {

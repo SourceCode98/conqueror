@@ -18,15 +18,17 @@ import TradeResponsePanel from '../components/game/TradeResponsePanel.js';
 import GameLog from '../components/game/GameLog.js';
 import ChatPanel from '../components/game/ChatPanel.js';
 import WinCelebration from '../components/game/WinCelebration.js';
+import { CombatResultModal } from '../components/game/CombatResultModal.js';
 import ActionToast from '../components/game/ActionToast.js';
 import TurnTimer from '../components/game/TurnTimer.js';
 import BuildCostTable from '../components/game/BuildCostTable.js';
+import WarRulesModal from '../components/game/WarRulesModal.js';
 import SoundPanel from '../components/game/SoundPanel.js';
 import { musicEngine } from '../components/game/musicEngine.js';
 import DiscardPanel from '../components/game/DiscardPanel.js';
 import { resolvePlayerColor } from '../components/HexBoard/hexLayout.js';
 import { RESOURCE_ICON_MAP } from '../components/icons/GameIcons.js';
-import { ALL_RESOURCES } from '@conqueror/shared';
+import { ALL_RESOURCES, edgeVertices } from '@conqueror/shared';
 import { cn } from '../lib/cn.js';
 
 // Board padding: bottom = ContextBar + chat strip (top varies by hand anchor)
@@ -214,6 +216,10 @@ export default function GamePage() {
   const [showMobileCostTable, setShowMobileCostTable] = useState(false);
   const [handAnchor, setHandAnchor] = useState<HandAnchor>(getHandAnchor);
   const [showReconnectOverlay, setShowReconnectOverlay] = useState(false);
+  const [showWarRules, setShowWarRules] = useState(false);
+  const warRulesShownRef = useRef(false);
+  const [warMode, setWarMode] = useState(false);
+  const [warVariants, setWarVariants] = useState({ totalWar: false, fortress: false, reconstruction: false });
 
   // Sync hand anchor from ResourceHand via custom event
   useEffect(() => {
@@ -221,6 +227,14 @@ export default function GamePage() {
     window.addEventListener('hand-anchor-change', handler);
     return () => window.removeEventListener('hand-anchor-change', handler);
   }, []);
+
+  // Auto-show war rules once when the game starts in war mode
+  useEffect(() => {
+    if (gameState?.warMode && !warRulesShownRef.current) {
+      warRulesShownRef.current = true;
+      setShowWarRules(true);
+    }
+  }, [gameState?.warMode]);
 
   // Delay the reconnecting overlay by 2s to avoid flickers on mobile (brief WS drops)
   useEffect(() => {
@@ -299,7 +313,7 @@ export default function GamePage() {
       const res = await fetch(`/api/games/${gameId}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ turnTimeLimit, hornCooldownSecs }),
+        body: JSON.stringify({ turnTimeLimit, hornCooldownSecs, warMode, warVariants }),
       });
       const data = await res.json();
       if (!res.ok) setStartError(data.error ?? 'Failed to start game');
@@ -403,6 +417,29 @@ export default function GamePage() {
                 </div>
               </div>
 
+              {/* War mode */}
+              <div className="card py-2 px-3">
+                <label className="block text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wide">
+                  War &amp; Sieges mode
+                </label>
+                <button
+                  onClick={() => { setWarMode(w => !w); if (warMode) setWarVariants({ totalWar: false, fortress: false, reconstruction: false }); }}
+                  className={cn('rounded-lg px-3 py-1.5 text-sm border transition-colors w-full text-left', warMode ? 'border-red-500 bg-red-900/30 text-red-300' : 'border-gray-700 text-gray-400 hover:border-gray-500')}
+                >
+                  {warMode ? 'Enabled — soldiers, sieges & destruction' : 'Disabled (classic mode)'}
+                </button>
+                {warMode && (
+                  <div className="mt-2 space-y-1">
+                    {(['totalWar', 'fortress', 'reconstruction'] as const).map(v => (
+                      <button key={v} onClick={() => setWarVariants(prev => ({ ...prev, [v]: !prev[v] }))}
+                        className={cn('w-full text-left rounded px-2 py-1 text-xs border transition-colors', warVariants[v] ? 'border-orange-500 bg-orange-900/30 text-orange-300' : 'border-gray-700 text-gray-500 hover:border-gray-600')}>
+                        {warVariants[v] ? '✓' : '○'} {v === 'totalWar' ? 'Total War (no attack limit)' : v === 'fortress' ? 'Fortress (cities need 2 wins to degrade)' : 'Reconstruction (rebuild for 2 timber + 2 clay)'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {!canStart && (
                 <p className="text-yellow-500 text-sm text-center">Need at least 2 players to start</p>
               )}
@@ -460,6 +497,8 @@ export default function GamePage() {
     _boardMode === 'place_city'       ? 'Tap your settlement to upgrade to a City' :
     _boardMode === 'place_road'       ? 'Tap an edge to place your Road' :
     _boardMode === 'move_bandit'      ? 'Tap a tile to move the Bandit' :
+    _boardMode === 'recruit_soldier'  ? '🪖 Tap one of your buildings to recruit a soldier' :
+    _boardMode === 'attack'           ? '⚔️ Tap an enemy building to attack' :
     _roadEdges  !== null              ? `Road Building — pick edge ${(_roadEdges?.length ?? 0) + 1}/2` :
     null;
   const cancelHint = () => {
@@ -526,6 +565,17 @@ export default function GamePage() {
             📋
           </button>
 
+          {/* War rules reference (only in war mode) */}
+          {gameState?.warMode && (
+            <button
+              className="hidden lg:flex items-center gap-1 rounded px-2 py-1 text-xs text-red-400 hover:text-red-300 border border-red-800 hover:border-red-600 transition-colors"
+              onClick={() => setShowWarRules(true)}
+              title="War mode rules"
+            >
+              ⚔️ ?
+            </button>
+          )}
+
           {/* Host: end game button */}
           {isHost && phase !== 'GAME_OVER' && (
             <button
@@ -554,6 +604,16 @@ export default function GamePage() {
               }}
             >
               🏁
+            </button>
+          )}
+
+          {/* Mobile: war rules */}
+          {gameState?.warMode && (
+            <button
+              className="lg:hidden flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold border border-red-800 text-red-400 transition-colors"
+              onClick={() => setShowWarRules(true)}
+            >
+              ⚔️?
             </button>
           )}
 
@@ -714,6 +774,9 @@ export default function GamePage() {
                     {p.hasSupremeArmy && (
                       <span className="text-[9px] bg-red-900/80 text-red-200 rounded px-0.5" title="Supreme Army">⚔️</span>
                     )}
+                    {(p as any).hasWarlord && (
+                      <span className="text-[9px] bg-orange-900/80 text-orange-200 rounded px-0.5" title="Warlord (+2 VP)">🗡️</span>
+                    )}
                   </div>
                   {/* Row 2: stats */}
                   <div className="flex items-center gap-2">
@@ -726,6 +789,16 @@ export default function GamePage() {
                     <span className="text-[9px] tabular-nums text-gray-500 flex items-center gap-0.5" title="Longest road">
                       🛤 <span className="font-bold text-gray-300">{p.longestRoadLength}</span>
                     </span>
+                    {gameState.warMode && (() => {
+                      const soldiers = Object.values(gameState.buildings)
+                        .filter((b: any) => b.playerId === p.id)
+                        .reduce((s: number, b: any) => s + (b.soldiers ?? 0), 0);
+                      return soldiers > 0 ? (
+                        <span className="text-[9px] tabular-nums text-gray-500 flex items-center gap-0.5" title="Soldiers">
+                          🪖 <span className="font-bold text-gray-300">{soldiers}</span>
+                        </span>
+                      ) : null;
+                    })()}
                   </div>
                 </div>
               );
@@ -751,7 +824,7 @@ export default function GamePage() {
                 exit={{ opacity: 0, x: 20 }}
                 className="hidden lg:block absolute top-2 right-2"
               >
-                <BuildCostTable onClose={() => setShowCostTable(false)}/>
+                <BuildCostTable onClose={() => setShowCostTable(false)} warMode={gameState.warMode} warVariants={(gameState as any).warVariants}/>
               </motion.div>
             )}
           </AnimatePresence>
@@ -794,6 +867,8 @@ export default function GamePage() {
                     { label: 'Settlement', icon: '🏠',  cost: { timber: 1, clay: 1, grain: 1, wool: 1 } },
                     { label: 'City',       icon: '🏙',  cost: { iron: 3, grain: 2 } },
                     { label: 'Dev Card',   icon: '🃏',  cost: { iron: 1, grain: 1, wool: 1 } },
+                    ...(gameState.warMode ? [{ label: 'Soldier', icon: '🪖', cost: { iron: 1, grain: 1, wool: 1 } }] : []),
+                    ...((gameState as any).warVariants?.reconstruction ? [{ label: 'Rebuild', icon: '🏚️', cost: { timber: 2, clay: 2 } }] : []),
                   ] as Array<{ label: string; icon: string; cost: Partial<Record<string, number>> }>).map(item => (
                     <div key={item.label} className="flex items-center gap-2">
                       <span className="text-2xl w-8 text-center shrink-0">{item.icon}</span>
@@ -906,6 +981,58 @@ export default function GamePage() {
       {gameState.phase === 'GAME_OVER' && gameState.winner && (
         <WinCelebration gameState={gameState} localPlayerId={localPlayerId}/>
       )}
+
+      {/* ── Combat result modal ── */}
+      <CombatResultModal />
+
+      {/* ── War rules modal ── */}
+      {showWarRules && (
+        <WarRulesModal
+          onClose={() => setShowWarRules(false)}
+          variants={(gameState as any).warVariants}
+        />
+      )}
+
+      {/* ── WAR_DESTRUCTION phase overlay (attacker chooses what to destroy) ── */}
+      {gameState.warMode && gameState.phase === 'WAR_DESTRUCTION' && gameState.pendingDestruction?.attackerId === localPlayerId && (() => {
+        const pd = gameState.pendingDestruction!;
+        const tb = gameState.buildings[pd.targetVertex as any];
+        const victim = gameState.players.find(p => p.id === tb?.playerId);
+        const connectedVictimRoads = Object.keys(gameState.roads).filter(eid => {
+          const r = (gameState.roads as any)[eid];
+          if (r.playerId !== victim?.id) return false;
+          const [v1, v2] = edgeVertices(eid as any);
+          return v1 === pd.targetVertex || v2 === pd.targetVertex;
+        });
+
+        return (
+          <motion.div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <div className="bg-gray-900 border border-red-700 rounded-2xl p-6 max-w-sm w-full mx-4 space-y-4">
+              <h3 className="text-red-400 font-bold text-lg text-center">Destruction</h3>
+              <p className="text-gray-300 text-sm text-center">
+                {victim?.username}'s {tb?.type} is at your mercy. Choose:
+              </p>
+              <div className="space-y-2">
+                {tb?.type === 'settlement' && (
+                  <button
+                    className="w-full rounded-lg border border-red-600 bg-red-900/30 text-red-300 py-2 text-sm hover:bg-red-800/40 transition-colors"
+                    onClick={() => wsService.send({ type: 'CHOOSE_DESTRUCTION', payload: { gameId: gameId!, destructionType: 'destroy' } })}>
+                    Destroy settlement (−1 VP for {victim?.username})
+                  </button>
+                )}
+                {tb?.type === 'city' && (
+                  <button
+                    className="w-full rounded-lg border border-orange-600 bg-orange-900/30 text-orange-300 py-2 text-sm hover:bg-orange-800/40 transition-colors"
+                    onClick={() => wsService.send({ type: 'CHOOSE_DESTRUCTION', payload: { gameId: gameId!, destructionType: 'downgrade' } })}>
+                    Downgrade city to settlement (−1 VP)
+                  </button>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        );
+      })()}
 
       {/* ── Mobile bottom sheet (chat only) ── */}
       <AnimatePresence>

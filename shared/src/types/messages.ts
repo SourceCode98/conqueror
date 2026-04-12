@@ -38,7 +38,12 @@ export type ClientMessage =
   | WSMessage<'END_GAME',            { gameId: string }>
   | WSMessage<'CHAT',                { gameId: string; text: string }>
   | WSMessage<'HORN',                { gameId: string }>
-  | WSMessage<'PLAY_AGAIN_VOTE',     { gameId: string; accept: boolean }>;
+  | WSMessage<'PLAY_AGAIN_VOTE',     { gameId: string; accept: boolean }>
+  | WSMessage<'RECRUIT_SOLDIER',    { gameId: string; vertexId: VertexId }>
+  | WSMessage<'ATTACK',             { gameId: string; targetVertexId: VertexId; soldiers: number }>
+  | WSMessage<'COMBAT_ROLL',        { gameId: string }>
+  | WSMessage<'CHOOSE_DESTRUCTION', { gameId: string; destructionType: 'destroy' | 'downgrade' }>
+  | WSMessage<'RECONSTRUCT',        { gameId: string; vertexId: VertexId }>;
 
 // ─── Server → Client ──────────────────────────────────────────────────────────
 
@@ -58,4 +63,7 @@ export type ServerMessage =
   | WSMessage<'ACTION_TOAST',        { playerId: string; username: string; action: string; extra?: string }>
   | WSMessage<'PLAY_AGAIN_POLL',     { votes: Record<string, boolean | null>; secondsLeft: number }>
   | WSMessage<'PLAY_AGAIN_START',    { newGameId: string }>
-  | WSMessage<'GAME_CLOSED',         { reason: string }>;
+  | WSMessage<'GAME_CLOSED',         { reason: string }>
+  | WSMessage<'COMBAT_DICE_PHASE',   { attackerId: string; defenderId: string; attackerName: string; defenderName: string; timeoutSecs: number }>
+  | WSMessage<'COMBAT_DIE_REVEALED', { side: 'attacker' | 'defender'; value: number }>
+  | WSMessage<'COMBAT_RESULT',       { attackerForce: number; defenderForce: number; attackerWon: boolean; effect: 'siege' | 'destruction_choice' | 'repelled'; attackerName: string; defenderName: string; attackerDie: number; defenderDie: number; attackSoldiers: number; defenderSoldiers: number; cityBonus: number; garrisonBonus: number }>;

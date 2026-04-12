@@ -6,6 +6,7 @@ import type {
   EdgeId,
   AxialCoord,
   ResourceType,
+  VertexId,
 } from '@conqueror/shared';
 import { hasResources, BUILD_COSTS, ALL_RESOURCES } from '@conqueror/shared';
 
@@ -18,7 +19,7 @@ export interface GameToast {
   timestamp: number;
 }
 
-export type InteractionMode = null | 'place_settlement' | 'place_city' | 'place_road' | 'move_bandit';
+export type InteractionMode = null | 'place_settlement' | 'place_city' | 'place_road' | 'move_bandit' | 'recruit_soldier' | 'attack';
 
 interface GameStore {
   gameState: PublicGameState | null;
@@ -42,6 +43,10 @@ interface GameStore {
   pendingBanditCoord: AxialCoord | null;
   setPendingBanditCoord: (coord: AxialCoord | null) => void;
 
+  // War mode: attack target vertex
+  attackTargetVertex: VertexId | null;
+  setAttackTargetVertex: (v: VertexId | null) => void;
+
   // Drag-and-drop piece placement
   dragPiece: { type: 'settlement' | 'city' | 'road' | 'bandit'; svgX: number; svgY: number } | null;
   setDragPiece: (piece: { type: 'settlement' | 'city' | 'road' | 'bandit'; svgX: number; svgY: number } | null) => void;
@@ -55,6 +60,30 @@ interface GameStore {
   // Set by the open trade panel; called by ResourceHand when a hand card is clicked
   _tradeCardCb: ((r: ResourceType) => void) | null;
   setTradeCardCb: (fn: ((r: ResourceType) => void) | null) => void;
+
+  // Combat modal state
+  combatModal: {
+    phase: 'rolling'; // waiting for dice rolls
+    attackerId: string;
+    defenderId: string;
+    attackerName: string;
+    defenderName: string;
+    timeoutSecs: number;
+    attackerDie: number | null;   // null = not yet revealed
+    defenderDie: number | null;
+  } | {
+    phase: 'result';
+    attackerDie: number; defenderDie: number;
+    attackSoldiers: number; defenderSoldiers: number;
+    cityBonus: number; garrisonBonus: number;
+    attackerForce: number; defenderForce: number;
+    attackerWon: boolean; effect: 'siege' | 'destruction_choice' | 'repelled';
+    attackerName: string; defenderName: string;
+  } | null;
+  setCombatDicePhase: (data: { attackerId: string; defenderId: string; attackerName: string; defenderName: string; timeoutSecs: number }) => void;
+  revealCombatDie: (side: 'attacker' | 'defender', value: number) => void;
+  setCombatResult: (r: Extract<GameStore['combatModal'], { phase: 'result' }>) => void;
+  clearCombatModal: () => void;
 
   // Stolen card reveal (shown to victim after being robbed)
   stolenReveal: { resource: ResourceType; thiefName: string } | null;
@@ -92,6 +121,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
   localPlayerId: null,
   chatMessages: [],
   toasts: [],
+  combatModal: null,
+  setCombatDicePhase: (data) => set(s => ({
+    combatModal: s.combatModal?.phase === 'rolling'
+      ? { ...s.combatModal, ...data } // merge if already open (optimistic → real)
+      : { phase: 'rolling', ...data, attackerDie: null, defenderDie: null },
+  })),
+  revealCombatDie: (side, value) => set(s => {
+    if (!s.combatModal || s.combatModal.phase !== 'rolling') return s;
+    return {
+      combatModal: {
+        ...s.combatModal,
+        attackerDie: side === 'attacker' ? value : s.combatModal.attackerDie,
+        defenderDie: side === 'defender' ? value : s.combatModal.defenderDie,
+      },
+    };
+  }),
+  setCombatResult: (r) => set({ combatModal: r }),
+  clearCombatModal: () => set({ combatModal: null }),
+
   stolenReveal: null,
   finalScores: null,
   boardMode: null,
@@ -101,6 +149,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   tradePanel: null,
   tradeSide: 'give',
   _tradeCardCb: null,
+
+  attackTargetVertex: null,
+  setAttackTargetVertex: (v) => set({ attackTargetVertex: v }),
 
   wsConnected: true,
   setWsConnected: (connected) => set({ wsConnected: connected }),
@@ -131,6 +182,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     boardMode: null,
     roadBuildingEdges: null,
     pendingBanditCoord: null,
+    attackTargetVertex: null,
+    combatModal: null,
     dragPiece: null,
     tradePanel: null,
     tradeSide: 'give',

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PublicGameState, ResourceType, EdgeId, AxialCoord } from '@conqueror/shared';
-import { ALL_RESOURCES, hexVertexIds } from '@conqueror/shared';
+import { ALL_RESOURCES, hexVertexIds, hasResources, SOLDIER_COST, MAX_SOLDIERS_SETTLEMENT, MAX_SOLDIERS_CITY } from '@conqueror/shared';
 import { useGameStore } from '../../store/gameStore.js';
 import { wsService } from '../../services/wsService.js';
 import DiscardPanel from './DiscardPanel.js';
@@ -58,6 +58,8 @@ export default function ActionPanel({ gameState, gameId }: Props) {
     roadBuildingEdges, startRoadBuilding, cancelRoadBuilding,
     pendingBanditCoord, setPendingBanditCoord,
     localPlayerId, openTradePanel,
+    attackTargetVertex, setAttackTargetVertex,
+    setCombatDicePhase,
   } = useGameStore();
 
   const myTurn = isMyTurn();
@@ -70,6 +72,7 @@ export default function ActionPanel({ gameState, gameId }: Props) {
   const [stealTarget, setStealTarget] = useState<string | null>(null); // playerId to steal from
   const [stealModalOpen, setStealModalOpen] = useState(false);
   const savedBanditCoordRef = useRef<AxialCoord | null>(null);
+  const [attackSoldiers, setAttackSoldiers] = useState(2);
 
   // ── Dev card drag ─────────────────────────────────────────────────────────
   const [dragCard, setDragCard] = useState<DragCard | null>(null);
@@ -241,6 +244,19 @@ export default function ActionPanel({ gameState, gameId }: Props) {
     );
   }
 
+  // ── WAR_DESTRUCTION phase ─────────────────────────────────────────────────
+  if (phase === 'WAR_DESTRUCTION') {
+    const pd = (gameState as any).pendingDestruction;
+    const isAttacker = pd?.attackerId === localPlayerId;
+    if (isAttacker) return null; // handled by GamePage overlay
+    const attacker = gameState.players.find(p => p.id === pd?.attackerId);
+    return (
+      <div className="text-center py-4">
+        <p className="text-orange-400 font-semibold text-sm">{attacker?.username ?? 'Attacker'} is choosing destruction…</p>
+      </div>
+    );
+  }
+
   // ── Not my turn ───────────────────────────────────────────────────────────
   if (!myTurn && phase !== 'DISCARD' && phase !== 'TRADE_OFFER') {
     const activeName = gameState.players.find(p => p.id === gameState.activePlayerId)?.username;
@@ -311,12 +327,23 @@ export default function ActionPanel({ gameState, gameId }: Props) {
   // ── Robber phase ──────────────────────────────────────────────────────────
   if (phase === 'ROBBER') {
     if (pendingBanditCoord) {
-      const adj = getAdjacentPlayers(pendingBanditCoord);
+      const allAdj = getAdjacentPlayers(pendingBanditCoord);
+      const vids = hexVertexIds(pendingBanditCoord);
+      const isProtected = (pid: string) => (gameState as any).warMode && vids.some(vid => {
+        const b = (gameState.buildings as any)[vid];
+        return b?.playerId === pid && (b.soldiers ?? 0) >= 1;
+      });
+      const adj = allAdj.filter(p => p && !isProtected(p.id));
+      const protectedPlayers = allAdj.filter(p => p && isProtected(p!.id));
 
-      // Player-selection step
       return (
         <div className="space-y-2">
           <p className="text-amber-400 font-semibold text-sm">Bandit placed!</p>
+          {protectedPlayers.length > 0 && (
+            <div className="rounded-lg border border-yellow-700/50 bg-yellow-950/30 px-3 py-2 text-xs text-yellow-300">
+              🛡️ {protectedPlayers.map(p => p!.username).join(', ')} {protectedPlayers.length === 1 ? 'is' : 'are'} protected by a soldier — cannot steal
+            </div>
+          )}
           {adj.length > 0 && (
             <p className="text-gray-400 text-xs">Choose a player to rob:</p>
           )}
@@ -467,6 +494,10 @@ export default function ActionPanel({ gameState, gameId }: Props) {
 
   // ── Action phase ──────────────────────────────────────────────────────────
   if (phase === 'ACTION') {
+    // Siege alert
+    const siegedBuildings = (gameState as any).warMode
+      ? Object.entries(gameState.buildings as any).filter(([, b]: any) => b.sieged && b.playerId === myId)
+      : [];
     const alreadyPlayedCard = me?.devCardPlayedThisTurn ?? false;
     const playableCards = alreadyPlayedCard
       ? []
@@ -474,6 +505,13 @@ export default function ActionPanel({ gameState, gameId }: Props) {
 
     return (
       <div className="space-y-3">
+        {/* Siege alert */}
+        {siegedBuildings.length > 0 && (
+          <div className="rounded-lg border border-red-700 bg-red-950/40 px-3 py-2 text-xs text-red-300">
+            🔴 <span className="font-semibold">{siegedBuildings.length} building{siegedBuildings.length > 1 ? 's' : ''} under siege</span> — no resources, build, or recruit
+          </div>
+        )}
+
         {/* Dev card drop zone (shown while dragging) */}
         {dragCard && (
           <div
@@ -536,6 +574,160 @@ export default function ActionPanel({ gameState, gameId }: Props) {
                 <span>🤝</span>{t('actions.offerTrade')}
               </button>
             </div>
+
+            {/* ── War section (only in war mode) ── */}
+            {(gameState as any).warMode && myTurn && (() => {
+              const totalSoldiers = Object.values(gameState.buildings)
+                .filter((b: any) => b.playerId === localPlayerId)
+                .reduce((s: number, b: any) => s + (b.soldiers ?? 0), 0);
+              const canAttack = (!((gameState as any).attackUsedThisTurn) || (gameState as any).warVariants?.totalWar) && totalSoldiers >= 1;
+
+              const canRecruitAfford = me ? hasResources(me.resources as any, SOLDIER_COST as any) : false;
+              const hasCapacity = Object.values(gameState.buildings).some((b: any) =>
+                b.playerId === localPlayerId && !b.sieged &&
+                (b.soldiers ?? 0) < (b.type === 'city' ? MAX_SOLDIERS_CITY : MAX_SOLDIERS_SETTLEMENT)
+              );
+              const canRecruit = canRecruitAfford && hasCapacity;
+
+              return (
+                <section>
+                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">War</p>
+                  <div className="space-y-1">
+                    {/* Recruit Soldier */}
+                    <button
+                      className={cn('w-full rounded-lg border p-2 text-left flex items-center gap-2 transition-all text-xs',
+                        boardMode === 'recruit_soldier'
+                          ? 'border-amber-400 bg-amber-900/40 text-white'
+                          : canRecruit
+                            ? 'border-green-600 bg-gray-800 hover:bg-gray-700 text-white animate-[pulse-ring_2s_ease-in-out_infinite]'
+                            : 'border-gray-700 bg-gray-800 text-gray-500 cursor-not-allowed')}
+                      disabled={!canRecruit}
+                      onClick={() => canRecruit && setBoardMode(boardMode === 'recruit_soldier' ? null : 'recruit_soldier')}
+                    >
+                      <span className={cn('text-base', !canRecruit && 'opacity-40')}>🪖</span>
+                      <div className="flex-1">
+                        <div className="font-semibold">Recruit Soldier</div>
+                        <div className="flex items-center gap-0.5 mt-0.5">
+                          {(['iron','grain','wool'] as const).map(r => (
+                            <span key={r} className="flex items-center gap-0 bg-gray-900 rounded px-0.5">
+                              {RESOURCE_ICON_MAP[r]?.({ size: 11 })}
+                            </span>
+                          ))}
+                          {!hasCapacity && canRecruitAfford && <span className="text-[9px] text-yellow-500 ml-1">All full</span>}
+                        </div>
+                      </div>
+                      {canRecruit && !boardMode && <span className="text-[9px] font-bold text-green-400 shrink-0">✓</span>}
+                      {boardMode === 'recruit_soldier' && <span className="text-amber-400 text-[10px] shrink-0">SELECT</span>}
+                    </button>
+
+                    {/* Attack */}
+                    <button
+                      className={cn('w-full rounded-lg border p-2 text-left flex items-center gap-2 transition-all text-xs',
+                        boardMode === 'attack'
+                          ? 'border-red-400 bg-red-900/40 text-white'
+                          : canAttack
+                            ? 'border-red-700 bg-gray-800 hover:bg-red-900/30 text-red-300'
+                            : 'border-gray-700 bg-gray-800 text-gray-500 cursor-not-allowed')}
+                      disabled={!canAttack}
+                      onClick={() => {
+                        if (!canAttack) return;
+                        setAttackTargetVertex(null);
+                        setBoardMode(boardMode === 'attack' ? null : 'attack');
+                      }}
+                    >
+                      <span className={cn('text-base', !canAttack && 'opacity-40')}>⚔️</span>
+                      <div className="flex-1">
+                        <div className="font-semibold">Attack</div>
+                        <div className="text-[10px] text-gray-400">{totalSoldiers} soldier{totalSoldiers !== 1 ? 's' : ''} available</div>
+                      </div>
+                      {(gameState as any).attackUsedThisTurn && !(gameState as any).warVariants?.totalWar && (
+                        <span className="text-gray-500 text-[10px] shrink-0">USED</span>
+                      )}
+                      {boardMode === 'attack' && <span className="text-red-400 text-[10px] shrink-0">SELECT</span>}
+                    </button>
+
+                    {/* Attack confirmation panel */}
+                    {boardMode === 'attack' && attackTargetVertex && (() => {
+                      const tb = (gameState.buildings as any)[attackTargetVertex];
+                      const victim = gameState.players.find(p => p.id === tb?.playerId);
+                      const minSoldiers = tb?.sieged ? 1 : 2;
+                      const canSendEnough = totalSoldiers >= minSoldiers;
+                      const clampedSoldiers = Math.max(minSoldiers, Math.min(attackSoldiers, totalSoldiers));
+                      return (
+                        <div className="rounded-lg border border-red-700 bg-red-950/30 p-3 space-y-2">
+                          <p className="text-red-300 text-xs font-semibold">
+                            ⚔️ {victim?.username}'s {tb?.type} {tb?.sieged ? '(BESIEGED)' : ''}
+                          </p>
+                          <p className="text-gray-400 text-xs">
+                            Defenders: {tb?.soldiers ?? 0} soldiers{tb?.type === 'city' ? ' +1 city bonus' : ''}
+                          </p>
+                          {canSendEnough ? (
+                            <>
+                              <div className="flex flex-col gap-1">
+                                <span className="text-xs text-gray-400">Send soldiers:</span>
+                                <div className="flex gap-1 flex-wrap">
+                                  {Array.from({ length: totalSoldiers }, (_, i) => i + 1).map(n => {
+                                    const selected = n <= clampedSoldiers;
+                                    const disabled = n < minSoldiers;
+                                    return (
+                                      <button key={n}
+                                        className={cn('text-lg leading-none transition-all',
+                                          disabled ? 'opacity-20 cursor-not-allowed' :
+                                          selected ? 'opacity-100 scale-110' : 'opacity-30 hover:opacity-60'
+                                        )}
+                                        disabled={disabled}
+                                        onClick={() => !disabled && setAttackSoldiers(n)}>
+                                        🪖
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                <span className="text-xs text-gray-500">{clampedSoldiers} of {totalSoldiers} selected</span>
+                              </div>
+                              <button
+                                className="w-full rounded-lg bg-red-700 hover:bg-red-600 text-white text-xs py-1.5 font-semibold"
+                                onClick={() => {
+                                  const me2 = gameState.players.find(p => p.id === localPlayerId);
+                                  const victim2 = gameState.players.find(p => p.id === tb?.playerId);
+                                  setCombatDicePhase({ attackerId: localPlayerId!, defenderId: tb?.playerId, attackerName: me2?.username ?? '?', defenderName: victim2?.username ?? '?', timeoutSecs: 12 });
+                                  wsService.send({ type: 'ATTACK', payload: { gameId, targetVertexId: attackTargetVertex as any, soldiers: clampedSoldiers } });
+                                  setBoardMode(null);
+                                  setAttackTargetVertex(null);
+                                }}>
+                                Attack with {clampedSoldiers} soldier{clampedSoldiers !== 1 ? 's' : ''}
+                              </button>
+                            </>
+                          ) : (
+                            <p className="text-yellow-500 text-xs">Need at least {minSoldiers} soldiers to attack this building</p>
+                          )}
+                          <button className="w-full text-xs text-gray-500 hover:text-gray-300"
+                            onClick={() => setAttackTargetVertex(null)}>Cancel</button>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Reconstruction */}
+                    {(gameState as any).warVariants?.reconstruction && (() => {
+                      const myRuins = Object.entries((gameState as any).destroyedVertices ?? {})
+                        .filter(([, pid]) => pid === localPlayerId)
+                        .map(([vid]) => vid);
+                      if (myRuins.length === 0) return null;
+                      return (
+                        <>
+                          {myRuins.map(vid => (
+                            <button key={vid}
+                              className="w-full rounded-lg border border-green-700 bg-green-900/30 text-green-300 p-2 text-xs hover:bg-green-800/40 transition-colors"
+                              onClick={() => wsService.send({ type: 'RECONSTRUCT', payload: { gameId, vertexId: vid as any } })}>
+                              Rebuild (2 timber + 2 clay)
+                            </button>
+                          ))}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </section>
+              );
+            })()}
 
             {/* ── Dev cards in hand ── */}
             {me?.devCards && me.devCards.length > 0 && (

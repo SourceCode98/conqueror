@@ -24,12 +24,43 @@ interface GamePlayer {
   seat_order: number;
 }
 
+export interface PendingCombat {
+  attackerId: string;
+  defenderId: string;
+  attackerName: string;
+  defenderName: string;
+  attackerDie: number;
+  defenderDie: number;
+  attackSoldiers: number;
+  defenderSoldiers: number;
+  cityBonus: number;
+  garrisonBonus: number;
+  attackerForce: number;
+  defenderForce: number;
+  attackerWon: boolean;
+  effect: 'siege' | 'destruction_choice' | 'repelled';
+  targetVertexId: string;
+  attackerRolled: boolean;
+  defenderRolled: boolean;
+}
+
 export class GameOrchestrator {
   private state: GameState;
   private db: Database.Database;
   private gameId: string;
+  // Non-persisted: transient combat state waiting for dice rolls
+  private _pendingCombat: PendingCombat | null = null;
 
-  constructor(gameId: string, db: Database.Database, players: GamePlayer[], seed?: number, turnTimeLimit: number | null = null, hornCooldownSecs: number = 30) {
+  constructor(
+    gameId: string,
+    db: Database.Database,
+    players: GamePlayer[],
+    seed?: number,
+    turnTimeLimit: number | null = null,
+    hornCooldownSecs: number = 30,
+    warMode: boolean = false,
+    warVariants: { totalWar?: boolean; fortress?: boolean; reconstruction?: boolean } = {},
+  ) {
     this.gameId = gameId;
     this.db = db;
 
@@ -82,6 +113,15 @@ export class GameOrchestrator {
       turnTimeLimit,
       hornCooldownSecs,
       lastAction: null,
+      // War mode
+      warMode: warMode || undefined,
+      warVariants: warMode ? warVariants : undefined,
+      warlordPlayerId: null,
+      destroyedByPlayer: {},
+      attackUsedThisTurn: false,
+      pendingDestruction: null,
+      destroyedVertices: {},
+      fortressHits: {},
     };
 
     this.persist();
@@ -159,6 +199,10 @@ export class GameOrchestrator {
       ],
     };
   }
+
+  getPendingCombat(): PendingCombat | null { return this._pendingCombat; }
+  setPendingCombat(data: PendingCombat): void { this._pendingCombat = data; }
+  clearPendingCombat(): void { this._pendingCombat = null; }
 
   private persist(): void {
     this.db.prepare(

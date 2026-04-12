@@ -72,6 +72,7 @@ export function canPlaceCity(
   if (!building) return fail('No settlement at this vertex');
   if (building.playerId !== playerId) return fail('Not your settlement');
   if (building.type !== 'settlement') return fail('Already a city');
+  if (building.sieged) return fail('Cannot upgrade a besieged settlement');
 
   const player = state.players.find(p => p.id === playerId);
   if (!player) return fail('Player not found');

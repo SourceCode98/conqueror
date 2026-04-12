@@ -28,6 +28,7 @@
     "DISCARD": "Discard Cards",
     "ACTION": "Your Turn",
     "TRADE_OFFER": "Trade Offer",
+    "WAR_DESTRUCTION": "Destruction Phase",
     "GAME_OVER": "Game Over"
   },
   "devCards": {
@@ -97,7 +98,17 @@
     "playerJoined": "{{player}} joined the game",
     "playerLeft": "{{player}} left the game",
     "gameStarted": "Game started!",
-    "gameOver": "{{player}} wins with {{points}} victory points!"
+    "gameOver": "{{player}} wins with {{points}} victory points!",
+    "recruitedSoldier": "{{player}} recruited a soldier",
+    "attackRepelled": "{{attacker}}'s attack on {{defender}} was repelled",
+    "siegeStarted": "{{attacker}} put {{defender}}'s building under siege",
+    "fortressHit": "{{attacker}} hit {{defender}}'s fortress (needs 1 more win)",
+    "destructionApplied": "{{attacker}} destroyed {{defender}}'s {{type}}",
+    "reconstructed": "{{player}} rebuilt a settlement",
+    "siegeExpired": "{{player}}'s siege expired — buildings restored",
+    "soldierMaintenance": "{{player}} paid {{grain}} grain for soldier maintenance",
+    "soldierDesertion": "{{player}} couldn't pay maintenance — lost {{lost}} soldier(s)",
+    "banditBlocked": "{{defender}}'s soldier blocked {{attacker}}'s theft!"
   },
   "colors": {
     "red": "Red",
@@ -134,5 +145,57 @@
     "title": "{{player}} Wins!",
     "points": "{{points}} Victory Points",
     "playAgain": "Play Again"
+  },
+  "warRules": {
+    "title": "War & Sieges Mode",
+    "subtitle": "Rules Overview",
+    "close": "Got it — let's conquer!",
+    "variants": {
+      "totalWar": "⚠️ Total War — no limit on attacks per turn.",
+      "fortress": "🏰 Fortress — Cities require 2 wins to downgrade.",
+      "reconstruction": "🏚️ Reconstruction — Destroyed settlements can be rebuilt for 2 Timber + 2 Clay."
+    },
+    "sections": {
+      "soldiers": {
+        "title": "Soldiers",
+        "lines": [
+          "Buy soldiers with Iron + Grain + Wool and assign them to your buildings.",
+          "Settlements hold up to 2 soldiers, Cities up to 4.",
+          "Every 2 soldiers cost 1 Grain per turn. If you can't pay, soldiers desert."
+        ]
+      },
+      "attacking": {
+        "title": "Attacking",
+        "lines": [
+          "On your turn (after rolling) you can attack an enemy building within 2 road-steps.",
+          "Both players roll a die. Add your soldiers as a bonus (+1 per soldier, max +5).",
+          "Cities add +1 for the defender (garrison bonus).",
+          "Higher total wins the battle."
+        ]
+      },
+      "siege": {
+        "title": "Siege",
+        "lines": [
+          "A draw or attacker win places the building under siege.",
+          "A sieged building cannot build or trade ports.",
+          "You have until the end of your NEXT turn to attack again — then the siege lifts."
+        ]
+      },
+      "destruction": {
+        "title": "Destruction",
+        "lines": [
+          "Win a battle against an already-sieged building to trigger Destruction.",
+          "Destroy a Settlement (−1 VP) or Downgrade a City to a Settlement (−1 VP).",
+          "Adjacent roads belonging to the loser transfer to the winner."
+        ]
+      },
+      "warlord": {
+        "title": "Warlord",
+        "lines": [
+          "Earn the Warlord title by destroying 2 settlements or 1 city.",
+          "The Warlord earns bonus Victory Points. The title can be stolen."
+        ]
+      }
+    }
   }
 }

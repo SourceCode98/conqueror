@@ -57,6 +57,7 @@ export function collectResources(
     for (const vid of vertexIds) {
       const building = state.buildings[vid];
       if (!building) continue;
+      if (building.sieged) continue; // Besieged buildings don't produce resources
       const amount = building.type === 'city' ? 2 : 1;
       gains[building.playerId][resource] += amount;
     }

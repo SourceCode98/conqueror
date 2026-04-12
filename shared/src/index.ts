@@ -13,3 +13,4 @@ export * from './logic/resources.js';
 export * from './logic/buildings.js';
 export * from './logic/trading.js';
 export * from './logic/victory.js';
+export * from './logic/war.js';

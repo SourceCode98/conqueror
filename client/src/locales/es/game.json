@@ -28,6 +28,7 @@
     "DISCARD": "Descartar cartas",
     "ACTION": "Tu turno",
     "TRADE_OFFER": "Oferta de intercambio",
+    "WAR_DESTRUCTION": "Fase de destrucción",
     "GAME_OVER": "Fin del juego"
   },
   "devCards": {
@@ -97,7 +98,17 @@
     "playerJoined": "{{player}} se unió a la partida",
     "playerLeft": "{{player}} abandonó la partida",
     "gameStarted": "¡La partida ha comenzado!",
-    "gameOver": "¡{{player}} gana con {{points}} puntos de victoria!"
+    "gameOver": "¡{{player}} gana con {{points}} puntos de victoria!",
+    "recruitedSoldier": "{{player}} reclutó un soldado",
+    "attackRepelled": "El ataque de {{attacker}} sobre {{defender}} fue repelido",
+    "siegeStarted": "{{attacker}} puso bajo asedio la estructura de {{defender}}",
+    "fortressHit": "{{attacker}} golpeó la fortaleza de {{defender}} (falta 1 victoria más)",
+    "destructionApplied": "{{attacker}} destruyó {{type}} de {{defender}}",
+    "reconstructed": "{{player}} reconstruyó una aldea",
+    "siegeExpired": "El asedio de {{player}} expiró — estructuras restauradas",
+    "soldierMaintenance": "{{player}} pagó {{grain}} grano por mantenimiento de soldados",
+    "soldierDesertion": "{{player}} no pudo pagar el mantenimiento — perdió {{lost}} soldado(s)",
+    "banditBlocked": "¡El soldado de {{defender}} bloqueó el robo de {{attacker}}!"
   },
   "colors": {
     "red": "Rojo",
@@ -134,5 +145,57 @@
     "title": "¡{{player}} gana!",
     "points": "{{points}} puntos de victoria",
     "playAgain": "Jugar de nuevo"
+  },
+  "warRules": {
+    "title": "Modo Guerra y Asedios",
+    "subtitle": "Resumen de reglas",
+    "close": "Entendido — ¡a conquistar!",
+    "variants": {
+      "totalWar": "⚠️ Guerra Total — sin límite de ataques por turno.",
+      "fortress": "🏰 Fortaleza — las ciudades necesitan 2 victorias para ser degradadas.",
+      "reconstruction": "🏚️ Reconstrucción — los asentamientos destruidos pueden reconstruirse por 2 Madera + 2 Arcilla."
+    },
+    "sections": {
+      "soldiers": {
+        "title": "Soldados",
+        "lines": [
+          "Compra soldados con Hierro + Grano + Lana y asígnalos a tus construcciones.",
+          "Los asentamientos admiten hasta 2 soldados; las ciudades, hasta 4.",
+          "Cada 2 soldados cuestan 1 Grano por turno. Si no puedes pagar, los soldados desertan."
+        ]
+      },
+      "attacking": {
+        "title": "Atacar",
+        "lines": [
+          "En tu turno (tras tirar los dados) puedes atacar un edificio enemigo a máximo 2 caminos de distancia.",
+          "Ambos jugadores tiran un dado. Suma tus soldados como bonificación (+1 por soldado, máx. +5).",
+          "Las ciudades añaden +1 al defensor (bonificación de guarnición).",
+          "El total más alto gana la batalla."
+        ]
+      },
+      "siege": {
+        "title": "Asedio",
+        "lines": [
+          "Un empate o victoria del atacante coloca el edificio bajo asedio.",
+          "Un edificio asediado no puede construir ni usar puertos.",
+          "Tienes hasta el final de tu PRÓXIMO turno para atacar de nuevo — después el asedio se levanta."
+        ]
+      },
+      "destruction": {
+        "title": "Destrucción",
+        "lines": [
+          "Gana una batalla contra un edificio ya asediado para activar la Destrucción.",
+          "Destruye un Asentamiento (−1 VP) o degrada una Ciudad a Asentamiento (−1 VP).",
+          "Los caminos adyacentes del perdedor pasan al ganador."
+        ]
+      },
+      "warlord": {
+        "title": "Señor de la Guerra",
+        "lines": [
+          "Obtén el título destruyendo 2 asentamientos o 1 ciudad.",
+          "El Señor de la Guerra obtiene puntos de victoria extra. El título puede ser robado."
+        ]
+      }
+    }
   }
 }

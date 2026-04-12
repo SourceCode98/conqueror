@@ -80,6 +80,30 @@ export function CitySvg({
   );
 }
 
+// ─── Soldier helmet (board inline) ───────────────────────────────────────────
+/**
+ * Draws a single soldier helmet centered at (cx, cy) inside an existing SVG.
+ * Size ~10×10 units in SVG space.
+ */
+export function SoldierHelmetSvg({ cx, cy, size = 10 }: { cx: number; cy: number; size?: number }) {
+  const s = size / 10;
+  return (
+    <g transform={`translate(${cx},${cy})`} style={{ pointerEvents: 'none' }}>
+      {/* Dome */}
+      <path
+        d={`M${-4.5*s},${1*s} Q${-4.5*s},${-5*s} 0,${-5.5*s} Q${4.5*s},${-5*s} ${4.5*s},${1*s} Z`}
+        fill="#fbbf24" stroke="#92400e" strokeWidth={0.8*s}
+      />
+      {/* Brim */}
+      <rect x={-5.5*s} y={0.5*s} width={11*s} height={2*s} rx={1*s}
+        fill="#f59e0b" stroke="#92400e" strokeWidth={0.8*s}/>
+      {/* Visor slit */}
+      <rect x={-2.5*s} y={-1.5*s} width={5*s} height={1.2*s} rx={0.5*s}
+        fill="rgba(0,0,0,0.5)"/>
+    </g>
+  );
+}
+
 // ─── Road ─────────────────────────────────────────────────────────────────────
 export function RoadIcon({ size = 24, color = 'currentColor', ...p }: IconProps) {
   return (

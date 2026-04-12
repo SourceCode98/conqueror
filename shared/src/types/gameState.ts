@@ -13,6 +13,10 @@ export type DevCardType =
 export interface Building {
   type: BuildingType;
   playerId: string;
+  soldiers?: number;
+  sieged?: boolean;
+  siegedBy?: string | null;
+  siegedAtTurn?: number;
 }
 
 export interface Road {
@@ -39,6 +43,7 @@ export interface PlayerState {
   longestRoadLength: number;       // current longest road for this player (updated each recalculation)
   hasSupremeArmy: boolean;
   hasGrandRoad: boolean;
+  hasWarlord?: boolean;
   victoryPoints: number;       // public VP visible to all
   victoryPointCards: number;   // hidden VP from dev cards (sent only to owner)
   connected: boolean;
@@ -53,6 +58,7 @@ export type GamePhase =
   | 'DISCARD'
   | 'ACTION'
   | 'TRADE_OFFER'
+  | 'WAR_DESTRUCTION'
   | 'GAME_OVER';
 
 export interface TradeOffer {
@@ -105,6 +111,19 @@ export interface GameState {
   turnTimeLimit: number | null;    // seconds per turn, null = no limit
   hornCooldownSecs: number;        // seconds between horn uses per player
   lastAction: LastAction | null;   // last notable action for toasts
+  // ── War mode ──────────────────────────────────────────────────────────────
+  warMode?: boolean;
+  warVariants?: {
+    totalWar?: boolean;
+    fortress?: boolean;
+    reconstruction?: boolean;
+  };
+  warlordPlayerId?: string | null;
+  destroyedByPlayer?: Record<string, { settlements: number; cities: number }>;
+  attackUsedThisTurn?: boolean;
+  pendingDestruction?: { targetVertex: VertexId; attackerId: string } | null;
+  destroyedVertices?: Record<string, string>;  // vertexId → playerId (for reconstruction)
+  fortressHits?: Record<string, number>;       // vertexId → hit count (fortress variant)
 }
 
 /**

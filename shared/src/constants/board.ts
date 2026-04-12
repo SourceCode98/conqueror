@@ -2,6 +2,7 @@ import type { AxialCoord } from '../types/board.js';
 import type { TerrainType, ResourceType } from '../types/resources.js';
 import type { DevCardType } from '../types/gameState.js';
 
+
 // Standard 3-4-5-4-3 hex layout in axial coordinates (pointy-top)
 export const STANDARD_HEX_COORDS: AxialCoord[] = [
   // row 0 — 3 hexes
@@ -75,3 +76,10 @@ export const IS_VALID_PLAYER_COLOR = (c: string) =>
 export const STARTING_SETTLEMENTS = 5;
 export const STARTING_CITIES = 4;
 export const STARTING_ROADS = 15;
+
+// ── War mode constants ────────────────────────────────────────────────────────
+export const SOLDIER_COST: Record<ResourceType, number> = { timber: 0, clay: 0, iron: 1, grain: 1, wool: 1 };
+export const MAX_SOLDIERS_SETTLEMENT = 2;
+export const MAX_SOLDIERS_CITY = 3;
+export const WARLORD_POINTS = 2;
+export const WAR_RECONSTRUCT_COST: Record<ResourceType, number> = { timber: 2, clay: 2, iron: 0, grain: 0, wool: 0 };

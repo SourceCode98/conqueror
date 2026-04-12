@@ -163,6 +163,12 @@ export default function ActionToast({ gameState }: Props) {
                 played_roadBuilding: '🛣️ played Road Building',
                 played_yearOfPlenty: '🌟 played Year of Plenty',
                 played_monopoly: '💰 played Monopoly',
+                attack_won: '⚔️ won a battle!',
+                attack_repelled: '🛡️ attack was repelled',
+                siege_started: '🔴 started a siege',
+                destruction_choice: '💥 is choosing destruction…',
+                soldierMaintenance: '🌾 paid grain for soldiers',
+                soldierDesertion: '💀 lost soldiers (can\'t pay)',
               };
               if (action === 'hurry_up') {
                 return (
@@ -188,10 +194,39 @@ export default function ActionToast({ gameState }: Props) {
                   </div>
                 );
               }
+              if (action === 'soldierDesertion' && extra) {
+                return (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold" style={{ color }}>{toast.username}</span>
+                    <span className="text-xs text-gray-300">💀 lost</span>
+                    <span className="text-xs text-red-400 font-semibold">{extra} soldier{+extra !== 1 ? 's' : ''}</span>
+                    <span className="text-xs text-gray-400">(can't pay)</span>
+                  </div>
+                );
+              }
+              if (action === 'soldierMaintenance' && extra) {
+                return (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold" style={{ color }}>{toast.username}</span>
+                    <span className="text-xs text-gray-300">🌾 paid</span>
+                    <span className="text-xs text-yellow-400 font-semibold">{extra} grain</span>
+                    <span className="text-xs text-gray-400">maintenance</span>
+                  </div>
+                );
+              }
+              if (toast.playerId === '__error__') {
+                return (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">⚠️</span>
+                    <span className="text-xs text-red-400">{extra ?? action}</span>
+                  </div>
+                );
+              }
               return (
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold" style={{ color }}>{toast.username}</span>
                   <span className="text-xs text-gray-300">{actionLabel[action] ?? action}</span>
+                  {extra && <span className="text-xs text-gray-500">{extra}</span>}
                 </div>
               );
             })()}

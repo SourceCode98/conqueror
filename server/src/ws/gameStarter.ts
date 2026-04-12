@@ -10,7 +10,14 @@ interface GamePlayer {
   seat_order: number;
 }
 
-export function startGame(gameId: string, players: GamePlayer[], turnTimeLimit: number | null = null, hornCooldownSecs: number = 30): GameOrchestrator {
+export function startGame(
+  gameId: string,
+  players: GamePlayer[],
+  turnTimeLimit: number | null = null,
+  hornCooldownSecs: number = 30,
+  warMode: boolean = false,
+  warVariants: { totalWar?: boolean; fortress?: boolean; reconstruction?: boolean } = {},
+): GameOrchestrator {
   const orch = new GameOrchestrator(
     gameId,
     db,
@@ -18,6 +25,8 @@ export function startGame(gameId: string, players: GamePlayer[], turnTimeLimit: 
     undefined,
     turnTimeLimit,
     hornCooldownSecs,
+    warMode,
+    warVariants,
   );
   registerOrchestrator(gameId, orch);
 

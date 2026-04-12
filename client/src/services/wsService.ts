@@ -114,6 +114,18 @@ class WSService {
     const store = useGameStore.getState();
 
     switch (msg.type) {
+      case 'ERROR': {
+        const key = `err:${msg.payload.code}`;
+        if (!this.isDup(key, 2000)) {
+          store.addToast({
+            type: 'action',
+            playerId: '__error__',
+            username: '⚠️',
+            data: { action: msg.payload.code, extra: msg.payload.message },
+          });
+        }
+        break;
+      }
       case 'GAME_STATE':
         if (msg.payload.state) {
           store.applyGameState(msg.payload.state);
@@ -197,6 +209,18 @@ class WSService {
       }
       case 'GAME_CLOSED': {
         store.setPlayAgainResult({ type: 'closed' });
+        break;
+      }
+      case 'COMBAT_DICE_PHASE': {
+        store.setCombatDicePhase(msg.payload);
+        break;
+      }
+      case 'COMBAT_DIE_REVEALED': {
+        store.revealCombatDie(msg.payload.side, msg.payload.value);
+        break;
+      }
+      case 'COMBAT_RESULT': {
+        store.setCombatResult({ phase: 'result', ...msg.payload });
         break;
       }
     }
