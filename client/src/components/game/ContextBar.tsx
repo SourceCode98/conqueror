@@ -510,7 +510,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
         })()}
 
         {/* Action buttons row */}
-        <div className="flex items-center gap-0.5 px-1 py-1.5">
+        <div className="flex items-center gap-0.5 px-1 pt-1.5 pb-1 overflow-x-auto scrollbar-none">
           <ActionBtn label="Settle" disabled={!canSettle} active={mode === 'place_settlement'}
             pieces={settlementsLeft}
             onClick={() => setBoardMode(mode === 'place_settlement' ? null : 'place_settlement')}>
@@ -548,7 +548,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
             const canRecruit = canRecruitAfford && hasCapacity;
             return (
               <>
-                <div className="w-px h-6 bg-gray-700 mx-0.5"/>
+                <div className="w-px h-6 bg-gray-700 mx-0.5 shrink-0"/>
                 <ActionBtn label="Recruit" active={mode === 'recruit_soldier'} disabled={!canRecruit}
                   onClick={() => { if (canRecruit) setBoardMode(mode === 'recruit_soldier' ? null : 'recruit_soldier'); }}>
                   <span className={cn('text-lg leading-none', !canRecruit && 'opacity-40')}>🪖</span>
@@ -567,7 +567,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
           })()}
 
           {/* Divider */}
-          <div className="w-px h-6 bg-gray-700 mx-0.5"/>
+          <div className="w-px h-6 bg-gray-700 mx-0.5 shrink-0"/>
 
           <ActionBtn label="Bank" onClick={() => openTradePanel('bank')}>
             <span className="text-lg leading-none">🏦</span>
@@ -583,15 +583,15 @@ export default function ContextBar({ gameState, gameId }: Props) {
               <span className="text-lg leading-none">🃏</span>
             </ActionBtn>
           )}
+        </div>
 
-          {/* Spacer pushes End Turn to the right */}
-          <div className="flex-1"/>
-
+        {/* End Turn — own row, always fully visible */}
+        <div className="px-2 pb-2">
           <button
-            className="rounded-xl bg-green-700 hover:bg-green-600 active:scale-[0.97] text-white font-bold text-xs px-4 py-2.5 transition-all shadow-md"
+            className="w-full rounded-xl bg-green-700 hover:bg-green-600 active:scale-[0.98] text-white font-bold text-sm py-2.5 transition-all shadow-md"
             onClick={() => send('END_TURN')}
           >
-            End →
+            Terminar turno →
           </button>
         </div>
       </div>
