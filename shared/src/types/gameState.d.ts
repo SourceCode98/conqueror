@@ -34,11 +34,16 @@ export interface PlayerState {
     connected: boolean;
 }
 export type GamePhase = 'LOBBY' | 'SETUP_FORWARD' | 'SETUP_REVERSE' | 'ROLL' | 'ROBBER' | 'DISCARD' | 'ACTION' | 'TRADE_OFFER' | 'GAME_OVER';
+export interface TradeRespondent {
+    status: 'pending' | 'accept' | 'reject' | 'counter' | 'rejected_by_offerer';
+    give?: ResourceBundle;
+    want?: ResourceBundle;
+}
 export interface TradeOffer {
     fromPlayerId: string;
     give: ResourceBundle;
     want: ResourceBundle;
-    respondents: Record<string, 'pending' | 'accept' | 'reject'>;
+    respondents: Record<string, TradeRespondent>;
 }
 export interface GameLogEntry {
     timestamp: number;

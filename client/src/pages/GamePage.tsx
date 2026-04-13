@@ -19,6 +19,8 @@ import GameLog from '../components/game/GameLog.js';
 import ChatPanel from '../components/game/ChatPanel.js';
 import WinCelebration from '../components/game/WinCelebration.js';
 import { CombatResultModal } from '../components/game/CombatResultModal.js';
+import DealClosedOverlay from '../components/game/DealClosedOverlay.js';
+import WarEventOverlay from '../components/game/WarEventOverlay.js';
 import ActionToast from '../components/game/ActionToast.js';
 import TurnTimer from '../components/game/TurnTimer.js';
 import BuildCostTable from '../components/game/BuildCostTable.js';
@@ -36,7 +38,7 @@ const MOBILE_CHAT_H   = 44;        // compact chat input strip height
 const MOBILE_BOARD_PB = 56 + MOBILE_CHAT_H; // ContextBar + chat strip
 
 function getHandAnchor(): HandAnchor {
-  try { return (localStorage.getItem('hand-anchor') as HandAnchor) ?? 'top-center'; } catch { return 'top-center'; }
+  try { return (localStorage.getItem('hand-anchor') as HandAnchor) ?? 'left-bottom'; } catch { return 'left-bottom'; }
 }
 
 // ── Floating instruction pill shown over the board when in a board-tap mode ──
@@ -199,7 +201,7 @@ export default function GamePage() {
   const { t } = useTranslation('game');
   const navigate = useNavigate();
   const { token, user } = useAuthStore();
-  const { gameState, localPlayerId, setLocalPlayerId, resetGame, tradePanel, closeTradePanel, stolenReveal, clearStolenReveal, wsConnected } = useGameStore();
+  const { gameState, localPlayerId, setLocalPlayerId, resetGame, tradePanel, closeTradePanel, stolenReveal, clearStolenReveal, wsConnected, chatMessages, lobbySettings } = useGameStore();
   const _boardMode    = useGameStore(s => s.boardMode);
   const _roadEdges    = useGameStore(s => s.roadBuildingEdges);
   const _cancelRoad   = useGameStore(s => s.cancelRoadBuilding);
@@ -209,17 +211,21 @@ export default function GamePage() {
   const [lobbyInfo, setLobbyInfo] = useState<LobbyInfo | null>(null);
   const [startError, setStartError] = useState('');
   const [starting, setStarting] = useState(false);
+  const [lobbyChatInput, setLobbyChatInput] = useState('');
   const [turnTimeLimit, setTurnTimeLimit] = useState<number | null>(null); // seconds, null = no limit
   const [hornCooldownSecs, setHornCooldownSecs] = useState<number>(30);   // seconds between horn uses
   const [mobileSheet, setMobileSheet] = useState<'chat' | null>(null);
   const [showCostTable, setShowCostTable] = useState(false);
   const [showMobileCostTable, setShowMobileCostTable] = useState(false);
+  const [playersCollapsed, setPlayersCollapsed] = useState(false);
+  const [costTableY, setCostTableY] = useState<number | null>(null); // null = centered
+  const costTableBoardRef = useRef<HTMLDivElement>(null);
   const [handAnchor, setHandAnchor] = useState<HandAnchor>(getHandAnchor);
   const [showReconnectOverlay, setShowReconnectOverlay] = useState(false);
   const [showWarRules, setShowWarRules] = useState(false);
   const warRulesShownRef = useRef(false);
   const [warMode, setWarMode] = useState(false);
-  const [warVariants, setWarVariants] = useState({ totalWar: false, fortress: false, reconstruction: false });
+  const [warVariants, setWarVariants] = useState({ totalWar: false, fortress: false, reconstruction: false, soldierFoodEnabled: true });
 
   // Sync hand anchor from ResourceHand via custom event
   useEffect(() => {
@@ -305,6 +311,13 @@ export default function GamePage() {
     return () => clearTimeout(t);
   }, [stolenReveal]);
 
+  // Broadcast lobby settings to all players when host changes them
+  useEffect(() => {
+    const isHost = lobbyInfo?.created_by_username === user?.username;
+    if (!isHost || !gameId || gameState) return;
+    wsService.send({ type: 'LOBBY_SETTINGS', payload: { gameId, turnTimeLimit, hornCooldownSecs, warMode, warVariants } });
+  }, [turnTimeLimit, hornCooldownSecs, warMode, warVariants, lobbyInfo, gameState]);
+
   async function startGame() {
     if (!gameId || !token) return;
     setStartError('');
@@ -322,6 +335,22 @@ export default function GamePage() {
     } finally {
       setStarting(false);
     }
+  }
+
+  // ── Loading / reconnecting overlay ──────────────────────────────────────────
+  // Show spinner while lobby info is still loading (prevents flicker of lobby UI)
+  // and while we're reconnecting to an already-active game.
+  if (!gameState && (!lobbyInfo || lobbyInfo.status === 'active')) {
+    return (
+      <div className="h-dvh bg-gray-900 flex flex-col items-center justify-center gap-4">
+        <div className="w-10 h-10 rounded-full border-4 border-amber-500 border-t-transparent animate-spin" />
+        <p className="text-amber-400 text-lg font-semibold">Reconnecting…</p>
+        <p className="text-gray-500 text-sm">{lobbyInfo?.name}</p>
+        <button className="mt-4 text-gray-500 hover:text-gray-300 text-sm" onClick={() => navigate('/lobby')}>
+          ← Leave game
+        </button>
+      </div>
+    );
   }
 
   // ── Lobby waiting room ────────────────────────────────────────────────────
@@ -423,7 +452,7 @@ export default function GamePage() {
                   War &amp; Sieges mode
                 </label>
                 <button
-                  onClick={() => { setWarMode(w => !w); if (warMode) setWarVariants({ totalWar: false, fortress: false, reconstruction: false }); }}
+                  onClick={() => { setWarMode(w => !w); if (warMode) setWarVariants({ totalWar: false, fortress: false, reconstruction: false, soldierFoodEnabled: true }); }}
                   className={cn('rounded-lg px-3 py-1.5 text-sm border transition-colors w-full text-left', warMode ? 'border-red-500 bg-red-900/30 text-red-300' : 'border-gray-700 text-gray-400 hover:border-gray-500')}
                 >
                   {warMode ? 'Enabled — soldiers, sieges & destruction' : 'Disabled (classic mode)'}
@@ -436,6 +465,10 @@ export default function GamePage() {
                         {warVariants[v] ? '✓' : '○'} {v === 'totalWar' ? 'Total War (no attack limit)' : v === 'fortress' ? 'Fortress (cities need 2 wins to degrade)' : 'Reconstruction (rebuild for 2 timber + 2 clay)'}
                       </button>
                     ))}
+                    <button onClick={() => setWarVariants(prev => ({ ...prev, soldierFoodEnabled: !prev.soldierFoodEnabled }))}
+                      className={cn('w-full text-left rounded px-2 py-1 text-xs border transition-colors', !warVariants.soldierFoodEnabled ? 'border-blue-500 bg-blue-900/30 text-blue-300' : 'border-gray-700 text-gray-500 hover:border-gray-600')}>
+                      {!warVariants.soldierFoodEnabled ? '✓' : '○'} No Food (soldiers don't consume grain or desert)
+                    </button>
                   </div>
                 )}
               </div>
@@ -457,8 +490,74 @@ export default function GamePage() {
           )}
 
           {!isHost && (
-            <p className="text-center text-gray-400 text-sm">Waiting for the host to start the game…</p>
+            <div className="space-y-3">
+              <p className="text-center text-gray-400 text-sm">Waiting for the host to start the game…</p>
+              {/* Read-only settings from host */}
+              {lobbySettings && (
+                <div className="card py-2 px-3 space-y-1.5">
+                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">Game settings</p>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <span className="rounded-lg border border-gray-700 bg-gray-800 px-2 py-1 text-gray-300">
+                      ⏱ {lobbySettings.turnTimeLimit ? `${lobbySettings.turnTimeLimit}s` : 'No limit'}
+                    </span>
+                    <span className="rounded-lg border border-gray-700 bg-gray-800 px-2 py-1 text-gray-300">
+                      📯 Horn {lobbySettings.hornCooldownSecs}s
+                    </span>
+                    <span className={cn('rounded-lg border px-2 py-1', lobbySettings.warMode ? 'border-red-700 bg-red-900/30 text-red-300' : 'border-gray-700 bg-gray-800 text-gray-400')}>
+                      ⚔️ War {lobbySettings.warMode ? 'ON' : 'OFF'}
+                    </span>
+                    {lobbySettings.warMode && Object.entries(lobbySettings.warVariants).filter(([, v]) => v).map(([k]) => (
+                      <span key={k} className="rounded-lg border border-orange-700 bg-orange-900/30 px-2 py-1 text-orange-300 text-xs">
+                        {k === 'totalWar' ? 'Total War' : k === 'fortress' ? 'Fortress' : k === 'reconstruction' ? 'Reconstruction' : k === 'soldierFoodEnabled' ? '' : k}
+                      </span>
+                    ))}
+                    {lobbySettings.warMode && lobbySettings.warVariants.soldierFoodEnabled === false && (
+                      <span className="rounded-lg border border-blue-700 bg-blue-900/30 px-2 py-1 text-blue-300 text-xs">No Food</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
+
+          {/* Lobby chat */}
+          <div className="card mt-4 py-2 px-3 flex flex-col gap-2">
+            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide">Chat</p>
+            <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+              {chatMessages.length === 0 && (
+                <p className="text-xs text-gray-600 italic">No messages yet…</p>
+              )}
+              {chatMessages.map((m, i) => {
+                const playerColor = lobbyInfo?.players.find(p => p.id === m.fromPlayerId)?.color;
+                const color = playerColor ? resolvePlayerColor(playerColor) : '#f59e0b';
+                return (
+                  <div key={i} className="text-xs flex items-start gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full mt-0.5 shrink-0" style={{ backgroundColor: color }}/>
+                    <span>
+                      <span className="font-semibold" style={{ color }}>{m.username}: </span>
+                      <span className="text-gray-300">{m.text}</span>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <form onSubmit={e => {
+              e.preventDefault();
+              const text = lobbyChatInput.trim();
+              if (!text || !gameId) return;
+              wsService.send({ type: 'CHAT', payload: { gameId, text } });
+              setLobbyChatInput('');
+            }} className="flex gap-2">
+              <input
+                value={lobbyChatInput}
+                onChange={e => setLobbyChatInput(e.target.value)}
+                placeholder="Write a message…"
+                maxLength={200}
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-600"
+              />
+              <button type="submit" className="rounded-lg bg-amber-700 hover:bg-amber-600 text-white text-sm px-3 py-1.5 font-semibold">→</button>
+            </form>
+          </div>
 
           <p className="text-center text-xs text-gray-600 mt-4">
             Game ID: <code className="text-gray-500">{gameId}</code>
@@ -475,13 +574,7 @@ export default function GamePage() {
   const isHost = lobbyInfo?.created_by_username === user?.username;
 
   const tradeOffer = gameState.tradeOffer;
-  // Show response panel for everyone during a trade offer:
-  //   - Offerer: always shown so they can click "Confirm ✓" on acceptors
-  //   - Others: shown unless they already declined
-  const myTradeResponse = localPlayerId ? tradeOffer?.respondents[localPlayerId] : undefined;
-  const showResponsePanel = phase === 'TRADE_OFFER'
-    && tradeOffer !== null
-    && (tradeOffer.fromPlayerId === localPlayerId || myTradeResponse !== 'reject');
+  const showResponsePanel = phase === 'TRADE_OFFER' && tradeOffer !== null;
 
   const sheetOpen = mobileSheet !== null;
 
@@ -697,12 +790,12 @@ export default function GamePage() {
         })()}
       </AnimatePresence>
 
-      {/* Trade panel backdrop */}
+      {/* Trade panel backdrop (bank/offer only — response panel has no backdrop) */}
       <AnimatePresence>
-        {(tradePanel !== null || showResponsePanel) && (
+        {tradePanel !== null && (
           <div
             className="fixed inset-0 z-30 bg-black/50"
-            onClick={tradePanel !== null ? closeTradePanel : undefined}
+            onClick={closeTradePanel}
           />
         )}
       </AnimatePresence>
@@ -719,21 +812,32 @@ export default function GamePage() {
 
         {/* Center — hex board (full width, players overlay on top) */}
         <div
+          ref={costTableBoardRef}
           className="relative flex-1 flex items-center justify-center bg-[#060e1c] overflow-hidden"
           style={{ paddingTop: handAnchor.startsWith('top') ? HAND_PEEK : 0, paddingBottom: handAnchor.startsWith('bottom') ? MOBILE_BOARD_PB + HAND_PEEK : MOBILE_BOARD_PB }}
         >
           <HexBoard state={gameState} />
 
           {/* Floating player list — top-left overlay */}
-          <div className="absolute top-2 left-2 flex flex-col gap-1 pointer-events-none">
-            {gameState.players.map(p => {
+          <div className="absolute top-2 left-2 flex flex-col gap-1">
+            {/* Toggle button */}
+            <button
+              className="self-start rounded-lg px-2 py-0.5 text-[10px] font-bold text-gray-400 pointer-events-auto transition-colors"
+              style={{ background: 'rgba(17,24,39,0.75)', border: '1px solid rgba(75,85,99,0.4)', backdropFilter: 'blur(4px)' }}
+              onClick={() => setPlayersCollapsed(s => !s)}
+            >
+              {playersCollapsed ? '▶ Players' : '▼ Hide'}
+            </button>
+
+            {/* Player cards */}
+            {!playersCollapsed && gameState.players.map(p => {
               const color = resolvePlayerColor(p.color);
               const isActive = gameState.activePlayerId === p.id;
               const isMe = p.id === localPlayerId;
               return (
                 <div
                   key={p.id}
-                  className="rounded-lg px-2 py-1 space-y-0.5"
+                  className="rounded-lg px-2 py-1 space-y-0.5 pointer-events-none"
                   style={{
                     background: isActive ? 'rgba(17,24,39,0.88)' : 'rgba(17,24,39,0.55)',
                     border: isActive ? `1px solid ${color}` : '1px solid rgba(75,85,99,0.3)',
@@ -829,27 +933,57 @@ export default function GamePage() {
             )}
           </AnimatePresence>
 
-          {/* ── Mobile: build cost toggle + panel — fixed left side ── */}
-          <div className="lg:hidden absolute left-0 top-1/2 -translate-y-1/2 z-20 flex flex-row items-center">
-            {/* Toggle tab on left edge */}
-            <button
-              onClick={() => setShowMobileCostTable(s => !s)}
-              className={cn(
-                'rounded-r-xl border-y border-r shadow-xl backdrop-blur-sm transition-all active:scale-95 px-1.5 py-3 flex flex-col items-center gap-1',
-                showMobileCostTable
-                  ? 'bg-amber-700/90 border-amber-500 text-white'
-                  : 'bg-gray-900/90 border-gray-700 text-gray-300',
-              )}
-            >
-              <span className="text-base leading-none">🏗</span>
-              <span className={cn(
-                'text-[8px] font-bold uppercase tracking-wide',
-                '[writing-mode:vertical-rl] rotate-180 leading-none',
-                showMobileCostTable ? 'text-amber-200' : 'text-gray-500',
-              )}>
-                {showMobileCostTable ? '✕' : 'Costs'}
-              </span>
-            </button>
+          {/* ── Mobile: build cost toggle + panel — draggable left side ── */}
+          <div
+            className="lg:hidden absolute left-0 z-20 flex flex-row items-center pointer-events-none"
+            style={{ top: costTableY ?? '50%', transform: 'translateY(-50%)' }}
+          >
+            {/* Tab: drag handle (top) + toggle (bottom) */}
+            <div className={cn(
+              'pointer-events-auto rounded-r-xl border-y border-r shadow-xl backdrop-blur-sm transition-colors flex flex-col items-center',
+              showMobileCostTable
+                ? 'bg-amber-700/90 border-amber-500 text-white'
+                : 'bg-gray-900/90 border-gray-700 text-gray-300',
+            )}>
+              {/* Drag grip */}
+              <div
+                className="w-full flex flex-col items-center gap-0.5 py-1.5 px-1.5 cursor-ns-resize touch-none select-none"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  const board = costTableBoardRef.current;
+                  if (!board) return;
+                  const rect = board.getBoundingClientRect();
+                  const onMove = (me: PointerEvent) => {
+                    const y = me.clientY - rect.top;
+                    setCostTableY(Math.min(Math.max(y, 50), rect.height - 50));
+                  };
+                  const onUp = () => {
+                    document.removeEventListener('pointermove', onMove);
+                    document.removeEventListener('pointerup', onUp);
+                  };
+                  document.addEventListener('pointermove', onMove);
+                  document.addEventListener('pointerup', onUp);
+                }}
+              >
+                <div className="w-3 h-px rounded bg-current opacity-50"/>
+                <div className="w-3 h-px rounded bg-current opacity-50"/>
+                <div className="w-3 h-px rounded bg-current opacity-50"/>
+              </div>
+              {/* Toggle button */}
+              <button
+                onClick={() => setShowMobileCostTable(s => !s)}
+                className="px-1.5 pb-2 flex flex-col items-center gap-1 active:scale-95 transition-transform"
+              >
+                <span className="text-base leading-none">🏗</span>
+                <span className={cn(
+                  'text-[8px] font-bold uppercase tracking-wide',
+                  '[writing-mode:vertical-rl] rotate-180 leading-none',
+                  showMobileCostTable ? 'text-amber-200' : 'text-gray-500',
+                )}>
+                  {showMobileCostTable ? '✕' : 'Costs'}
+                </span>
+              </button>
+            </div>
 
             {/* Collapsible cost panel slides right from the tab */}
             <AnimatePresence>
@@ -860,7 +994,7 @@ export default function GamePage() {
                   exit={{ opacity: 0, x: -12, scaleX: 0.85 }}
                   style={{ originX: 0 }}
                   transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-                  className="rounded-r-2xl border-y border-r border-gray-700 bg-gray-900/95 shadow-2xl backdrop-blur-sm px-3 py-3 space-y-3"
+                  className="pointer-events-auto rounded-r-2xl border-y border-r border-gray-700 bg-gray-900/95 shadow-2xl backdrop-blur-sm px-3 py-3 space-y-3"
                 >
                   {([
                     { label: 'Road',       icon: '🛣',  cost: { timber: 1, clay: 1 } },
@@ -984,6 +1118,12 @@ export default function GamePage() {
 
       {/* ── Combat result modal ── */}
       <CombatResultModal />
+
+      {/* ── Deal closed overlay ── */}
+      <DealClosedOverlay />
+
+      {/* ── War event overlay ── */}
+      <WarEventOverlay />
 
       {/* ── War rules modal ── */}
       {showWarRules && (

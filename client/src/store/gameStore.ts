@@ -91,6 +91,14 @@ interface GameStore {
   setCombatResult: (r: Extract<GameStore['combatModal'], { phase: 'result' }>) => void;
   clearCombatModal: () => void;
 
+  // Deal closed overlay
+  dealClosed: { activePlayerId: string; partnerId: string } | null;
+  setDealClosed: (deal: { activePlayerId: string; partnerId: string } | null) => void;
+
+  // War event overlay
+  warEvent: { effect: 'siege' | 'destruction_choice' | 'repelled'; attackerId: string; defenderId: string } | null;
+  setWarEvent: (e: { effect: 'siege' | 'destruction_choice' | 'repelled'; attackerId: string; defenderId: string } | null) => void;
+
   // Stolen card reveal (shown to victim after being robbed)
   stolenReveal: { resource: ResourceType; thiefName: string } | null;
   clearStolenReveal: () => void;
@@ -98,6 +106,10 @@ interface GameStore {
   // Final scores revealed at game over (includes hidden VP cards for all players)
   finalScores: Record<string, number> | null;
   setFinalScores: (scores: Record<string, number>) => void;
+
+  // Lobby settings broadcast by host
+  lobbySettings: { turnTimeLimit: number | null; hornCooldownSecs: number; warMode: boolean; warVariants: Record<string, boolean> } | null;
+  setLobbySettings: (s: GameStore['lobbySettings']) => void;
 
   // WebSocket connection status
   wsConnected: boolean;
@@ -173,8 +185,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setPlayAgainResult: (result) => set({ playAgainPoll: null, playAgainResult: result }),
   clearPlayAgain: () => set({ playAgainPoll: null, playAgainResult: null }),
 
+  dealClosed: null,
+  setDealClosed: (deal) => set({ dealClosed: deal }),
+
+  warEvent: null,
+  setWarEvent: (e) => set({ warEvent: e }),
+
   clearStolenReveal: () => set({ stolenReveal: null }),
   setFinalScores: (scores) => set({ finalScores: scores }),
+
+  lobbySettings: null,
+  setLobbySettings: (s) => set({ lobbySettings: s }),
 
   setLocalPlayerId: (id) => set({ localPlayerId: id }),
 
@@ -188,6 +209,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     gameState: null,
     chatMessages: [],
     toasts: [],
+    dealClosed: null,
+    warEvent: null,
     stolenReveal: null,
     finalScores: null,
     boardMode: null,

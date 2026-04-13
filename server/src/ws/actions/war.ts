@@ -4,7 +4,7 @@ import {
   hasResources, subtractResources,
   SOLDIER_COST, MAX_SOLDIERS_SETTLEMENT, MAX_SOLDIERS_CITY,
   WAR_RECONSTRUCT_COST,
-  roadDistanceToVertex, countPlayerSoldiers, updateWarlord, edgeVertices, hexVertexIds,
+  roadDistanceToVertex, vertexToVertexDistance, countPlayerSoldiers, updateWarlord, edgeVertices, hexVertexIds,
   recalculateSpecialCards,
 } from '@conqueror/shared';
 import type { GameOrchestrator, PendingCombat } from '../../game/GameOrchestrator.js';
@@ -88,12 +88,16 @@ export function handleRecruitSoldier(
   if ((building.soldiers ?? 0) >= max) { err(ctx, ws, 'AT_CAPACITY', `Max ${max} soldiers here`); return; }
 
   const me = state.players.find(p => p.id === meta.userId)!;
-  if (!hasResources(me.resources, SOLDIER_COST)) { err(ctx, ws, 'INSUFFICIENT_RESOURCES', 'Need 1 iron, 1 grain, 1 wool'); return; }
+  const useFree = (me.freeSoldiers ?? 0) > 0;
+  if (!useFree && !hasResources(me.resources, SOLDIER_COST)) { err(ctx, ws, 'INSUFFICIENT_RESOURCES', 'Need 1 iron, 1 grain, 1 wool'); return; }
 
   orch.updateState(s => ({
     ...s,
     players: s.players.map(p => p.id === meta.userId
-      ? { ...p, resources: subtractResources(p.resources, SOLDIER_COST) } : p),
+      ? useFree
+        ? { ...p, freeSoldiers: (p.freeSoldiers ?? 1) - 1 }
+        : { ...p, resources: subtractResources(p.resources, SOLDIER_COST) }
+      : p),
     buildings: {
       ...s.buildings,
       [payload.vertexId]: { ...building, soldiers: (building.soldiers ?? 0) + 1 },
@@ -114,6 +118,7 @@ export function handleTransferSoldiers(
   const state = orch.getState();
   if (!state.warMode) return;
   if (state.phase !== 'ACTION') { err(ctx, ws, 'WRONG_PHASE', 'Can only transfer soldiers in ACTION phase'); return; }
+  if ((state.transfersUsedThisTurn ?? 0) >= 2) { err(ctx, ws, 'TRANSFER_LIMIT', 'Solo se pueden mover soldados 2 veces por turno'); return; }
 
   const { fromVertexId, toVertexId, count } = payload;
   if (fromVertexId === toVertexId) { err(ctx, ws, 'SAME_VERTEX', 'Source and destination must differ'); return; }
@@ -131,8 +136,9 @@ export function handleTransferSoldiers(
   const free    = maxDest - (to.soldiers ?? 0);
   if (free <= 0) { err(ctx, ws, 'DEST_FULL', 'Destination building is at soldier capacity'); return; }
 
-  const dist = roadDistanceToVertex(state, meta.userId, toVertexId);
-  if (dist > 2) { err(ctx, ws, 'TOO_FAR', 'Buildings must be within 2 road-steps'); return; }
+  const maxDist = 2 + (state.transferDistanceBonus ?? 0);
+  const dist = vertexToVertexDistance(state, fromVertexId, toVertexId);
+  if (dist > maxDist) { err(ctx, ws, 'TOO_FAR', `Buildings must be within ${maxDist} road-steps`); return; }
 
   const move = Math.min(count, free);
   orch.updateState(s => ({
@@ -142,6 +148,7 @@ export function handleTransferSoldiers(
       [fromVertexId]: { ...s.buildings[fromVertexId as any], soldiers: available - move },
       [toVertexId]:   { ...s.buildings[toVertexId   as any], soldiers: (to.soldiers ?? 0) + move },
     },
+    transfersUsedThisTurn: (s.transfersUsedThisTurn ?? 0) + 1,
   }));
 
   ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
@@ -300,6 +307,24 @@ function applyCombatResult(orch: GameOrchestrator, ctx: ActionContext): void {
   };
 
   if (!pending.attackerWon) {
+    // Attacker loses soldiers on repel: all of them, except if attacked with 3 → loses only 1
+    const lossCount = pending.attackSoldiers === 3 ? 1 : pending.attackSoldiers;
+    if (lossCount > 0) {
+      orch.updateState(s => {
+        const newBuildings = { ...s.buildings };
+        let toRemove = lossCount;
+        for (const vid of Object.keys(newBuildings)) {
+          if (toRemove <= 0) break;
+          const b = newBuildings[vid] as any;
+          if (b.playerId === pending.attackerId && (b.soldiers ?? 0) > 0) {
+            const remove = Math.min(b.soldiers, toRemove);
+            newBuildings[vid] = { ...b, soldiers: b.soldiers - remove };
+            toRemove -= remove;
+          }
+        }
+        return { ...s, buildings: newBuildings as any };
+      });
+    }
     orch.addLogEntry('log.attackRepelled', { attacker: pending.attackerName, defender: pending.defenderName }, pending.attackerId);
     ctx.broadcastToRoom({ type: 'COMBAT_RESULT', payload: combatPayload });
     ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
@@ -324,6 +349,24 @@ function applyCombatResult(orch: GameOrchestrator, ctx: ActionContext): void {
     ctx.broadcastToRoom({ type: 'COMBAT_RESULT', payload: { ...combatPayload, effect: 'siege' } });
     ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
   } else if (!canDestroy) {
+    // Effectively repelled (last building) — attacker still loses soldiers
+    const lossCount2 = pending.attackSoldiers === 3 ? 1 : pending.attackSoldiers;
+    if (lossCount2 > 0) {
+      orch.updateState(s => {
+        const newBuildings = { ...s.buildings };
+        let toRemove = lossCount2;
+        for (const vid of Object.keys(newBuildings)) {
+          if (toRemove <= 0) break;
+          const b = newBuildings[vid] as any;
+          if (b.playerId === pending.attackerId && (b.soldiers ?? 0) > 0) {
+            const remove = Math.min(b.soldiers, toRemove);
+            newBuildings[vid] = { ...b, soldiers: b.soldiers - remove };
+            toRemove -= remove;
+          }
+        }
+        return { ...s, buildings: newBuildings as any };
+      });
+    }
     ctx.broadcastToRoom({ type: 'COMBAT_RESULT', payload: { ...combatPayload, effect: 'repelled' } });
     ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
   } else {

@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 
 interface Props {
   onClose: () => void;
-  variants?: { totalWar?: boolean; fortress?: boolean; reconstruction?: boolean };
+  variants?: { totalWar?: boolean; fortress?: boolean; reconstruction?: boolean; soldierFoodEnabled?: boolean };
 }
 
 const SECTION_KEYS = ['soldiers', 'attacking', 'siege', 'destruction', 'warlord'] as const;
@@ -24,6 +24,7 @@ export default function WarRulesModal({ onClose, variants }: Props) {
   const { t } = useTranslation('game');
 
   const activeVariants = VARIANT_KEYS.filter(k => variants?.[k]);
+  const noFoodActive = variants?.soldierFoodEnabled === false;
 
   return (
     <AnimatePresence>
@@ -66,13 +67,18 @@ export default function WarRulesModal({ onClose, variants }: Props) {
 
           <div className="px-5 py-4 space-y-5">
             {/* Active variants */}
-            {activeVariants.length > 0 && (
+            {(activeVariants.length > 0 || noFoodActive) && (
               <div className="space-y-1.5">
                 {activeVariants.map(k => (
                   <div key={k} className="text-xs text-orange-300 bg-orange-900/20 border border-orange-800/40 rounded-lg px-3 py-1.5">
                     {t(`warRules.variants.${k}`)}
                   </div>
                 ))}
+                {noFoodActive && (
+                  <div className="text-xs text-blue-300 bg-blue-900/20 border border-blue-800/40 rounded-lg px-3 py-1.5">
+                    {t('warRules.variants.noFood')}
+                  </div>
+                )}
               </div>
             )}
 

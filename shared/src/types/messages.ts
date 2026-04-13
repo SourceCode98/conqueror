@@ -30,7 +30,9 @@ export type ClientMessage =
   | WSMessage<'RESPOND_TRADE',       { gameId: string; response: 'accept' | 'reject' }>
   | WSMessage<'ACCEPT_PLAYER_TRADE', { gameId: string; fromPlayerId: string }>
   | WSMessage<'CANCEL_TRADE',        { gameId: string }>
-  | WSMessage<'COUNTER_TRADE',       { gameId: string; give: ResourceBundle; want: ResourceBundle }>
+  | WSMessage<'COUNTER_TRADE',        { gameId: string; give: ResourceBundle; want: ResourceBundle }>
+  | WSMessage<'REJECT_COUNTER_OFFER', { gameId: string; playerId: string }>
+  | WSMessage<'MODIFY_OFFER_GIVE',    { gameId: string; give: ResourceBundle }>
   | WSMessage<'MOVE_BANDIT',         { gameId: string; coord: AxialCoord; stealFromPlayerId?: string }>
   | WSMessage<'DISCARD_CARDS',       { gameId: string; cards: ResourceBundle }>
   | WSMessage<'END_TURN',            { gameId: string }>
@@ -44,7 +46,8 @@ export type ClientMessage =
   | WSMessage<'ATTACK',             { gameId: string; targetVertexId: VertexId; soldiers: number }>
   | WSMessage<'COMBAT_ROLL',        { gameId: string }>
   | WSMessage<'CHOOSE_DESTRUCTION', { gameId: string; destructionType: 'destroy' | 'downgrade' }>
-  | WSMessage<'RECONSTRUCT',        { gameId: string; vertexId: VertexId }>;
+  | WSMessage<'RECONSTRUCT',        { gameId: string; vertexId: VertexId }>
+  | WSMessage<'LOBBY_SETTINGS',     { gameId: string; turnTimeLimit: number | null; hornCooldownSecs: number; warMode: boolean; warVariants: Record<string, boolean> }>;
 
 // ─── Server → Client ──────────────────────────────────────────────────────────
 
@@ -67,4 +70,5 @@ export type ServerMessage =
   | WSMessage<'GAME_CLOSED',         { reason: string }>
   | WSMessage<'COMBAT_DICE_PHASE',   { attackerId: string; defenderId: string; attackerName: string; defenderName: string; timeoutSecs: number }>
   | WSMessage<'COMBAT_DIE_REVEALED', { side: 'attacker' | 'defender'; value: number }>
-  | WSMessage<'COMBAT_RESULT',       { attackerForce: number; defenderForce: number; attackerWon: boolean; effect: 'siege' | 'destruction_choice' | 'repelled'; attackerName: string; defenderName: string; attackerDie: number; defenderDie: number; attackSoldiers: number; defenderSoldiers: number; cityBonus: number; garrisonBonus: number }>;
+  | WSMessage<'COMBAT_RESULT',       { attackerForce: number; defenderForce: number; attackerWon: boolean; effect: 'siege' | 'destruction_choice' | 'repelled'; attackerName: string; defenderName: string; attackerDie: number; defenderDie: number; attackSoldiers: number; defenderSoldiers: number; cityBonus: number; garrisonBonus: number }>
+  | WSMessage<'LOBBY_SETTINGS',      { turnTimeLimit: number | null; hornCooldownSecs: number; warMode: boolean; warVariants: Record<string, boolean> }>;

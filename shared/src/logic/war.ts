@@ -3,6 +3,34 @@ import type { VertexId, EdgeId } from '../types/board.js';
 import { edgeVertices } from './board.js';
 import { WARLORD_POINTS } from '../constants/board.js';
 
+/** Point-to-point BFS: shortest road path from one vertex to another (traverses any occupied road). */
+export function vertexToVertexDistance(
+  state: GameState,
+  fromVertexId: string,
+  toVertexId: string,
+): number {
+  if (fromVertexId === toVertexId) return 0;
+  const dist = new Map<string, number>();
+  dist.set(fromVertexId, 0);
+  const queue: Array<[string, number]> = [[fromVertexId, 0]];
+  let head = 0;
+  while (head < queue.length) {
+    const [vertex, d] = queue[head++];
+    if (d >= 4) continue; // max useful search depth
+    for (const [edgeId, road] of Object.entries(state.roads)) {
+      if (!road.playerId) continue;
+      const [v1, v2] = edgeVertices(edgeId as EdgeId);
+      const neighbor = v1 === vertex ? v2 : v2 === vertex ? v1 : null;
+      if (!neighbor || dist.has(neighbor)) continue;
+      const nd = d + 1;
+      dist.set(neighbor, nd);
+      if (neighbor === toVertexId) return nd;
+      queue.push([neighbor, nd]);
+    }
+  }
+  return Infinity;
+}
+
 export function roadDistanceToVertex(
   state: GameState,
   attackerId: string,
@@ -132,9 +160,10 @@ export function applyWarTurnStart(orch: WarTurnOrchestrator): void {
     const newLog = [...s.log];
     const newBuildings: Record<string, Building> = { ...s.buildings };
 
-    // Soldier maintenance: every 2 soldiers costs 1 grain
+    // Soldier maintenance: every 2 soldiers costs 1 grain (skip if food disabled)
+    const foodEnabled = s.warVariants?.soldierFoodEnabled !== false;
     const totalSoldiers = countPlayerSoldiers(newBuildings, pid);
-    const grainCost = Math.floor(totalSoldiers / 2);
+    const grainCost = foodEnabled ? Math.floor(totalSoldiers / 2) : 0;
     let players = s.players;
 
     if (grainCost > 0) {
@@ -169,6 +198,8 @@ export function applyWarTurnStart(orch: WarTurnOrchestrator): void {
       players,
       log: newLog,
       attackUsedThisTurn: false,
+      transfersUsedThisTurn: 0,
+      transferDistanceBonus: 0,
     };
   });
 }

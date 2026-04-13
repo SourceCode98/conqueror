@@ -113,6 +113,12 @@ export const DEV_CARD_DECK: DevCardType[] = [
   ...Array(2).fill('monopoly'),
 ];
 
+// Extra cards added to deck when war mode is enabled
+export const WAR_CARD_EXTRAS: DevCardType[] = [
+  ...Array(3).fill('troopSupply'),  // 2 free soldiers
+  ...Array(2).fill('marchOrders'),  // +1 transfer distance this turn
+];
+
 export const VICTORY_POINTS_TO_WIN = 10;
 export const GRAND_ROAD_MIN_LENGTH = 5;
 export const SUPREME_ARMY_MIN_KNIGHTS = 3;

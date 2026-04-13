@@ -9,7 +9,7 @@ import type {
 import {
   generateBoard,
   findDesertCoord,
-  DEV_CARD_DECK,
+  DEV_CARD_DECK, WAR_CARD_EXTRAS,
   STARTING_SETTLEMENTS,
   STARTING_CITIES,
   STARTING_ROADS,
@@ -68,7 +68,7 @@ export class GameOrchestrator {
     const banditLocation = findDesertCoord(board);
 
     // Shuffle dev card deck
-    const deck = shuffleDeck([...DEV_CARD_DECK]);
+    const deck = shuffleDeck([...DEV_CARD_DECK, ...(warMode ? WAR_CARD_EXTRAS : [])]);
 
     this.state = {
       gameId,
@@ -119,6 +119,7 @@ export class GameOrchestrator {
       warlordPlayerId: null,
       destroyedByPlayer: {},
       attackUsedThisTurn: false,
+      transfersUsedThisTurn: 0,
       pendingDestruction: null,
       destroyedVertices: {},
       fortressHits: {},

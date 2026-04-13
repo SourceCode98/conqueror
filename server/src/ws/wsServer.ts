@@ -13,6 +13,9 @@ import { checkAndHandleWin } from './actions/winCheck.js';
 
 // Room registry: gameId → connected clients
 const rooms = new Map<string, Set<WebSocket>>();
+// Lobby settings cache: gameId → last settings broadcast by host
+interface LobbySettingsCache { turnTimeLimit: number | null; hornCooldownSecs: number; warMode: boolean; warVariants: Record<string, boolean> }
+const lobbySettingsCache = new Map<string, LobbySettingsCache>();
 // Client metadata
 const clientMeta = new WeakMap<WebSocket, ClientMeta>();
 // Horn rate limiting: `${gameId}:${userId}` → last horn timestamp
@@ -159,6 +162,7 @@ function launchRematch(gameId: string, session: PlayAgainSession): void {
   broadcastToRoom(gameId, { type: 'PLAY_AGAIN_START', payload: { newGameId } });
 
   // Clean up old game
+  lobbySettingsCache.delete(gameId);
   db.prepare('DELETE FROM games WHERE id = ?').run(gameId);
 }
 
@@ -279,6 +283,11 @@ function handleMessage(ws: WebSocket, data: RawData): void {
     return;
   }
 
+  if (msg.type === 'LOBBY_SETTINGS') {
+    handleLobbySettings(ws, msg.payload as any);
+    return;
+  }
+
   if (msg.type === 'HORN') {
     handleHorn(ws, msg.payload as { gameId: string });
     return;
@@ -385,6 +394,25 @@ function handleJoinGame(
   }
   // If lobby: client is registered in the room. When host calls POST /start,
   // the server will broadcast GAME_STATE to everyone in the room.
+  // Send cached settings to the joining player if available.
+  if (!orch) {
+    const cached = lobbySettingsCache.get(payload.gameId);
+    if (cached) sendTo(ws, { type: 'LOBBY_SETTINGS', payload: cached });
+  }
+}
+
+function handleLobbySettings(ws: WebSocket, payload: { gameId: string; turnTimeLimit: number | null; hornCooldownSecs: number; warMode: boolean; warVariants: Record<string, boolean> }): void {
+  const meta = clientMeta.get(ws);
+  if (!meta) return;
+  // Only allowed in lobby (no orchestrator running)
+  const orch = getOrLoadOrchestrator(payload.gameId);
+  if (orch) return; // game already started
+  // Verify sender is the host
+  const game = db.prepare('SELECT created_by FROM games WHERE id = ? AND status = ?').get(payload.gameId, 'lobby') as { created_by: string } | undefined;
+  if (!game || game.created_by !== meta.userId) return;
+  const settings: LobbySettingsCache = { turnTimeLimit: payload.turnTimeLimit, hornCooldownSecs: payload.hornCooldownSecs, warMode: payload.warMode, warVariants: payload.warVariants };
+  lobbySettingsCache.set(payload.gameId, settings);
+  broadcastToRoom(payload.gameId, { type: 'LOBBY_SETTINGS', payload: settings });
 }
 
 function handleChat(ws: WebSocket, payload: { gameId: string; text: string }): void {

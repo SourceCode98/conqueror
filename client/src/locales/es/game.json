@@ -153,15 +153,17 @@
     "variants": {
       "totalWar": "⚠️ Guerra Total — sin límite de ataques por turno.",
       "fortress": "🏰 Fortaleza — las ciudades necesitan 2 victorias para ser degradadas.",
-      "reconstruction": "🏚️ Reconstrucción — los asentamientos destruidos pueden reconstruirse por 2 Madera + 2 Arcilla."
+      "reconstruction": "🏚️ Reconstrucción — los asentamientos destruidos pueden reconstruirse por 2 Madera + 2 Arcilla.",
+      "noFood": "🌾 Sin Comida — los soldados no consumen Grano ni desertan."
     },
     "sections": {
       "soldiers": {
         "title": "Soldados",
         "lines": [
           "Compra soldados con Hierro + Grano + Lana y asígnalos a tus construcciones.",
-          "Los asentamientos admiten hasta 2 soldados; las ciudades, hasta 4.",
-          "Cada 2 soldados cuestan 1 Grano por turno. Si no puedes pagar, los soldados desertan."
+          "Los asentamientos admiten hasta 2 soldados; las ciudades, hasta 3.",
+          "Cada 2 soldados cuestan 1 Grano por turno. Si no puedes pagar, los soldados desertan.",
+          "Mueve soldados entre tus propias construcciones (a máximo 2 caminos) en tu turno."
         ]
       },
       "attacking": {
@@ -170,7 +172,8 @@
           "En tu turno (tras tirar los dados) puedes atacar un edificio enemigo a máximo 2 caminos de distancia.",
           "Ambos jugadores tiran un dado. Suma tus soldados como bonificación (+1 por soldado, máx. +5).",
           "Las ciudades añaden +1 al defensor (bonificación de guarnición).",
-          "El total más alto gana la batalla."
+          "El total más alto gana la batalla.",
+          "Si eres repelido: pierdes TODOS tus soldados atacantes. Excepción: atacar con 3 soldados solo pierde 1."
         ]
       },
       "siege": {

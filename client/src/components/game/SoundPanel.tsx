@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { wsService } from '../../services/wsService.js';
 import { useGameStore } from '../../store/gameStore.js';
 import { cn } from '../../lib/cn.js';
-import { musicEngine, TRACKS } from './musicEngine.js';
+import { musicEngine } from './musicEngine.js';
 import { VICTORY_POINTS_TO_WIN } from '@conqueror/shared';
 
 const DEFAULT_HORN_COOLDOWN_MS = 30_000;
@@ -113,15 +113,21 @@ export function safePlay(fn: () => void) {
   if (!globalMuted) fn();
 }
 
-// ── Music track selection based on leading VP ────────────────────────────────
+// ── Music track + tempo based on leading VP ───────────────────────────────────
+// Tracks ordered by ascending BPM: VILLAGE(100) → TAVERN(118) → CONQUEST(132) → BATTLE(152)
+// DUNGEON(96) excluded from auto-selection — its low BPM breaks the tension curve.
 
-function vpToTrackIdx(vp: number): number {
-  const ratio = vp / VICTORY_POINTS_TO_WIN;
-  if (ratio >= 0.9) return 3; // BATTLE  152 BPM — imminent win
-  if (ratio >= 0.7) return 2; // DUNGEON  96 BPM — dark tension
-  if (ratio >= 0.5) return 0; // CONQUEST 132 BPM — energetic
-  if (ratio >= 0.3) return 4; // TAVERN  118 BPM — bouncy
-  return 1;                   // VILLAGE 100 BPM — peaceful opening
+function vpToTrackIdx(ratio: number): number {
+  if (ratio >= 0.75) return 3; // BATTLE   152 BPM — final sprint
+  if (ratio >= 0.50) return 0; // CONQUEST 132 BPM — energetic mid
+  if (ratio >= 0.25) return 4; // TAVERN   118 BPM — building up
+  return 1;                    // VILLAGE  100 BPM — peaceful opening
+}
+
+/** Extra tempo multiplier: ramps from 1.0 at 75% VP to 1.18 at 100% VP */
+function vpToTempoMult(ratio: number): number {
+  if (ratio < 0.75) return 1.0;
+  return 1.0 + (ratio - 0.75) / 0.25 * 0.18; // linear 1.0 → 1.18
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -133,7 +139,8 @@ interface Props {
 
 export default function SoundPanel({ gameId, className }: Props) {
   const [muted, setMuted] = useState(false);
-  const [musicOn, setMusicOn] = useState(true);   // on by default
+  const [musicOn, setMusicOn] = useState(true);   // engine running
+  const [panelOpen, setPanelOpen] = useState(false); // volume slider visible
   const [musicVol, setMusicVol] = useState(0.45);
   const [hornDisabled, setHornDisabled] = useState(false);
   const [hornCooldown, setHornCooldown] = useState(0);
@@ -179,35 +186,32 @@ export default function SoundPanel({ gameId, className }: Props) {
     musicEngine.setVolume(musicVol);
   }, [musicVol]);
 
-  // Auto-select track based on leading player's VP
-  const leadingVP = useMemo(() => {
+  // Auto-select track + tempo based on leading player's VP ratio
+  const leadingVPRatio = useMemo(() => {
     if (!gameState || gameState.phase === 'GAME_OVER') return 0;
-    return Math.max(...gameState.players.map(p => p.victoryPoints));
+    const maxVP = Math.max(...gameState.players.map(p => p.victoryPoints));
+    return maxVP / VICTORY_POINTS_TO_WIN;
   }, [gameState]);
 
   useEffect(() => {
     if (!musicEngine.isRunning) return;
-    const idx = vpToTrackIdx(leadingVP);
+    const idx  = vpToTrackIdx(leadingVPRatio);
+    const mult = vpToTempoMult(leadingVPRatio);
     if (idx !== trackIdx) {
       setTrackIdx(idx);
       musicEngine.setTrack(idx);
     }
+    musicEngine.setTempoMultiplier(mult);
   // trackIdx intentionally excluded — we only want to react to VP changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leadingVP]);
+  }, [leadingVPRatio]);
 
-  function toggleMute() {
-    const next = !muted;
-    setMuted(next);
-    setGlobalMuted(next);
+  // 🎵 = toggle panel visibility only (never stops music)
+  function togglePanel() {
+    setPanelOpen(o => !o);
   }
 
-  function changeTrack(delta: number) {
-    const next = (trackIdx + delta + TRACKS.length) % TRACKS.length;
-    setTrackIdx(next);
-    musicEngine.setTrack(next);
-  }
-
+  // 🔊/🔇 = toggle music engine on/off
   async function toggleMusic() {
     if (musicOn) {
       musicEngine.stop();
@@ -215,8 +219,16 @@ export default function SoundPanel({ gameId, className }: Props) {
     } else {
       await musicEngine.start();
       musicEngine.setVolume(musicVol);
+      musicEngine.setTempoMultiplier(vpToTempoMult(leadingVPRatio));
+      musicEngine.setTrack(vpToTrackIdx(leadingVPRatio));
       setMusicOn(true);
     }
+  }
+
+  function toggleMute() {
+    const next = !muted;
+    setMuted(next);
+    setGlobalMuted(next);
   }
 
   function blowHorn() {
@@ -255,13 +267,13 @@ export default function SoundPanel({ gameId, className }: Props) {
         {hornDisabled && hornCooldown > 0 && <span className="tabular-nums">{hornCooldown}s</span>}
       </button>
 
-      {/* Music toggle */}
+      {/* 🎵 — toggle volume panel visibility (does NOT stop music) */}
       <button
-        onClick={toggleMusic}
-        title={musicOn ? 'Stop music' : 'Play background music'}
+        onClick={togglePanel}
+        title={panelOpen ? 'Hide music controls' : 'Show music controls'}
         className={cn(
           'rounded-lg px-2 py-1.5 text-xs border transition-colors',
-          musicOn
+          panelOpen
             ? 'border-violet-600 text-violet-300 bg-violet-900/40 hover:bg-violet-800/50'
             : 'border-gray-700 text-gray-500 hover:text-gray-300 hover:border-gray-500',
         )}
@@ -269,27 +281,8 @@ export default function SoundPanel({ gameId, className }: Props) {
         🎵
       </button>
 
-      {/* Track selector — only when music is on */}
-      {musicOn && (
-        <div className="flex items-center gap-0.5">
-          <button
-            onClick={() => changeTrack(-1)}
-            title="Previous track"
-            className="rounded px-1 py-1 text-xs text-violet-400 hover:text-violet-200 hover:bg-violet-900/40 transition-colors"
-          >◀</button>
-          <span className="text-xs text-violet-300 w-16 text-center truncate select-none">
-            {TRACKS[trackIdx].name}
-          </span>
-          <button
-            onClick={() => changeTrack(1)}
-            title="Next track"
-            className="rounded px-1 py-1 text-xs text-violet-400 hover:text-violet-200 hover:bg-violet-900/40 transition-colors"
-          >▶</button>
-        </div>
-      )}
-
-      {/* Music volume slider — only when music is on */}
-      {musicOn && (
+      {/* Volume slider — shown when panel is open */}
+      {panelOpen && (
         <input
           type="range" min={0} max={1} step={0.05}
           value={musicVol}
@@ -299,13 +292,13 @@ export default function SoundPanel({ gameId, className }: Props) {
         />
       )}
 
-      {/* SFX mute toggle */}
+      {/* 🔊/🔇 — stop/start music engine */}
       <button
-        onClick={toggleMute}
-        title={muted ? 'Unmute SFX' : 'Mute SFX'}
+        onClick={toggleMusic}
+        title={musicOn ? 'Stop music' : 'Play music'}
         className="rounded-lg px-2 py-1.5 text-xs border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-colors"
       >
-        {muted ? '🔇' : '🔊'}
+        {musicOn ? '🔊' : '🔇'}
       </button>
     </div>
   );

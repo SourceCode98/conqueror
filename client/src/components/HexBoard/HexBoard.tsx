@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PublicGameState, VertexId, EdgeId, AxialCoord, HexTile, ResourceType } from '@conqueror/shared';
-import { edgeVertices, adjacentVertices, roadDistanceToVertex, MAX_SOLDIERS_CITY, MAX_SOLDIERS_SETTLEMENT } from '@conqueror/shared';
+import { edgeVertices, adjacentVertices, roadDistanceToVertex, vertexToVertexDistance, MAX_SOLDIERS_CITY, MAX_SOLDIERS_SETTLEMENT } from '@conqueror/shared';
 import { useGameStore } from '../../store/gameStore.js';
 import { wsService } from '../../services/wsService.js';
 import { SettlementSvg, CitySvg, BanditSvg } from '../icons/GameIcons.js';
@@ -373,7 +373,7 @@ export default function HexBoard({ state }: HexBoardProps) {
     localPlayerId,
     setAttackTargetVertex,
     transferFromVertex, setTransferFromVertex,
-    setTransferToVertex,
+    addToast,
   } = useGameStore();
 
   const myTurn = isMyTurn();
@@ -499,18 +499,29 @@ export default function HexBoard({ state }: HexBoardProps) {
       if (!building || building.playerId !== localPlayerId) return;
       if (!transferFromVertex) {
         // First tap: select source (must have soldiers)
-        if ((building.soldiers ?? 0) > 0) setTransferFromVertex(vertexId);
+        if ((building.soldiers ?? 0) > 0) {
+          setTransferFromVertex(vertexId);
+        } else {
+          addToast({ type: 'action', playerId: '__error__', username: '⚠️', data: { action: 'NO_SOLDIERS', extra: 'Este edificio no tiene soldados' } });
+        }
       } else if (vertexId === transferFromVertex) {
         // Tap same: deselect
         setTransferFromVertex(null);
-        setTransferToVertex(null);
       } else {
-        // Second tap: select destination (must have capacity and be in range)
+        // Second tap: destination → send transfer immediately
         const max = building.type === 'city' ? MAX_SOLDIERS_CITY : MAX_SOLDIERS_SETTLEMENT;
         const free = max - (building.soldiers ?? 0);
-        const dist = roadDistanceToVertex(state as any, localPlayerId!, vertexId);
-        if (free > 0 && dist <= 2) {
-          setTransferToVertex(vertexId);
+        if (free > 0) {
+          const fromB = (state.buildings as any)[transferFromVertex];
+          const available = fromB?.soldiers ?? 0;
+          const count = Math.min(available, free);
+          if (count > 0) {
+            wsService.send({ type: 'TRANSFER_SOLDIERS', payload: { gameId: state.gameId, fromVertexId: transferFromVertex, toVertexId: vertexId, count } });
+          }
+          setTransferFromVertex(null);
+          setBoardMode(null);
+        } else {
+          addToast({ type: 'action', playerId: '__error__', username: '⚠️', data: { action: 'DEST_FULL', extra: `Capacidad máxima: ${max} soldados` } });
         }
       }
       return;
@@ -823,14 +834,16 @@ export default function HexBoard({ state }: HexBoardProps) {
             const hasSoldiers = (b.soldiers ?? 0) > 0;
             const maxCap = b.type === 'city' ? MAX_SOLDIERS_CITY : MAX_SOLDIERS_SETTLEMENT;
             const hasFree = (b.soldiers ?? 0) < maxCap;
+            const maxTransferDist = 2 + ((state as any).transferDistanceBonus ?? 0);
             const dist = transferFromVertex
-              ? roadDistanceToVertex(state as any, localPlayerId!, vid as VertexId)
+              ? vertexToVertexDistance(state as any, transferFromVertex, vid)
               : 0;
-            const inRange = !transferFromVertex || vid === transferFromVertex || dist <= 2;
-            // Source phase: show buildings with soldiers; Dest phase: show buildings in range with space
+            const inRange = !transferFromVertex || vid === transferFromVertex || dist <= maxTransferDist;
+            // Source phase: show buildings with soldiers; Dest phase: all own buildings (full = greyed)
             if (!transferFromVertex && !hasSoldiers) return null;
-            if (transferFromVertex && !isSource && (!hasFree || !inRange)) return null;
-            const color = isSource ? '#f97316' : transferFromVertex ? '#60a5fa' : '#fbbf24';
+            if (transferFromVertex && !isSource && !inRange) return null;
+            const isFull = transferFromVertex && !isSource && !hasFree;
+            const color = isSource ? '#f97316' : isFull ? '#6b7280' : transferFromVertex ? '#60a5fa' : '#fbbf24';
             return (
               <circle key={vid} cx={pos.x} cy={pos.y} r={13}
                 fill={`${color}33`} stroke={color} strokeWidth={2}
@@ -932,6 +945,8 @@ export default function HexBoard({ state }: HexBoardProps) {
             {boardMode === 'move_bandit'      && t('bandit.selectTile')}
             {boardMode === 'recruit_soldier'  && '🪖 Select a building to recruit'}
             {boardMode === 'attack'           && '⚔️ Select an enemy building to attack'}
+            {boardMode === 'transfer_soldiers' && !transferFromVertex && '🪖 Tap a building to move soldiers from'}
+            {boardMode === 'transfer_soldiers' && transferFromVertex  && '🪖 Now tap the destination building'}
           </span>
           {boardMode === 'move_bandit'
             ? <span className="text-xs opacity-60">Drag or click a tile</span>

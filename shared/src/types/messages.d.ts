@@ -49,6 +49,12 @@ export type ClientMessage = WSMessage<'JOIN_GAME', {
     gameId: string;
     give: ResourceBundle;
     want: ResourceBundle;
+}> | WSMessage<'REJECT_COUNTER_OFFER', {
+    gameId: string;
+    playerId: string;
+}> | WSMessage<'MODIFY_OFFER_GIVE', {
+    gameId: string;
+    give: ResourceBundle;
 }> | WSMessage<'MOVE_BANDIT', {
     gameId: string;
     coord: AxialCoord;

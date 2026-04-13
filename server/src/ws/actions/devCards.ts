@@ -88,6 +88,12 @@ export function handlePlayDevCard(
     return;
   }
 
+  // War-only cards require war mode and ACTION phase
+  if ((payload.cardType === 'troopSupply' || payload.cardType === 'marchOrders') && !state.warMode) {
+    ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'NOT_WAR_MODE', message: 'This card can only be used in War mode' } });
+    return;
+  }
+
   // Victory point cards cannot be manually played
   if (payload.cardType === 'victoryPoint') {
     ctx.sendTo(ws, { type: 'ERROR', payload: { code: 'AUTO_VP', message: 'VP cards are revealed automatically' } });
@@ -177,6 +183,18 @@ export function handlePlayDevCard(
       break;
     case 'monopoly':
       toastExtra = playMonopoly(ws, payload.params, meta, orch, ctx);
+      break;
+    case 'troopSupply':
+      orch.updateState(s => ({
+        ...s,
+        players: s.players.map(p => p.id === meta.userId
+          ? { ...p, freeSoldiers: (p.freeSoldiers ?? 0) + 2 }
+          : p),
+      }));
+      toastExtra = '2';
+      break;
+    case 'marchOrders':
+      orch.updateState(s => ({ ...s, transferDistanceBonus: (s.transferDistanceBonus ?? 0) + 1 }));
       break;
   }
 

@@ -195,6 +195,32 @@ class WSService {
         }
         break;
       }
+      case 'TRADE_OFFERED': {
+        const { fromPlayerId } = msg.payload.offer;
+        const gs = store.gameState;
+        const username = gs?.players.find(p => p.id === fromPlayerId)?.username ?? 'Someone';
+        const isCounter = gs ? fromPlayerId !== gs.activePlayerId : false;
+        const key = `trade_offered:${fromPlayerId}:${isCounter}`;
+        if (!this.isDup(key, 3000)) {
+          store.addToast({
+            type: 'action',
+            playerId: fromPlayerId,
+            username,
+            data: { action: isCounter ? 'trade_countered' : 'trade_offered' },
+          });
+        }
+        break;
+      }
+      case 'TRADE_RESOLVED': {
+        if (msg.payload.accepted && msg.payload.byPlayerId) {
+          const gs = store.gameState;
+          const activeId = gs?.activePlayerId;
+          if (activeId && msg.payload.byPlayerId) {
+            store.setDealClosed({ activePlayerId: activeId, partnerId: msg.payload.byPlayerId });
+          }
+        }
+        break;
+      }
       case 'GAME_OVER': {
         store.setFinalScores(msg.payload.finalScores);
         break;
@@ -219,8 +245,20 @@ class WSService {
         store.revealCombatDie(msg.payload.side, msg.payload.value);
         break;
       }
+      case 'LOBBY_SETTINGS': {
+        store.setLobbySettings(msg.payload);
+        break;
+      }
       case 'COMBAT_RESULT': {
         store.setCombatResult({ phase: 'result', ...msg.payload });
+        // Trigger war event overlay
+        const gs = store.gameState;
+        const attacker = gs?.players.find(p => p.username === msg.payload.attackerName);
+        const defender = gs?.players.find(p => p.username === msg.payload.defenderName);
+        if (attacker && defender) {
+          const effect = msg.payload.attackerWon ? msg.payload.effect : 'repelled';
+          store.setWarEvent({ effect, attackerId: attacker.id, defenderId: defender.id });
+        }
         break;
       }
     }

@@ -217,9 +217,15 @@ class MusicEngine {
   private _trackIdx     = 0;
   private _pendingTrack : number | null = null;
   private _noiseBuf     : AudioBuffer | null = null;
+  private _tempoMult    = 1.0;  // 1.0 = normal, >1 = faster
 
   get isRunning()    { return this.running; }
   get trackIndex()   { return this._trackIdx; }
+
+  /** Scale playback tempo. Applied on the next scheduled step. */
+  setTempoMultiplier(mult: number) {
+    this._tempoMult = Math.max(0.5, Math.min(2.0, mult));
+  }
 
   setVolume(v: number) {
     this.vol = Math.max(0, Math.min(1, v));
@@ -270,9 +276,7 @@ class MusicEngine {
   // ── Scheduler ───────────────────────────────────────────────────────────────
   private tick() {
     if (!this.ctx || !this.running) return;
-    const track = TRACKS[this._trackIdx];
-    const s16   = 60 / track.bpm / 4;
-    const now   = this.ctx.currentTime;
+    const now = this.ctx.currentTime;
     while (this.nextTime < now + 0.28) {
       // Apply pending track switch at bar boundary (step 0)
       if (this.nextStep === 0 && this._pendingTrack !== null) {
@@ -280,13 +284,14 @@ class MusicEngine {
         this._pendingTrack = null;
       }
       this.scheduleStep(this.nextStep, this.nextTime);
-      this.nextTime += 60 / TRACKS[this._trackIdx].bpm / 4;
+      this.nextTime += 60 / (TRACKS[this._trackIdx].bpm * this._tempoMult) / 4;
       this.nextStep  = (this.nextStep + 1) % 64;
     }
   }
 
   private scheduleStep(step: number, t: number) {
     const track   = TRACKS[this._trackIdx];
+    const effBpm  = track.bpm * this._tempoMult;
     const barIdx  = Math.floor(step / 16) % 4;
     const beat    = Math.floor((step % 16) / 4);
     const sixInBt = step % 4;
@@ -302,16 +307,16 @@ class MusicEngine {
     // Bass on beat downbeats
     if (sixInBt === 0) {
       const bFreq = (beat === 0 || beat === 2) ? bar.bassR : bar.bass5;
-      this.bass(bFreq, t, (60 / track.bpm) * 0.88);
+      this.bass(bFreq, t, (60 / effBpm) * 0.88);
     }
 
     // Arp (every 16th or every 8th depending on track)
     if (track.arpDiv === 1 || sixInBt % 2 === 0) {
-      this.arp(bar.arp[step % 4], t, (60 / track.bpm / 4) * 0.55);
+      this.arp(bar.arp[step % 4], t, (60 / effBpm / 4) * 0.55);
     }
 
     // Lead melody
-    const s16 = 60 / track.bpm / 4;
+    const s16 = 60 / effBpm / 4;
     const leadFreq = track.melody[step];
     if (leadFreq) {
       const nextTied = track.melody[(step + 1) % 64] !== null;
@@ -320,9 +325,7 @@ class MusicEngine {
 
     // Harmony
     const harmFreq = track.harmony[step];
-    if (harmFreq) {
-      this.harmony(harmFreq, t, s16 * 0.65);
-    }
+    if (harmFreq) this.harmony(harmFreq, t, s16 * 0.65);
   }
 
   // ── Synth helpers ────────────────────────────────────────────────────────────

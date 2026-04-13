@@ -260,7 +260,7 @@ interface Props {
 
 export default function ResourceHand({ resources, devCards }: Props) {
   const [anchor, setAnchor] = useState<HandAnchor>(() => {
-    try { return (localStorage.getItem('hand-anchor') as HandAnchor) ?? 'top-center'; } catch { return 'top-center'; }
+    try { return (localStorage.getItem('hand-anchor') as HandAnchor) ?? 'left-bottom'; } catch { return 'left-bottom'; }
   });
   const [pinned, setPinned]     = useState(false);
   const [hovering, setHovering] = useState(false);

@@ -169,6 +169,8 @@ export default function ActionToast({ gameState }: Props) {
                 destruction_choice: '💥 is choosing destruction…',
                 soldierMaintenance: '🌾 paid grain for soldiers',
                 soldierDesertion: '💀 lost soldiers (can\'t pay)',
+                trade_offered: '🤝 made a trade offer',
+                trade_countered: '↩ sent a counter-offer',
               };
               if (action === 'hurry_up') {
                 return (

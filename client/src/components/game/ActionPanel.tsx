@@ -401,29 +401,30 @@ export default function ActionPanel({ gameState, gameId }: Props) {
       <div className="space-y-2">
         <p className="text-amber-400 font-semibold text-sm">{t('trade.waitingForResponse')}</p>
 
-        {Object.entries(offer.respondents).map(([pid, status]) => {
+        {Object.entries(offer.respondents).map(([pid, respondent]) => {
           const p = gameState.players.find(pl => pl.id === pid);
+          const st = respondent.status;
           return (
             <div key={pid} className={cn(
               'flex items-center justify-between rounded-lg px-3 py-2 text-sm border transition-colors',
-              status === 'accept'  ? 'bg-green-900/30 border-green-800' :
-              status === 'reject'  ? 'border-gray-800 opacity-50' :
+              st === 'accept'  ? 'bg-green-900/30 border-green-800' :
+              st === 'reject'  ? 'border-gray-800 opacity-50' :
               'bg-gray-800 border-gray-700',
             )}>
               <span className={cn(
                 'font-medium',
-                status === 'accept' ? 'text-green-300' : status === 'reject' ? 'text-gray-500' : 'text-gray-400',
+                st === 'accept' ? 'text-green-300' : st === 'reject' ? 'text-gray-500' : 'text-gray-400',
               )}>
                 {p?.username}
               </span>
-              {status === 'accept' && (
+              {st === 'accept' && (
                 <button className="btn-success text-xs px-2 py-1"
                   onClick={() => send('ACCEPT_PLAYER_TRADE', { fromPlayerId: pid })}>
                   Trade ✓
                 </button>
               )}
-              {status === 'pending' && <span className="text-gray-600 text-xs">⏳</span>}
-              {status === 'reject'  && <span className="text-red-500 text-xs">✕</span>}
+              {st === 'pending' && <span className="text-gray-600 text-xs">⏳</span>}
+              {st === 'reject'  && <span className="text-red-500 text-xs">✕</span>}
             </div>
           );
         })}

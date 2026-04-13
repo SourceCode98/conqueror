@@ -8,7 +8,9 @@ export type DevCardType =
   | 'victoryPoint'
   | 'roadBuilding'
   | 'yearOfPlenty'
-  | 'monopoly';
+  | 'monopoly'
+  | 'troopSupply'
+  | 'marchOrders';
 
 export interface Building {
   type: BuildingType;
@@ -44,6 +46,7 @@ export interface PlayerState {
   hasSupremeArmy: boolean;
   hasGrandRoad: boolean;
   hasWarlord?: boolean;
+  freeSoldiers?: number;
   victoryPoints: number;       // public VP visible to all
   victoryPointCards: number;   // hidden VP from dev cards (sent only to owner)
   connected: boolean;
@@ -61,11 +64,17 @@ export type GamePhase =
   | 'WAR_DESTRUCTION'
   | 'GAME_OVER';
 
+export interface TradeRespondent {
+  status: 'pending' | 'accept' | 'reject' | 'counter' | 'rejected_by_offerer';
+  give?: ResourceBundle;  // counter: resources this player offers to give (locked = original offer.want)
+  want?: ResourceBundle;  // counter: resources this player wants from active player (negotiable)
+}
+
 export interface TradeOffer {
-  fromPlayerId: string;
-  give: ResourceBundle;
-  want: ResourceBundle;
-  respondents: Record<string, 'pending' | 'accept' | 'reject'>;
+  fromPlayerId: string;  // always the active player
+  give: ResourceBundle;  // what active player gives
+  want: ResourceBundle;  // what active player wants
+  respondents: Record<string, TradeRespondent>;
 }
 
 export interface GameLogEntry {
@@ -117,10 +126,13 @@ export interface GameState {
     totalWar?: boolean;
     fortress?: boolean;
     reconstruction?: boolean;
+    soldierFoodEnabled?: boolean;
   };
   warlordPlayerId?: string | null;
   destroyedByPlayer?: Record<string, { settlements: number; cities: number }>;
   attackUsedThisTurn?: boolean;
+  transfersUsedThisTurn?: number;
+  transferDistanceBonus?: number;
   pendingDestruction?: { targetVertex: VertexId; attackerId: string } | null;
   destroyedVertices?: Record<string, string>;  // vertexId → playerId (for reconstruction)
   fortressHits?: Record<string, number>;       // vertexId → hit count (fortress variant)

@@ -153,15 +153,17 @@
     "variants": {
       "totalWar": "⚠️ Total War — no limit on attacks per turn.",
       "fortress": "🏰 Fortress — Cities require 2 wins to downgrade.",
-      "reconstruction": "🏚️ Reconstruction — Destroyed settlements can be rebuilt for 2 Timber + 2 Clay."
+      "reconstruction": "🏚️ Reconstruction — Destroyed settlements can be rebuilt for 2 Timber + 2 Clay.",
+      "noFood": "🌾 No Food — soldiers do not consume Grain and do not desert."
     },
     "sections": {
       "soldiers": {
         "title": "Soldiers",
         "lines": [
           "Buy soldiers with Iron + Grain + Wool and assign them to your buildings.",
-          "Settlements hold up to 2 soldiers, Cities up to 4.",
-          "Every 2 soldiers cost 1 Grain per turn. If you can't pay, soldiers desert."
+          "Settlements hold up to 2 soldiers, Cities up to 3.",
+          "Every 2 soldiers cost 1 Grain per turn. If you can't pay, soldiers desert.",
+          "Move soldiers between your own buildings (within 2 road-steps) on your turn."
         ]
       },
       "attacking": {
@@ -170,7 +172,8 @@
           "On your turn (after rolling) you can attack an enemy building within 2 road-steps.",
           "Both players roll a die. Add your soldiers as a bonus (+1 per soldier, max +5).",
           "Cities add +1 for the defender (garrison bonus).",
-          "Higher total wins the battle."
+          "Higher total wins the battle.",
+          "If repelled: you lose ALL your attacking soldiers. Exception: attacking with 3 soldiers loses only 1."
         ]
       },
       "siege": {
