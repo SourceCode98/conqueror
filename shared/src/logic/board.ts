@@ -4,6 +4,11 @@ import {
   STANDARD_HEX_COORDS,
   TERRAIN_DISTRIBUTION,
   NUMBER_TOKENS,
+  LARGE_HEX_COORDS,
+  LARGE_TERRAIN_DISTRIBUTION,
+  LARGE_NUMBER_TOKENS,
+  LARGE_PORT_POSITIONS,
+  LARGE_PORT_RESOURCES,
 } from '../constants/board.js';
 
 // ─── Coordinate Math ──────────────────────────────────────────────────────────
@@ -265,9 +270,9 @@ function findAdjacentVerticesGeneral(vertexId: VertexId, boardVertices: Set<Vert
   return result;
 }
 
-function shareEdge(v1: VertexId, v2: VertexId): boolean {
+function shareEdge(v1: VertexId, v2: VertexId, hexCoords: AxialCoord[] = STANDARD_HEX_COORDS): boolean {
   // Two vertices share an edge if they appear consecutively in any hex's corner list
-  for (const coord of STANDARD_HEX_COORDS) {
+  for (const coord of hexCoords) {
     const corners = hexCornerHexSets(coord).map(canonicalVertex);
     for (let i = 0; i < 6; i++) {
       const a = corners[i];
@@ -383,18 +388,24 @@ const PORT_RESOURCES: Array<{ ratio: 2 | 3; resource: 'timber' | 'clay' | 'iron'
   { ratio: 3, resource: null },
 ];
 
-export function generateBoard(seed?: number): BoardConfig {
+export function generateBoard(seed?: number, large = false): BoardConfig {
   const rng = seededRng(seed ?? Math.floor(Math.random() * 0xffffffff));
 
+  const hexCoords = large ? LARGE_HEX_COORDS : STANDARD_HEX_COORDS;
+  const terrainDist = large ? LARGE_TERRAIN_DISTRIBUTION : TERRAIN_DISTRIBUTION;
+  const numberTokens = large ? LARGE_NUMBER_TOKENS : NUMBER_TOKENS;
+  const portPositions = large ? LARGE_PORT_POSITIONS : PORT_POSITIONS;
+  const portResourceList = large ? LARGE_PORT_RESOURCES : PORT_RESOURCES;
+
   // Shuffle terrain
-  const terrains = shuffle([...TERRAIN_DISTRIBUTION] as TerrainType[], rng);
+  const terrains = shuffle([...terrainDist] as TerrainType[], rng);
 
   // Shuffle number tokens
-  const tokens = shuffle([...NUMBER_TOKENS], rng);
+  const tokens = shuffle([...numberTokens], rng);
 
   // Assign terrains and tokens to hex coords
   let tokenIdx = 0;
-  const tiles: HexTile[] = STANDARD_HEX_COORDS.map((coord, i) => {
+  const tiles: HexTile[] = hexCoords.map((coord, i) => {
     const terrain = terrains[i];
     const numberToken = terrain === 'desert' ? null : tokens[tokenIdx++];
     return {
@@ -408,24 +419,21 @@ export function generateBoard(seed?: number): BoardConfig {
   // Collect all valid vertex and edge IDs
   const vertexSet = new Set<VertexId>();
   const edgeSet = new Set<EdgeId>();
-  const coordSet = new Set<string>(STANDARD_HEX_COORDS.map(coordKey));
 
-  for (const coord of STANDARD_HEX_COORDS) {
+  for (const coord of hexCoords) {
     for (const vid of hexVertexIds(coord)) {
       vertexSet.add(vid);
     }
     for (const eid of hexEdgeIds(coord)) {
-      // Only include edges where both sharing hexes are on the board OR it's a boundary edge
       edgeSet.add(eid);
     }
   }
 
   // Shuffle port assignments
-  const portResources = shuffle([...PORT_RESOURCES], rng);
+  const portResources = shuffle([...portResourceList], rng);
 
-  const ports: Port[] = PORT_POSITIONS.map((pos, i) => {
+  const ports: Port[] = portPositions.map((pos, i) => {
     const pr = portResources[i];
-    // Get the edge vertices for this port direction on this hex
     const edgeId = `${pos.coord.q}:${pos.coord.r}:${pos.dir}`;
     const [v1, v2] = edgeVertices(edgeId);
     return {

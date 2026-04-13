@@ -90,10 +90,14 @@ export default function ContextBar({ gameState, gameId }: Props) {
     openTradePanel, roadBuildingEdges, startRoadBuilding, cancelRoadBuilding,
     pendingBanditCoord, setPendingBanditCoord, localPlayerId,
     attackTargetVertex, setAttackTargetVertex,
+    transferFromVertex, setTransferFromVertex, transferToVertex, setTransferToVertex,
     setCombatDicePhase,
   } = useGameStore();
 
   const [attackSoldiers, setAttackSoldiers] = useState(1);
+  const [transferFrom, setTransferFrom]     = useState<string | null>(null);
+  const [transferTo, setTransferTo]         = useState<string | null>(null);
+  const [transferCount, setTransferCount]   = useState(1);
   const [yopPicking, setYopPicking]   = useState(false);
   const [yopPicks, setYopPicks]       = useState<ResourceType[]>([]);
   const [monoPicking, setMonoPicking] = useState(false);
@@ -122,6 +126,8 @@ export default function ContextBar({ gameState, gameId }: Props) {
   // Reset card picker on phase / turn change (but not steal victim — it manages its own lifecycle)
   useEffect(() => {
     setYopPicking(false); setYopPicks([]); setMonoPicking(false); setShowCards(false);
+    setTransferFrom(null); setTransferTo(null); setTransferCount(1);
+    setTransferFromVertex(null); setTransferToVertex(null);
   }, [gameState.activePlayerId, gameState.phase]);
 
   function send(type: string, extra?: object) {
@@ -509,6 +515,53 @@ export default function ContextBar({ gameState, gameId }: Props) {
           );
         })()}
 
+        {/* Transfer soldiers confirmation panel */}
+        {mode === 'transfer_soldiers' && transferFromVertex && transferToVertex && (() => {
+          const fromB = (gameState.buildings as any)[transferFromVertex];
+          const toB   = (gameState.buildings as any)[transferToVertex];
+          const maxMove = fromB?.soldiers ?? 0;
+          const maxDest = (toB?.type === 'city' ? MAX_SOLDIERS_CITY : MAX_SOLDIERS_SETTLEMENT) - (toB?.soldiers ?? 0);
+          const maxPossible = Math.min(maxMove, maxDest);
+          const clamped = Math.max(1, Math.min(transferCount, maxPossible));
+          return (
+            <div className="mx-2 mb-1 rounded-xl border border-blue-700 bg-blue-950/40 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-blue-300 text-xs font-semibold">🪖 Transferir soldados</p>
+                <button className="text-gray-500 hover:text-gray-300 text-sm leading-none"
+                  onClick={() => { setTransferFromVertex(null); setTransferToVertex(null); }}>✕</button>
+              </div>
+              <div className="flex gap-1 flex-wrap">
+                {Array.from({ length: maxMove }, (_, i) => i + 1).map(n => {
+                  const selected = n <= clamped;
+                  const disabled = n > maxPossible;
+                  return (
+                    <button key={n}
+                      className={cn('text-lg leading-none transition-all',
+                        disabled ? 'opacity-20 cursor-not-allowed' :
+                        selected ? 'opacity-100 scale-110' : 'opacity-30 hover:opacity-60'
+                      )}
+                      disabled={disabled}
+                      onClick={() => !disabled && setTransferCount(n)}>
+                      🪖
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                className="w-full rounded-lg bg-blue-700 hover:bg-blue-600 active:bg-blue-800 text-white text-xs py-2 font-semibold"
+                onClick={() => {
+                  wsService.send({ type: 'TRANSFER_SOLDIERS', payload: { gameId, fromVertexId: transferFromVertex as any, toVertexId: transferToVertex as any, count: clamped } });
+                  setBoardMode(null);
+                  setTransferFromVertex(null);
+                  setTransferToVertex(null);
+                  setTransferCount(1);
+                }}>
+                Mover {clamped} soldado{clamped !== 1 ? 's' : ''}
+              </button>
+            </div>
+          );
+        })()}
+
         {/* Action buttons row */}
         <div className="flex items-center gap-0.5 px-1 pt-1.5 pb-1 overflow-x-auto scrollbar-none">
           <ActionBtn label="Settle" disabled={!canSettle} active={mode === 'place_settlement'}
@@ -561,6 +614,15 @@ export default function ContextBar({ gameState, gameId }: Props) {
                     setBoardMode(mode === 'attack' ? null : 'attack');
                   }}>
                   <span className={cn('text-lg leading-none', !canAttack && 'opacity-40')}>⚔️</span>
+                </ActionBtn>
+                <ActionBtn label="Mover" disabled={totalSoldiers < 1} active={mode === 'transfer_soldiers'}
+                  onClick={() => {
+                    if (totalSoldiers < 1) return;
+                    setTransferFromVertex(null);
+                    setTransferToVertex(null);
+                    setBoardMode(mode === 'transfer_soldiers' ? null : 'transfer_soldiers');
+                  }}>
+                  <span className={cn('text-lg leading-none', totalSoldiers < 1 && 'opacity-40')}>↔️</span>
                 </ActionBtn>
               </>
             );

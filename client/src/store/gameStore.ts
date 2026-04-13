@@ -19,7 +19,7 @@ export interface GameToast {
   timestamp: number;
 }
 
-export type InteractionMode = null | 'place_settlement' | 'place_city' | 'place_road' | 'move_bandit' | 'recruit_soldier' | 'attack';
+export type InteractionMode = null | 'place_settlement' | 'place_city' | 'place_road' | 'move_bandit' | 'recruit_soldier' | 'attack' | 'transfer_soldiers';
 
 interface GameStore {
   gameState: PublicGameState | null;
@@ -46,6 +46,12 @@ interface GameStore {
   // War mode: attack target vertex
   attackTargetVertex: VertexId | null;
   setAttackTargetVertex: (v: VertexId | null) => void;
+
+  // War mode: transfer soldiers — source vertex
+  transferFromVertex: VertexId | null;
+  setTransferFromVertex: (v: VertexId | null) => void;
+  transferToVertex: VertexId | null;
+  setTransferToVertex: (v: VertexId | null) => void;
 
   // Drag-and-drop piece placement
   dragPiece: { type: 'settlement' | 'city' | 'road' | 'bandit'; svgX: number; svgY: number } | null;
@@ -152,6 +158,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   attackTargetVertex: null,
   setAttackTargetVertex: (v) => set({ attackTargetVertex: v }),
+
+  transferFromVertex: null,
+  setTransferFromVertex: (v) => set({ transferFromVertex: v }),
+  transferToVertex: null,
+  setTransferToVertex: (v) => set({ transferToVertex: v }),
 
   wsConnected: true,
   setWsConnected: (connected) => set({ wsConnected: connected }),

@@ -5,6 +5,7 @@ import {
   SOLDIER_COST, MAX_SOLDIERS_SETTLEMENT, MAX_SOLDIERS_CITY,
   WAR_RECONSTRUCT_COST,
   roadDistanceToVertex, countPlayerSoldiers, updateWarlord, edgeVertices, hexVertexIds,
+  recalculateSpecialCards,
 } from '@conqueror/shared';
 import type { GameOrchestrator, PendingCombat } from '../../game/GameOrchestrator.js';
 import type { ClientMeta } from '../types.js';
@@ -19,6 +20,52 @@ const combatTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function err(ctx: ActionContext, ws: WebSocket, code: string, message: string) {
   ctx.sendTo(ws, { type: 'ERROR', payload: { code, message } });
+}
+
+/**
+ * After transferring adjacent roads, flood-fill through remaining victim roads.
+ * Any victim road not reachable from a remaining victim building is also transferred
+ * to the attacker (orphaned road chain).
+ */
+function transferOrphanedRoads(
+  roads: Record<string, any>,
+  buildings: Record<string, any>,
+  victimId: string,
+  attackerId: string,
+): Record<string, any> {
+  // Seed BFS with vertices that still have a victim building
+  const seeds = Object.entries(buildings)
+    .filter(([, b]) => b.playerId === victimId)
+    .map(([vid]) => vid);
+
+  const connectedEdges = new Set<string>();
+  const visited = new Set<string>(seeds);
+  const queue = [...seeds];
+
+  while (queue.length > 0) {
+    const v = queue.shift()!;
+    for (const [edgeId, road] of Object.entries(roads)) {
+      if ((road as any).playerId !== victimId) continue;
+      if (connectedEdges.has(edgeId)) continue;
+      const [v1, v2] = edgeVertices(edgeId as EdgeId);
+      const neighbor = v1 === v ? v2 : v2 === v ? v1 : null;
+      if (neighbor === null) continue;
+      connectedEdges.add(edgeId);
+      if (!visited.has(neighbor)) {
+        visited.add(neighbor);
+        queue.push(neighbor);
+      }
+    }
+  }
+
+  const newRoads = { ...roads };
+  for (const [edgeId, road] of Object.entries(roads)) {
+    if ((road as any).playerId !== victimId) continue;
+    if (!connectedEdges.has(edgeId)) {
+      (newRoads as any)[edgeId] = { playerId: attackerId };
+    }
+  }
+  return newRoads;
 }
 
 export function handleRecruitSoldier(
@@ -54,6 +101,49 @@ export function handleRecruitSoldier(
   }));
 
   orch.addLogEntry('log.recruitedSoldier', { player: meta.username }, meta.userId);
+  ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
+}
+
+export function handleTransferSoldiers(
+  ws: WebSocket,
+  payload: { gameId: string; fromVertexId: VertexId; toVertexId: VertexId; count: number },
+  meta: ClientMeta,
+  orch: GameOrchestrator,
+  ctx: ActionContext,
+): void {
+  const state = orch.getState();
+  if (!state.warMode) return;
+  if (state.phase !== 'ACTION') { err(ctx, ws, 'WRONG_PHASE', 'Can only transfer soldiers in ACTION phase'); return; }
+
+  const { fromVertexId, toVertexId, count } = payload;
+  if (fromVertexId === toVertexId) { err(ctx, ws, 'SAME_VERTEX', 'Source and destination must differ'); return; }
+  if (!Number.isInteger(count) || count < 1) { err(ctx, ws, 'INVALID_COUNT', 'Count must be at least 1'); return; }
+
+  const from = state.buildings[fromVertexId];
+  const to   = state.buildings[toVertexId];
+  if (!from || from.playerId !== meta.userId) { err(ctx, ws, 'NOT_OWNER', 'Source building not yours'); return; }
+  if (!to   || to.playerId   !== meta.userId) { err(ctx, ws, 'NOT_OWNER', 'Destination building not yours'); return; }
+
+  const available = from.soldiers ?? 0;
+  if (count > available) { err(ctx, ws, 'NOT_ENOUGH_SOLDIERS', `Only ${available} soldiers available`); return; }
+
+  const maxDest = to.type === 'city' ? MAX_SOLDIERS_CITY : MAX_SOLDIERS_SETTLEMENT;
+  const free    = maxDest - (to.soldiers ?? 0);
+  if (free <= 0) { err(ctx, ws, 'DEST_FULL', 'Destination building is at soldier capacity'); return; }
+
+  const dist = roadDistanceToVertex(state, meta.userId, toVertexId);
+  if (dist > 2) { err(ctx, ws, 'TOO_FAR', 'Buildings must be within 2 road-steps'); return; }
+
+  const move = Math.min(count, free);
+  orch.updateState(s => ({
+    ...s,
+    buildings: {
+      ...s.buildings,
+      [fromVertexId]: { ...s.buildings[fromVertexId as any], soldiers: available - move },
+      [toVertexId]:   { ...s.buildings[toVertexId   as any], soldiers: (to.soldiers ?? 0) + move },
+    },
+  }));
+
   ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
 }
 
@@ -295,7 +385,7 @@ export function handleChooseDestruction(
         : s.destroyedVertices;
 
       // Transfer adjacent victim roads to attacker
-      const newRoads = { ...s.roads } as Record<string, any>;
+      let newRoads = { ...s.roads } as Record<string, any>;
       for (const [edgeId, road] of Object.entries(s.roads)) {
         if (road.playerId !== victimId) continue;
         const [v1, v2] = edgeVertices(edgeId as EdgeId);
@@ -304,7 +394,10 @@ export function handleChooseDestruction(
         }
       }
 
-      return updateWarlord({
+      // Transfer orphaned victim roads (chains no longer connected to any victim building)
+      newRoads = transferOrphanedRoads(newRoads, newBuildings, victimId, meta.userId);
+
+      const intermediate = updateWarlord({
         ...s,
         buildings: newBuildings,
         roads: newRoads as any,
@@ -314,6 +407,7 @@ export function handleChooseDestruction(
         pendingDestruction: null,
         phase: 'ACTION',
       });
+      return { ...intermediate, players: recalculateSpecialCards(intermediate) };
     });
 
   } else if (destructionType === 'downgrade') {
@@ -357,8 +451,19 @@ export function handleChooseDestruction(
       );
       const newSoldiers = Math.min(targetBuilding.soldiers ?? 0, MAX_SOLDIERS_SETTLEMENT);
 
+      const newBuildings = {
+        ...s.buildings,
+        [targetVertex]: {
+          type: 'settlement',
+          playerId: victimId,
+          soldiers: newSoldiers,
+          sieged: false,
+          siegedBy: null,
+        },
+      } as Record<string, any>;
+
       // Transfer adjacent victim roads to attacker
-      const newRoads = { ...s.roads } as Record<string, any>;
+      let newRoads = { ...s.roads } as Record<string, any>;
       for (const [edgeId, road] of Object.entries(s.roads)) {
         if (road.playerId !== victimId) continue;
         const [v1, v2] = edgeVertices(edgeId as EdgeId);
@@ -367,18 +472,12 @@ export function handleChooseDestruction(
         }
       }
 
-      return updateWarlord({
+      // Transfer orphaned victim roads (chains no longer connected to any victim building)
+      newRoads = transferOrphanedRoads(newRoads, newBuildings, victimId, meta.userId);
+
+      const intermediate = updateWarlord({
         ...s,
-        buildings: {
-          ...s.buildings,
-          [targetVertex]: {
-            type: 'settlement',
-            playerId: victimId,
-            soldiers: newSoldiers,
-            sieged: false,
-            siegedBy: null,
-          },
-        },
+        buildings: newBuildings as any,
         roads: newRoads as any,
         players,
         destroyedByPlayer: db2,
@@ -386,6 +485,7 @@ export function handleChooseDestruction(
         pendingDestruction: null,
         phase: 'ACTION',
       });
+      return { ...intermediate, players: recalculateSpecialCards(intermediate) };
     });
 
   } else {

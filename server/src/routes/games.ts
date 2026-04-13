@@ -35,8 +35,8 @@ gamesRouter.post('/', (req, res) => {
     res.status(400).json({ error: 'Game name is required' });
     return;
   }
-  if (maxPlayers < 2 || maxPlayers > 4) {
-    res.status(400).json({ error: 'maxPlayers must be 2-4' });
+  if (maxPlayers < 2 || maxPlayers > 6) {
+    res.status(400).json({ error: 'maxPlayers must be 2-6' });
     return;
   }
   if (!color || !IS_VALID_PLAYER_COLOR(color)) {

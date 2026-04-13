@@ -144,7 +144,7 @@ export default function LobbyPage() {
               <div>
                 <label className="block text-sm text-gray-400 mb-1">{t('maxPlayers')}</label>
                 <select className="input" value={maxPlayers} onChange={e => setMaxPlayers(Number(e.target.value))}>
-                  {[2, 3, 4].map(n => <option key={n} value={n}>{n}</option>)}
+                  {[2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n}</option>)}
                 </select>
               </div>
               <div>

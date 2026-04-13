@@ -65,7 +65,7 @@ export function handlePlaceBuilding(
     orch.updateState(s => {
       const intermediate = {
         ...s,
-        buildings: { ...s.buildings, [vertexId]: { type: 'city' as const, playerId: meta.userId } },
+        buildings: { ...s.buildings, [vertexId]: { type: 'city' as const, playerId: meta.userId, soldiers: s.buildings[vertexId as any]?.soldiers ?? 0 } },
         players: s.players.map(p =>
           p.id === meta.userId
             ? {

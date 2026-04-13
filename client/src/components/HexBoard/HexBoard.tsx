@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PublicGameState, VertexId, EdgeId, AxialCoord, HexTile, ResourceType } from '@conqueror/shared';
-import { edgeVertices, adjacentVertices, roadDistanceToVertex } from '@conqueror/shared';
+import { edgeVertices, adjacentVertices, roadDistanceToVertex, MAX_SOLDIERS_CITY, MAX_SOLDIERS_SETTLEMENT } from '@conqueror/shared';
 import { useGameStore } from '../../store/gameStore.js';
 import { wsService } from '../../services/wsService.js';
 import { SettlementSvg, CitySvg, BanditSvg } from '../icons/GameIcons.js';
@@ -12,6 +12,7 @@ import {
   vertexToPixel,
   edgeMidpoint,
   BOARD_VIEWBOX,
+  LARGE_BOARD_VIEWBOX,
   TERRAIN_COLORS,
   TERRAIN_HIGHLIGHT,
   PLAYER_COLOR_HEX,
@@ -371,6 +372,8 @@ export default function HexBoard({ state }: HexBoardProps) {
     cancelRoadBuilding,
     localPlayerId,
     setAttackTargetVertex,
+    transferFromVertex, setTransferFromVertex,
+    setTransferToVertex,
   } = useGameStore();
 
   const myTurn = isMyTurn();
@@ -490,6 +493,29 @@ export default function HexBoard({ state }: HexBoardProps) {
       return;
     }
 
+    // War: transfer soldiers — tap 1 = source, tap 2 = destination
+    if (boardMode === 'transfer_soldiers' && myTurn) {
+      const building = (state.buildings as any)[vertexId];
+      if (!building || building.playerId !== localPlayerId) return;
+      if (!transferFromVertex) {
+        // First tap: select source (must have soldiers)
+        if ((building.soldiers ?? 0) > 0) setTransferFromVertex(vertexId);
+      } else if (vertexId === transferFromVertex) {
+        // Tap same: deselect
+        setTransferFromVertex(null);
+        setTransferToVertex(null);
+      } else {
+        // Second tap: select destination (must have capacity and be in range)
+        const max = building.type === 'city' ? MAX_SOLDIERS_CITY : MAX_SOLDIERS_SETTLEMENT;
+        const free = max - (building.soldiers ?? 0);
+        const dist = roadDistanceToVertex(state as any, localPlayerId!, vertexId);
+        if (free > 0 && dist <= 2) {
+          setTransferToVertex(vertexId);
+        }
+      }
+      return;
+    }
+
     if (!myTurn) return;
     if (boardMode === 'place_settlement' || boardMode === 'place_city') {
       wsService.send({ type: 'PLACE_BUILDING', payload: {
@@ -547,7 +573,7 @@ export default function HexBoard({ state }: HexBoardProps) {
   }, [state.diceRoll]);
 
   const isRobberClickable = boardMode === 'move_bandit' && myTurn && !dragPiece;
-  const isVertexClickable = (boardMode === 'place_settlement' || boardMode === 'place_city' || boardMode === 'recruit_soldier' || boardMode === 'attack') && myTurn && !dragPiece;
+  const isVertexClickable = (boardMode === 'place_settlement' || boardMode === 'place_city' || boardMode === 'recruit_soldier' || boardMode === 'attack' || boardMode === 'transfer_soldiers') && myTurn && !dragPiece;
   const isEdgeClickable   = boardMode === 'place_road' && myTurn && !dragPiece;
   const showDragVertex    = dragPiece && (dragPiece.type === 'settlement' || dragPiece.type === 'city');
   const showDragEdge      = dragPiece?.type === 'road';
@@ -558,7 +584,7 @@ export default function HexBoard({ state }: HexBoardProps) {
     <div className="relative w-full h-full flex items-center justify-center">
       <svg
         ref={svgRef}
-        viewBox={BOARD_VIEWBOX}
+        viewBox={state.board.tiles.length > 19 ? LARGE_BOARD_VIEWBOX : BOARD_VIEWBOX}
         className="max-w-full max-h-full"
         style={{ width: '100%', height: '100%' }}
       >
@@ -785,6 +811,29 @@ export default function HexBoard({ state }: HexBoardProps) {
             return (
               <circle key={vid} cx={pos.x} cy={pos.y} r={12}
                 fill="rgba(251,191,36,0.3)" stroke="#fbbf24" strokeWidth={2}
+                style={{ cursor: 'pointer' }}
+                onClick={() => handleVertexClick(vid as VertexId)}/>
+            );
+          }
+          if (boardMode === 'transfer_soldiers') {
+            const b = (state.buildings as any)[vid];
+            if (!b || b.playerId !== localPlayerId) return null;
+            const pos = vertexToPixel(vid as VertexId);
+            const isSource = vid === transferFromVertex;
+            const hasSoldiers = (b.soldiers ?? 0) > 0;
+            const maxCap = b.type === 'city' ? MAX_SOLDIERS_CITY : MAX_SOLDIERS_SETTLEMENT;
+            const hasFree = (b.soldiers ?? 0) < maxCap;
+            const dist = transferFromVertex
+              ? roadDistanceToVertex(state as any, localPlayerId!, vid as VertexId)
+              : 0;
+            const inRange = !transferFromVertex || vid === transferFromVertex || dist <= 2;
+            // Source phase: show buildings with soldiers; Dest phase: show buildings in range with space
+            if (!transferFromVertex && !hasSoldiers) return null;
+            if (transferFromVertex && !isSource && (!hasFree || !inRange)) return null;
+            const color = isSource ? '#f97316' : transferFromVertex ? '#60a5fa' : '#fbbf24';
+            return (
+              <circle key={vid} cx={pos.x} cy={pos.y} r={13}
+                fill={`${color}33`} stroke={color} strokeWidth={2}
                 style={{ cursor: 'pointer' }}
                 onClick={() => handleVertexClick(vid as VertexId)}/>
             );

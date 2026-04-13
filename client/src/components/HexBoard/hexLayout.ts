@@ -67,8 +67,10 @@ export function edgeMidpoint(edgeId: EdgeId): { x: number; y: number } {
   return { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
 }
 
-/** SVG viewBox covering the full standard board */
+/** SVG viewBox covering the full standard board (radius 2) */
 export const BOARD_VIEWBOX = '-280 -280 560 560';
+/** SVG viewBox covering the large board (radius 3, 5-6 players) */
+export const LARGE_BOARD_VIEWBOX = '-420 -380 840 760';
 
 /** Color map for terrain types — each terrain has a clearly distinct hue */
 export const TERRAIN_COLORS: Record<string, string> = {

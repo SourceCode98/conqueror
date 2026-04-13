@@ -40,6 +40,7 @@ export type ClientMessage =
   | WSMessage<'HORN',                { gameId: string }>
   | WSMessage<'PLAY_AGAIN_VOTE',     { gameId: string; accept: boolean }>
   | WSMessage<'RECRUIT_SOLDIER',    { gameId: string; vertexId: VertexId }>
+  | WSMessage<'TRANSFER_SOLDIERS',  { gameId: string; fromVertexId: VertexId; toVertexId: VertexId; count: number }>
   | WSMessage<'ATTACK',             { gameId: string; targetVertexId: VertexId; soldiers: number }>
   | WSMessage<'COMBAT_ROLL',        { gameId: string }>
   | WSMessage<'CHOOSE_DESTRUCTION', { gameId: string; destructionType: 'destroy' | 'downgrade' }>

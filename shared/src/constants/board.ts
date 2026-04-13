@@ -17,6 +17,24 @@ export const STANDARD_HEX_COORDS: AxialCoord[] = [
   { q: -2, r: 2 }, { q: -1, r: 2 }, { q: 0, r: 2 },
 ];
 
+// Large 4-5-6-7-6-5-4 hex layout (radius 3, 37 tiles) for 5-6 players
+export const LARGE_HEX_COORDS: AxialCoord[] = [
+  // row 0 — 4 hexes
+  { q: 0, r: -3 }, { q: 1, r: -3 }, { q: 2, r: -3 }, { q: 3, r: -3 },
+  // row 1 — 5 hexes
+  { q: -1, r: -2 }, { q: 0, r: -2 }, { q: 1, r: -2 }, { q: 2, r: -2 }, { q: 3, r: -2 },
+  // row 2 — 6 hexes
+  { q: -2, r: -1 }, { q: -1, r: -1 }, { q: 0, r: -1 }, { q: 1, r: -1 }, { q: 2, r: -1 }, { q: 3, r: -1 },
+  // row 3 — 7 hexes (middle)
+  { q: -3, r: 0 }, { q: -2, r: 0 }, { q: -1, r: 0 }, { q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }, { q: 3, r: 0 },
+  // row 4 — 6 hexes
+  { q: -3, r: 1 }, { q: -2, r: 1 }, { q: -1, r: 1 }, { q: 0, r: 1 }, { q: 1, r: 1 }, { q: 2, r: 1 },
+  // row 5 — 5 hexes
+  { q: -3, r: 2 }, { q: -2, r: 2 }, { q: -1, r: 2 }, { q: 0, r: 2 }, { q: 1, r: 2 },
+  // row 6 — 4 hexes
+  { q: -3, r: 3 }, { q: -2, r: 3 }, { q: -1, r: 3 }, { q: 0, r: 3 },
+];
+
 // Resource distribution: 4+3+3+4+4+1 = 19 tiles
 export const TERRAIN_DISTRIBUTION: TerrainType[] = [
   'timber', 'timber', 'timber', 'timber',
@@ -27,9 +45,55 @@ export const TERRAIN_DISTRIBUTION: TerrainType[] = [
   'desert',
 ];
 
+// Large board resource distribution: 7×5 resources + 2 deserts = 37 tiles
+export const LARGE_TERRAIN_DISTRIBUTION: TerrainType[] = [
+  'timber', 'timber', 'timber', 'timber', 'timber', 'timber', 'timber',
+  'clay', 'clay', 'clay', 'clay', 'clay', 'clay', 'clay',
+  'iron', 'iron', 'iron', 'iron', 'iron', 'iron', 'iron',
+  'grain', 'grain', 'grain', 'grain', 'grain', 'grain', 'grain',
+  'wool', 'wool', 'wool', 'wool', 'wool', 'wool', 'wool',
+  'desert', 'desert',
+];
+
 // Standard number tokens (18 for 18 resource hexes, desert gets none)
 export const NUMBER_TOKENS: number[] = [
   2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12,
+];
+
+// Large board number tokens (35 for 35 resource hexes)
+export const LARGE_NUMBER_TOKENS: number[] = [
+  2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6,
+  8, 8, 8, 8, 9, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11, 11, 12, 12,
+];
+
+// Large board port positions (11 ports distributed around radius-3 boundary)
+// Each entry: the boundary hex coord + the edge direction facing the ocean
+export const LARGE_PORT_POSITIONS: Array<{ coord: AxialCoord; dir: 'NE' | 'E' | 'SE' | 'SW' | 'W' | 'NW' }> = [
+  { coord: { q: 0, r: -3 }, dir: 'NW' },   // top boundary, left
+  { coord: { q: 2, r: -3 }, dir: 'NE' },   // top boundary, right
+  { coord: { q: 3, r: -3 }, dir: 'NE' },   // top-right corner
+  { coord: { q: 3, r: -1 }, dir: 'E' },    // right side
+  { coord: { q: 2, r: 1 },  dir: 'SE' },   // lower-right diagonal
+  { coord: { q: 0, r: 3 },  dir: 'SW' },   // bottom, right
+  { coord: { q: -2, r: 3 }, dir: 'SW' },   // bottom, left
+  { coord: { q: -3, r: 3 }, dir: 'W' },    // bottom-left corner
+  { coord: { q: -3, r: 1 }, dir: 'W' },    // left side
+  { coord: { q: -3, r: 0 }, dir: 'NW' },   // upper-left corner
+  { coord: { q: -1, r: -2 }, dir: 'NW' },  // upper-left diagonal
+];
+
+export const LARGE_PORT_RESOURCES: Array<{ ratio: 2 | 3; resource: 'timber' | 'clay' | 'iron' | 'grain' | 'wool' | null }> = [
+  { ratio: 2, resource: 'timber' },
+  { ratio: 2, resource: 'clay' },
+  { ratio: 2, resource: 'iron' },
+  { ratio: 2, resource: 'grain' },
+  { ratio: 2, resource: 'wool' },
+  { ratio: 3, resource: null },
+  { ratio: 3, resource: null },
+  { ratio: 3, resource: null },
+  { ratio: 3, resource: null },
+  { ratio: 3, resource: null },
+  { ratio: 3, resource: null },
 ];
 
 // Build costs

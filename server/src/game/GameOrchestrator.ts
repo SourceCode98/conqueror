@@ -64,7 +64,7 @@ export class GameOrchestrator {
     this.gameId = gameId;
     this.db = db;
 
-    const board = generateBoard(seed);
+    const board = generateBoard(seed, players.length >= 5);
     const banditLocation = findDesertCoord(board);
 
     // Shuffle dev card deck

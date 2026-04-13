@@ -14,7 +14,7 @@ import { handleMoveBandit } from './actions/bandit.js';
 import { handleDiscardCards } from './actions/discard.js';
 import { handleEndGame } from './actions/endGame.js';
 import { handleForceEndTurn } from './actions/forceEndTurn.js';
-import { handleRecruitSoldier, handleAttack, handleCombatRoll, handleChooseDestruction, handleReconstruct } from './actions/war.js';
+import { handleRecruitSoldier, handleTransferSoldiers, handleAttack, handleCombatRoll, handleChooseDestruction, handleReconstruct } from './actions/war.js';
 
 export interface ActionContext {
   broadcastToRoom: (msg: ServerMessage) => void;
@@ -98,6 +98,9 @@ export function handleGameAction(
         break;
       case 'RECRUIT_SOLDIER':
         handleRecruitSoldier(ws, msg.payload as any, meta, orch, ctx);
+        break;
+      case 'TRANSFER_SOLDIERS':
+        handleTransferSoldiers(ws, msg.payload as any, meta, orch, ctx);
         break;
       case 'ATTACK':
         handleAttack(ws, msg.payload as any, meta, orch, ctx);
