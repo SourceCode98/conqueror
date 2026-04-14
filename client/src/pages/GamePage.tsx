@@ -299,6 +299,18 @@ export default function GamePage() {
     return () => clearInterval(interval);
   }, [gameState, fetchLobbyInfo]);
 
+  // Handle lobby-specific WS events
+  useEffect(() => {
+    if (gameState) return;
+    return wsService.onMessage(msg => {
+      if (msg.type === 'HOST_CHANGED') {
+        setLobbyInfo(prev => prev ? { ...prev, created_by_username: msg.payload.newHostUsername } : prev);
+      } else if (msg.type === 'GAME_CLOSED') {
+        navigate('/lobby');
+      }
+    });
+  }, [gameState, navigate]);
+
   // Close mobile sheet when a trade panel opens
   useEffect(() => {
     if (tradePanel !== null) setMobileSheet(null);
@@ -346,9 +358,6 @@ export default function GamePage() {
         <div className="w-10 h-10 rounded-full border-4 border-amber-500 border-t-transparent animate-spin" />
         <p className="text-amber-400 text-lg font-semibold">Reconnecting…</p>
         <p className="text-gray-500 text-sm">{lobbyInfo?.name}</p>
-        <button className="mt-4 text-gray-500 hover:text-gray-300 text-sm" onClick={() => navigate('/lobby')}>
-          ← Leave game
-        </button>
       </div>
     );
   }

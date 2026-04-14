@@ -486,6 +486,40 @@ function handleDisconnect(ws: WebSocket): void {
     type: 'PLAYER_DISCONNECTED',
     payload: { playerId: meta.userId },
   });
+
+  // Handle host leaving the lobby
+  if (!orch) {
+    const game = db.prepare('SELECT status, created_by FROM games WHERE id = ?')
+      .get(meta.gameId) as { status: string; created_by: string } | undefined;
+
+    if (game && game.status === 'lobby' && game.created_by === meta.userId) {
+      const currentRoom = rooms.get(meta.gameId);
+      const connectedIds: string[] = [];
+      if (currentRoom) {
+        for (const client of currentRoom) {
+          if (client.readyState === WebSocket.OPEN) {
+            const m = clientMeta.get(client);
+            if (m) connectedIds.push(m.userId);
+          }
+        }
+      }
+
+      if (connectedIds.length === 0) {
+        db.prepare('DELETE FROM games WHERE id = ?').run(meta.gameId);
+      } else {
+        const newHostId = connectedIds[0];
+        db.prepare('UPDATE games SET created_by = ? WHERE id = ?').run(newHostId, meta.gameId);
+        const newHostUser = db.prepare('SELECT username FROM users WHERE id = ?')
+          .get(newHostId) as { username: string } | undefined;
+        if (newHostUser) {
+          broadcastToRoom(meta.gameId, {
+            type: 'HOST_CHANGED',
+            payload: { newHostId, newHostUsername: newHostUser.username },
+          });
+        }
+      }
+    }
+  }
 }
 
 // ─── Broadcast Helpers ────────────────────────────────────────────────────────

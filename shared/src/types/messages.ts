@@ -68,6 +68,7 @@ export type ServerMessage =
   | WSMessage<'PLAY_AGAIN_POLL',     { votes: Record<string, boolean | null>; secondsLeft: number }>
   | WSMessage<'PLAY_AGAIN_START',    { newGameId: string }>
   | WSMessage<'GAME_CLOSED',         { reason: string }>
+  | WSMessage<'HOST_CHANGED',        { newHostId: string; newHostUsername: string }>
   | WSMessage<'COMBAT_DICE_PHASE',   { attackerId: string; defenderId: string; attackerName: string; defenderName: string; timeoutSecs: number }>
   | WSMessage<'COMBAT_DIE_REVEALED', { side: 'attacker' | 'defender'; value: number }>
   | WSMessage<'COMBAT_RESULT',       { attackerForce: number; defenderForce: number; attackerWon: boolean; effect: 'siege' | 'destruction_choice' | 'repelled'; attackerName: string; defenderName: string; attackerDie: number; defenderDie: number; attackSoldiers: number; defenderSoldiers: number; cityBonus: number; garrisonBonus: number }>
