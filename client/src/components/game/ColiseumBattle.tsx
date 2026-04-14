@@ -10,7 +10,11 @@ const ARENA_RADIUS  = 11;
 const MOVE_SPEED    = 5.5;
 const POS_SEND_MS   = 50;   // 20 fps position sync
 const ATTACK_ANIM_MS = 280;
-const WIN_SCORE     = 3;
+const WIN_SCORE        = 3;
+const STAMINA_MAX      = 100;
+const STAMINA_ATK_COST = 28;  // consumed per swing
+const STAMINA_SHD_DRAIN = 18; // per second while shielding
+const STAMINA_REGEN    = 22;  // per second while not shielding
 const isMobileDevice = () => /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || ('ontouchstart' in window);
 
 // ─── Arena builder ────────────────────────────────────────────────────────────
@@ -232,6 +236,9 @@ export function ColiseumBattle() {
   };
   const [portrait, setPortrait]       = useState(isPortrait);
   const [showControls, setShowControls] = useState(true);
+  const [awaitingPortraitReturn, setAwaitingPortraitReturn] = useState(false);
+  const staminaRef    = useRef(STAMINA_MAX);
+  const [staminaDisplay, setStaminaDisplay] = useState(STAMINA_MAX);
 
   const battle        = gameState?.coliseumBattle;
   const isActive      = gameState?.phase === 'COLISEUM_BATTLE' && !!battle;
@@ -291,12 +298,26 @@ export function ColiseumBattle() {
     return () => clearTimeout(t);
   }, [hitEventStore]);
 
-  // Auto-dismiss battle over
+  // Auto-dismiss battle result; on mobile+landscape hand off to portrait-return gate
   useEffect(() => {
     if (!battleOver) return;
-    const t = setTimeout(() => clearBattleOver(), 4000);
+    const t = setTimeout(() => {
+      if (mobile && !isPortrait()) {
+        setAwaitingPortraitReturn(true);
+      } else {
+        clearBattleOver();
+      }
+    }, 4000);
     return () => clearTimeout(t);
-  }, [battleOver]);
+  }, [battleOver]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Once user rotates back to portrait after battle, unblock normal game
+  useEffect(() => {
+    if (awaitingPortraitReturn && portrait) {
+      setAwaitingPortraitReturn(false);
+      clearBattleOver();
+    }
+  }, [awaitingPortraitReturn, portrait]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Three.js game ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -369,7 +390,10 @@ export function ColiseumBattle() {
     const keys = new Set<string>();
     let lastSend = 0;
     let lastAttack = 0;
+    let lastStaminaSync = 0;
     let swordSwing = false;
+    staminaRef.current = STAMINA_MAX;
+    setStaminaDisplay(STAMINA_MAX);
     let walkPhase = 0;       // walk cycle accumulator
     let remoteWalkPhase = 0; // for remote player
 
@@ -377,8 +401,10 @@ export function ColiseumBattle() {
     function doAttack() {
       const now = performance.now();
       if (now - lastAttack < 950) return;
-      lastAttack = now;
       if (swordSwing) return;
+      if (staminaRef.current < STAMINA_ATK_COST) return;
+      staminaRef.current = Math.max(0, staminaRef.current - STAMINA_ATK_COST);
+      lastAttack = now;
       swordSwing = true;
       const sw = localMesh.userData.sword as THREE.Group;
       sw.rotation.x = -1.1;
@@ -443,33 +469,35 @@ export function ColiseumBattle() {
     // ── Touch / virtual joystick ──
     const touchIds = new Map<number, 'move' | 'look'>();
     const onTouchStart = (e: TouchEvent) => {
+      e.preventDefault();
+      const cW = container.clientWidth;
       for (const t of Array.from(e.changedTouches)) {
-        const relX = t.clientX / W;
-        if (relX < 0.45 && !joyMove.current.active) {
+        const relX = t.clientX / cW;
+        if (relX < 0.5 && !joyMove.current.active) {
           joyMove.current = { active: true, cx: t.clientX, cy: t.clientY, dx: 0, dy: 0 };
           touchIds.set(t.identifier, 'move');
-        } else if (relX >= 0.45 && !joyLook.current.active) {
+        } else if (relX >= 0.5 && !joyLook.current.active) {
           joyLook.current = { active: true, cx: t.clientX, cy: t.clientY, dx: 0, dy: 0 };
           touchIds.set(t.identifier, 'look');
         }
       }
     };
     const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
       for (const t of Array.from(e.changedTouches)) {
         const kind = touchIds.get(t.identifier);
         if (kind === 'move') {
-          joyMove.current.dx = (t.clientX - joyMove.current.cx);
-          joyMove.current.dy = (t.clientY - joyMove.current.cy);
+          joyMove.current.dx = t.clientX - joyMove.current.cx;
+          joyMove.current.dy = t.clientY - joyMove.current.cy;
         } else if (kind === 'look') {
-          const ddx = t.clientX - joyLook.current.cx;
-          yawRef.current += ddx * 0.003;
-          joyLook.current.cx = t.clientX;
-          joyLook.current.cy = t.clientY;
-          joyLook.current.dx = 0; joyLook.current.dy = 0;
+          // Positional joystick: offset drives turn speed in game loop
+          joyLook.current.dx = t.clientX - joyLook.current.cx;
+          joyLook.current.dy = t.clientY - joyLook.current.cy;
         }
       }
     };
     const onTouchEnd = (e: TouchEvent) => {
+      e.preventDefault();
       for (const t of Array.from(e.changedTouches)) {
         const kind = touchIds.get(t.identifier);
         if (kind === 'move') joyMove.current = { active: false, cx: 0, cy: 0, dx: 0, dy: 0 };
@@ -477,9 +505,9 @@ export function ColiseumBattle() {
         touchIds.delete(t.identifier);
       }
     };
-    renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: true });
-    renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: true });
-    renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: true });
+    renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: false });
+    renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+    renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: false });
 
     // ── Resize ──
     const onResize = () => {
@@ -518,6 +546,10 @@ export function ColiseumBattle() {
           const jm = joyMove.current;
           if (Math.abs(jm.dx) > DEAD) mx = Math.max(-1, Math.min(1, jm.dx / 55));
           if (Math.abs(jm.dy) > DEAD) mz = Math.max(-1, Math.min(1, jm.dy / -55));
+          // Look joystick: x-offset → yaw rotation speed
+          if (joyLook.current.active && Math.abs(joyLook.current.dx) > DEAD) {
+            yawRef.current += Math.max(-1, Math.min(1, joyLook.current.dx / 50)) * dt * 2.8;
+          }
         } else {
           if (keys.has('KeyW') || keys.has('ArrowUp'))    mz =  1;
           if (keys.has('KeyS') || keys.has('ArrowDown'))  mz = -1;
@@ -556,6 +588,18 @@ export function ColiseumBattle() {
           p.z - Math.cos(y) * CDIST,
         );
         camera.lookAt(p.x, 1.3, p.z);
+
+        // ── Stamina ──
+        if (shielding.current) {
+          staminaRef.current = Math.max(0, staminaRef.current - STAMINA_SHD_DRAIN * dt);
+          if (staminaRef.current === 0) shielding.current = false; // force drop shield
+        } else {
+          staminaRef.current = Math.min(STAMINA_MAX, staminaRef.current + STAMINA_REGEN * dt);
+        }
+        if (now - lastStaminaSync > 80) {
+          lastStaminaSync = now;
+          setStaminaDisplay(Math.round(staminaRef.current));
+        }
 
         // ── Send position update ──
         if (now - lastSend > POS_SEND_MS) {
@@ -643,8 +687,20 @@ export function ColiseumBattle() {
     };
   }, [isActive, mobile && portrait]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // On mobile portrait show the rotate prompt as soon as a battle is active
-  if (mobile && portrait && isActive && !battleOver) {
+  // After battle: mobile + still landscape → gate until user rotates back to portrait
+  if (awaitingPortraitReturn) {
+    return (
+      <div className="fixed inset-0 z-[60] bg-black flex flex-col items-center justify-center gap-6 p-8 text-center">
+        <div className="text-7xl" style={{ animation: 'spin 2s linear infinite', animationDirection: 'reverse' }}>📱</div>
+        <p className="text-white text-2xl font-black">Rotate Back</p>
+        <p className="text-gray-400 text-sm">Rotate your device back to portrait to continue playing</p>
+        <div className="text-emerald-400 text-4xl mt-2">✓</div>
+      </div>
+    );
+  }
+
+  // During battle: mobile + portrait → show rotate-to-landscape prompt (battle frozen)
+  if (mobile && portrait && isActive) {
     return (
       <div className="fixed inset-0 z-[60] bg-black flex flex-col items-center justify-center gap-6 p-8 text-center">
         <div className="text-7xl" style={{ animation: 'spin 2s linear infinite' }}>📱</div>
@@ -665,7 +721,7 @@ export function ColiseumBattle() {
   const isCombatant = localId === battle?.attackerId || localId === battle?.defenderId;
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black">
+    <div className="fixed inset-0 z-[60] bg-black" style={{ touchAction: 'none' }}>
       {/* Three.js canvas mount */}
       <div ref={mountRef} className="absolute inset-0" />
 
@@ -721,6 +777,28 @@ export function ColiseumBattle() {
             )}
           </AnimatePresence>
         </div>
+
+        {/* Stamina bar — local combatant only */}
+        {isCombatant && (
+          <div className="absolute bottom-0 left-0 right-0 pointer-events-none flex flex-col items-center pb-3"
+            style={{ bottom: mobile ? 250 : 16 }}>
+            <span className="text-[9px] font-black tracking-widest mb-0.5"
+              style={{ color: staminaDisplay > 50 ? '#eab308' : staminaDisplay > 25 ? '#f97316' : '#ef4444', opacity: 0.85 }}>
+              STAMINA
+            </span>
+            <div className="rounded-full overflow-hidden" style={{ width: 160, height: 6, background: 'rgba(255,255,255,0.08)' }}>
+              <div
+                className="h-full rounded-full"
+                style={{
+                  width: `${(staminaDisplay / STAMINA_MAX) * 100}%`,
+                  background: staminaDisplay > 50 ? '#eab308' : staminaDisplay > 25 ? '#f97316' : '#ef4444',
+                  boxShadow: `0 0 8px ${staminaDisplay > 50 ? '#eab308aa' : '#f97316aa'}`,
+                  transition: 'width 0.08s linear, background 0.3s',
+                }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Controls hint (desktop, auto-hides after 5s) */}
         <AnimatePresence>
@@ -800,10 +878,21 @@ export function ColiseumBattle() {
             <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[9px] text-white/40 font-bold tracking-wide">MOVE</span>
           </div>
 
-          {/* Right look zone label */}
+          {/* Right look joystick */}
           <div className="absolute pointer-events-none" style={{ right: 20, bottom: 20, width: 120, height: 120 }}>
-            <div className="absolute inset-0 rounded-full" style={{ background: 'rgba(255,255,255,0.05)', border: '2px solid rgba(255,255,255,0.12)' }} />
-            <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[9px] text-white/30 font-bold tracking-wide">LOOK</span>
+            <div className="absolute inset-0 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', border: '2px solid rgba(255,255,255,0.18)' }} />
+            <div
+              className="absolute rounded-full"
+              style={{
+                width: 48, height: 48,
+                left: 36 + (joyLook.current.active ? Math.max(-36, Math.min(36, joyLook.current.dx)) : 0),
+                top:  36 + (joyLook.current.active ? Math.max(-36, Math.min(36, joyLook.current.dy)) : 0),
+                background: 'rgba(255,255,255,0.22)',
+                border: '2px solid rgba(255,255,255,0.42)',
+                transition: joyLook.current.active ? 'none' : 'left 0.1s, top 0.1s',
+              }}
+            />
+            <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[9px] text-white/40 font-bold tracking-wide">LOOK</span>
           </div>
 
           {/* Attack button — bottom-right above look area */}

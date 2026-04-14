@@ -115,7 +115,7 @@ function MobileDiceWidget({ diceRoll, phase, gameId }: {
 
 // ── Persistent mobile chat input strip ──────────────────────────────────────
 function MobileChatBar({ gameId }: { gameId: string }) {
-  const { chatMessages } = useGameStore();
+  const chatMessages = useGameStore(s => s.chatMessages);
   const [text, setText] = useState('');
   const [kbOffset, setKbOffset] = useState(0);
   const lastMsg = chatMessages[chatMessages.length - 1];
@@ -204,7 +204,18 @@ export default function GamePage() {
   const { t } = useTranslation('game');
   const navigate = useNavigate();
   const { token, user } = useAuthStore();
-  const { gameState, localPlayerId, setLocalPlayerId, resetGame, tradePanel, closeTradePanel, stolenReveal, clearStolenReveal, wsConnected, chatMessages, lobbySettings } = useGameStore();
+  const gameState        = useGameStore(s => s.gameState);
+  const localPlayerId    = useGameStore(s => s.localPlayerId);
+  const setLocalPlayerId = useGameStore(s => s.setLocalPlayerId);
+  const resetGame        = useGameStore(s => s.resetGame);
+  const tradePanel       = useGameStore(s => s.tradePanel);
+  const closeTradePanel  = useGameStore(s => s.closeTradePanel);
+  const stolenReveal     = useGameStore(s => s.stolenReveal);
+  const clearStolenReveal = useGameStore(s => s.clearStolenReveal);
+  const wsConnected      = useGameStore(s => s.wsConnected);
+  const chatMessages     = useGameStore(s => s.chatMessages);
+  const lobbySettings      = useGameStore(s => s.lobbySettings);
+  const coliseumBattleOver = useGameStore(s => s.coliseumBattleOver);
   const _boardMode    = useGameStore(s => s.boardMode);
   const _roadEdges    = useGameStore(s => s.roadBuildingEdges);
   const _cancelRoad   = useGameStore(s => s.cancelRoadBuilding);
@@ -667,7 +678,7 @@ export default function GamePage() {
               return `${activeName} · ${t(`phases.${phase}`)}`;
             })()}
           </span>
-          {gameState.turnStartTime && gameState.turnTimeLimit && phase !== 'GAME_OVER' && phase !== 'COLISEUM_BATTLE' && (
+          {gameState.turnStartTime && gameState.turnTimeLimit && phase !== 'GAME_OVER' && phase !== 'COLISEUM_BATTLE' && !coliseumBattleOver && (
             <TurnTimer
               turnStartTime={gameState.turnStartTime}
               turnTimeLimit={gameState.turnTimeLimit}
@@ -686,7 +697,7 @@ export default function GamePage() {
               return `${activeName} · ${t(`phases.${phase}`)}`;
             })()}
           </span>
-          {gameState.turnStartTime && gameState.turnTimeLimit && phase !== 'GAME_OVER' && phase !== 'COLISEUM_BATTLE' && (
+          {gameState.turnStartTime && gameState.turnTimeLimit && phase !== 'GAME_OVER' && phase !== 'COLISEUM_BATTLE' && !coliseumBattleOver && (
             <TurnTimer
               turnStartTime={gameState.turnStartTime}
               turnTimeLimit={gameState.turnTimeLimit}

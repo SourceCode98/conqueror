@@ -5,7 +5,8 @@
       "Bash(timeout 5 node --input-type=module -)",
       "Bash(npx vite:*)",
       "Bash(npx tsc:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(node \"C:/Users/Stream/Desktop/Conqueror/node_modules/typescript/bin/tsc\" --noEmit -p \"C:/Users/Stream/Desktop/Conqueror/client/tsconfig.json\")"
     ]
   }
 }

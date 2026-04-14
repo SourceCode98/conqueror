@@ -1,5 +1,6 @@
 import type { ClientMessage, ServerMessage } from '@conqueror/shared';
 import { useGameStore } from '../store/gameStore.js';
+import { useProfileStore } from '../store/profileStore.js';
 
 type MessageHandler = (msg: ServerMessage) => void;
 
@@ -223,6 +224,8 @@ class WSService {
       }
       case 'GAME_OVER': {
         store.setFinalScores(msg.payload.finalScores, msg.payload.eloChanges);
+        // Refresh profile so ELO is up-to-date when returning to lobby
+        if (this.token) useProfileStore.getState().fetchProfile(this.token);
         break;
       }
       case 'PLAY_AGAIN_POLL': {
@@ -262,7 +265,7 @@ class WSService {
         break;
       }
       case 'COLISEUM_PLAYER_STATES': {
-        store.setColiseumPlayerStates(msg.payload.states);
+        // Positions are read directly by ColiseumBattle via WS — no store write needed
         break;
       }
       case 'COLISEUM_HIT': {

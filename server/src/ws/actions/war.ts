@@ -626,7 +626,7 @@ export function handleColiseumPlayerUpdate(
 
   ctx.broadcastToRoom({
     type: 'COLISEUM_PLAYER_STATES',
-    payload: { states: { ...pending.playerStates } },
+    payload: { states: pending.playerStates },
   });
 }
 
