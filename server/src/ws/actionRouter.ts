@@ -14,7 +14,7 @@ import { handleMoveBandit } from './actions/bandit.js';
 import { handleDiscardCards } from './actions/discard.js';
 import { handleEndGame } from './actions/endGame.js';
 import { handleForceEndTurn } from './actions/forceEndTurn.js';
-import { handleRecruitSoldier, handleTransferSoldiers, handleAttack, handleCombatRoll, handleChooseDestruction, handleReconstruct } from './actions/war.js';
+import { handleRecruitSoldier, handleTransferSoldiers, handleAttack, handleCombatRoll, handleChooseDestruction, handleReconstruct, handleColiseumPlayerUpdate, handleColiseumAttack } from './actions/war.js';
 
 export interface ActionContext {
   broadcastToRoom: (msg: ServerMessage) => void;
@@ -33,7 +33,7 @@ export function handleGameAction(
 
   // Validate it's this player's turn for most actions
   // CHOOSE_DESTRUCTION is phase-gated (only attacker can use it) and handled within the action itself
-  const isTurnBased = !['RESPOND_TRADE', 'COUNTER_TRADE', 'DISCARD_CARDS', 'END_GAME', 'FORCE_END_TURN', 'CHOOSE_DESTRUCTION', 'COMBAT_ROLL'].includes(msg.type);
+  const isTurnBased = !['RESPOND_TRADE', 'COUNTER_TRADE', 'DISCARD_CARDS', 'END_GAME', 'FORCE_END_TURN', 'CHOOSE_DESTRUCTION', 'COMBAT_ROLL', 'COLISEUM_PLAYER_UPDATE', 'COLISEUM_ATTACK'].includes(msg.type);
   // REJECT_COUNTER_OFFER and MODIFY_OFFER_GIVE are turn-based but validated inside the handler
   if (isTurnBased && state.activePlayerId !== meta.userId) {
     ctx.sendTo(ws, {
@@ -120,6 +120,12 @@ export function handleGameAction(
         break;
       case 'RECONSTRUCT':
         handleReconstruct(ws, msg.payload as any, meta, orch, ctx);
+        break;
+      case 'COLISEUM_PLAYER_UPDATE':
+        handleColiseumPlayerUpdate(ws, msg.payload as any, meta, orch, ctx);
+        break;
+      case 'COLISEUM_ATTACK':
+        handleColiseumAttack(ws, msg.payload as any, meta, orch, ctx);
         break;
       default:
         ctx.sendTo(ws, {

@@ -4,7 +4,8 @@
       "Bash(npm run:*)",
       "Bash(timeout 5 node --input-type=module -)",
       "Bash(npx vite:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npm install:*)"
     ]
   }
 }

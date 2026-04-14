@@ -24,11 +24,12 @@ export function handleForceEndTurn(
     return; // silently ignore — race condition from a late client message
   }
 
-  // Nothing to do if game is already over or in setup phases
+  // Nothing to do if game is already over, in setup phases, or in coliseum battle
   if (
     state.phase === 'GAME_OVER' ||
     state.phase === 'SETUP_FORWARD' ||
-    state.phase === 'SETUP_REVERSE'
+    state.phase === 'SETUP_REVERSE' ||
+    state.phase === 'COLISEUM_BATTLE'
   ) {
     return;
   }

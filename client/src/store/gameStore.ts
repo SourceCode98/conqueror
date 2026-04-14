@@ -108,6 +108,15 @@ interface GameStore {
   eloChanges: Record<string, number> | null;
   setFinalScores: (scores: Record<string, number>, eloChanges?: Record<string, number>) => void;
 
+  // Coliseum battle real-time state
+  coliseumPlayerStates: Record<string, { x: number; z: number; rotation: number; shielding: boolean; swinging: boolean }> | null;
+  setColiseumPlayerStates: (s: GameStore['coliseumPlayerStates']) => void;
+  coliseumHitEvent: { attackerId: string; defenderId: string; attackerScore: number; defenderScore: number; attackerHp: number; defenderHp: number; blocked: boolean } | null;
+  setColiseumHitEvent: (e: GameStore['coliseumHitEvent']) => void;
+  coliseumBattleOver: { winnerId: string; winnerSide: 'attacker' | 'defender'; attackerScore: number; defenderScore: number; effect: string; attackerName: string; defenderName: string } | null;
+  setColiseumBattleOver: (e: GameStore['coliseumBattleOver']) => void;
+  clearColiseumBattleOver: () => void;
+
   // Lobby settings broadcast by host
   lobbySettings: { turnTimeLimit: number | null; hornCooldownSecs: number; warMode: boolean; warVariants: Record<string, boolean> } | null;
   setLobbySettings: (s: GameStore['lobbySettings']) => void;
@@ -196,6 +205,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
   clearStolenReveal: () => set({ stolenReveal: null }),
   setFinalScores: (scores, eloChanges) => set({ finalScores: scores, eloChanges: eloChanges ?? null }),
 
+  coliseumPlayerStates: null,
+  setColiseumPlayerStates: (s) => set({ coliseumPlayerStates: s }),
+  coliseumHitEvent: null,
+  setColiseumHitEvent: (e) => set({ coliseumHitEvent: e }),
+  coliseumBattleOver: null,
+  setColiseumBattleOver: (e) => set({ coliseumBattleOver: e }),
+  clearColiseumBattleOver: () => set({ coliseumBattleOver: null }),
+
   lobbySettings: null,
   setLobbySettings: (s) => set({ lobbySettings: s }),
 
@@ -227,6 +244,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     _tradeCardCb: null,
     playAgainPoll: null,
     playAgainResult: null,
+    coliseumPlayerStates: null,
+    coliseumHitEvent: null,
+    coliseumBattleOver: null,
   }),
 
   applyGameState: (state) => {
@@ -272,6 +292,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       boardMode: newMode,
       roadBuildingEdges: newRoadBuilding,
       pendingBanditCoord: newPendingBandit,
+      // Clear dice combat modal when entering coliseum battle
+      ...(state.phase === 'COLISEUM_BATTLE' ? { combatModal: null } : {}),
     });
   },
 

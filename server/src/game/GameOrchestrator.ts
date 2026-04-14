@@ -24,6 +24,28 @@ interface GamePlayer {
   seat_order: number;
 }
 
+export interface ColiseumPlayerState {
+  x: number;
+  z: number;
+  rotation: number;
+  shielding: boolean;
+  swinging: boolean;
+  lastUpdate: number;
+}
+
+export interface PendingColiseum {
+  attackerId: string;
+  defenderId: string;
+  attackerName: string;
+  defenderName: string;
+  targetVertexId: string;
+  attackSoldiers: number;
+  playerStates: Record<string, ColiseumPlayerState>;
+  attackCooldowns: Record<string, number>;
+  battleStartedAt: number;       // Date.now() when battle started
+  preBattleTurnStartTime: number | null; // turnStartTime to restore when battle ends
+}
+
 export interface PendingCombat {
   attackerId: string;
   defenderId: string;
@@ -50,6 +72,8 @@ export class GameOrchestrator {
   private gameId: string;
   // Non-persisted: transient combat state waiting for dice rolls
   private _pendingCombat: PendingCombat | null = null;
+  // Non-persisted: coliseum battle choice tracking (choices are secret until revealed)
+  private _pendingColiseum: PendingColiseum | null = null;
 
   constructor(
     gameId: string,
@@ -59,7 +83,7 @@ export class GameOrchestrator {
     turnTimeLimit: number | null = null,
     hornCooldownSecs: number = 30,
     warMode: boolean = false,
-    warVariants: { totalWar?: boolean; fortress?: boolean; reconstruction?: boolean } = {},
+    warVariants: { totalWar?: boolean; fortress?: boolean; reconstruction?: boolean; soldierFoodEnabled?: boolean; coliseum?: boolean } = {},
   ) {
     this.gameId = gameId;
     this.db = db;
@@ -204,6 +228,10 @@ export class GameOrchestrator {
   getPendingCombat(): PendingCombat | null { return this._pendingCombat; }
   setPendingCombat(data: PendingCombat): void { this._pendingCombat = data; }
   clearPendingCombat(): void { this._pendingCombat = null; }
+
+  getPendingColiseum(): PendingColiseum | null { return this._pendingColiseum; }
+  setPendingColiseum(data: PendingColiseum): void { this._pendingColiseum = data; }
+  clearPendingColiseum(): void { this._pendingColiseum = null; }
 
   private persist(): void {
     this.db.prepare(

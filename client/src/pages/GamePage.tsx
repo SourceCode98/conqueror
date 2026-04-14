@@ -19,6 +19,7 @@ import GameLog from '../components/game/GameLog.js';
 import ChatPanel from '../components/game/ChatPanel.js';
 import WinCelebration from '../components/game/WinCelebration.js';
 import { CombatResultModal } from '../components/game/CombatResultModal.js';
+import { ColiseumBattle } from '../components/game/ColiseumBattle.js';
 import DealClosedOverlay from '../components/game/DealClosedOverlay.js';
 import WarEventOverlay from '../components/game/WarEventOverlay.js';
 import ActionToast from '../components/game/ActionToast.js';
@@ -227,7 +228,7 @@ export default function GamePage() {
   const [showWarRules, setShowWarRules] = useState(false);
   const warRulesShownRef = useRef(false);
   const [warMode, setWarMode] = useState(false);
-  const [warVariants, setWarVariants] = useState({ totalWar: false, fortress: false, reconstruction: false, soldierFoodEnabled: true });
+  const [warVariants, setWarVariants] = useState({ totalWar: false, fortress: false, reconstruction: false, soldierFoodEnabled: true, coliseum: false });
   const [showProfile, setShowProfile] = useState(false);
   const [playerCosmetics, setPlayerCosmetics] = useState<Record<string, { road: string; building: string }>>({});
   const { profile } = useProfileStore();
@@ -493,7 +494,7 @@ export default function GamePage() {
                   War &amp; Sieges mode
                 </label>
                 <button
-                  onClick={() => { setWarMode(w => !w); if (warMode) setWarVariants({ totalWar: false, fortress: false, reconstruction: false, soldierFoodEnabled: true }); }}
+                  onClick={() => { setWarMode(w => !w); if (warMode) setWarVariants({ totalWar: false, fortress: false, reconstruction: false, soldierFoodEnabled: true, coliseum: false }); }}
                   className={cn('rounded-lg px-3 py-1.5 text-sm border transition-colors w-full text-left', warMode ? 'border-red-500 bg-red-900/30 text-red-300' : 'border-gray-700 text-gray-400 hover:border-gray-500')}
                 >
                   {warMode ? 'Enabled — soldiers, sieges & destruction' : 'Disabled (classic mode)'}
@@ -509,6 +510,10 @@ export default function GamePage() {
                     <button onClick={() => setWarVariants(prev => ({ ...prev, soldierFoodEnabled: !prev.soldierFoodEnabled }))}
                       className={cn('w-full text-left rounded px-2 py-1 text-xs border transition-colors', !warVariants.soldierFoodEnabled ? 'border-blue-500 bg-blue-900/30 text-blue-300' : 'border-gray-700 text-gray-500 hover:border-gray-600')}>
                       {!warVariants.soldierFoodEnabled ? '✓' : '○'} No Food (soldiers don't consume grain or desert)
+                    </button>
+                    <button onClick={() => setWarVariants(prev => ({ ...prev, coliseum: !prev.coliseum }))}
+                      className={cn('w-full text-left rounded px-2 py-1 text-xs border transition-colors', warVariants.coliseum ? 'border-purple-500 bg-purple-900/30 text-purple-300' : 'border-gray-700 text-gray-500 hover:border-gray-600')}>
+                      {warVariants.coliseum ? '✓' : '○'} Coliseum (attacks become 1v1 sword battles, first to 3 wins)
                     </button>
                   </div>
                 )}
@@ -548,8 +553,8 @@ export default function GamePage() {
                       ⚔️ War {lobbySettings.warMode ? 'ON' : 'OFF'}
                     </span>
                     {lobbySettings.warMode && Object.entries(lobbySettings.warVariants).filter(([, v]) => v).map(([k]) => (
-                      <span key={k} className="rounded-lg border border-orange-700 bg-orange-900/30 px-2 py-1 text-orange-300 text-xs">
-                        {k === 'totalWar' ? 'Total War' : k === 'fortress' ? 'Fortress' : k === 'reconstruction' ? 'Reconstruction' : k === 'soldierFoodEnabled' ? '' : k}
+                      <span key={k} className={cn('rounded-lg border px-2 py-1 text-xs', k === 'coliseum' ? 'border-purple-700 bg-purple-900/30 text-purple-300' : 'border-orange-700 bg-orange-900/30 text-orange-300')}>
+                        {k === 'totalWar' ? 'Total War' : k === 'fortress' ? 'Fortress' : k === 'reconstruction' ? 'Reconstruction' : k === 'coliseum' ? 'Coliseum' : k === 'soldierFoodEnabled' ? '' : k}
                       </span>
                     ))}
                     {lobbySettings.warMode && lobbySettings.warVariants.soldierFoodEnabled === false && (
@@ -662,7 +667,7 @@ export default function GamePage() {
               return `${activeName} · ${t(`phases.${phase}`)}`;
             })()}
           </span>
-          {gameState.turnStartTime && gameState.turnTimeLimit && phase !== 'GAME_OVER' && (
+          {gameState.turnStartTime && gameState.turnTimeLimit && phase !== 'GAME_OVER' && phase !== 'COLISEUM_BATTLE' && (
             <TurnTimer
               turnStartTime={gameState.turnStartTime}
               turnTimeLimit={gameState.turnTimeLimit}
@@ -681,7 +686,7 @@ export default function GamePage() {
               return `${activeName} · ${t(`phases.${phase}`)}`;
             })()}
           </span>
-          {gameState.turnStartTime && gameState.turnTimeLimit && phase !== 'GAME_OVER' && (
+          {gameState.turnStartTime && gameState.turnTimeLimit && phase !== 'GAME_OVER' && phase !== 'COLISEUM_BATTLE' && (
             <TurnTimer
               turnStartTime={gameState.turnStartTime}
               turnTimeLimit={gameState.turnTimeLimit}
@@ -1160,6 +1165,9 @@ export default function GamePage() {
 
       {/* ── Combat result modal ── */}
       <CombatResultModal />
+
+      {/* ── Coliseum battle overlay ── */}
+      <ColiseumBattle />
 
       {/* ── Deal closed overlay ── */}
       <DealClosedOverlay />

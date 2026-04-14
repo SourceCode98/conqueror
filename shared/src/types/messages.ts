@@ -47,7 +47,9 @@ export type ClientMessage =
   | WSMessage<'COMBAT_ROLL',        { gameId: string }>
   | WSMessage<'CHOOSE_DESTRUCTION', { gameId: string; destructionType: 'destroy' | 'downgrade' }>
   | WSMessage<'RECONSTRUCT',        { gameId: string; vertexId: VertexId }>
-  | WSMessage<'LOBBY_SETTINGS',     { gameId: string; turnTimeLimit: number | null; hornCooldownSecs: number; warMode: boolean; warVariants: Record<string, boolean> }>;
+  | WSMessage<'COLISEUM_PLAYER_UPDATE', { gameId: string; x: number; z: number; rotation: number; shielding: boolean; swinging: boolean }>
+  | WSMessage<'COLISEUM_ATTACK',        { gameId: string }>
+  | WSMessage<'LOBBY_SETTINGS',         { gameId: string; turnTimeLimit: number | null; hornCooldownSecs: number; warMode: boolean; warVariants: Record<string, boolean> }>;
 
 // ─── Server → Client ──────────────────────────────────────────────────────────
 
@@ -72,4 +74,7 @@ export type ServerMessage =
   | WSMessage<'COMBAT_DICE_PHASE',   { attackerId: string; defenderId: string; attackerName: string; defenderName: string; timeoutSecs: number }>
   | WSMessage<'COMBAT_DIE_REVEALED', { side: 'attacker' | 'defender'; value: number }>
   | WSMessage<'COMBAT_RESULT',       { attackerForce: number; defenderForce: number; attackerWon: boolean; effect: 'siege' | 'destruction_choice' | 'repelled'; attackerName: string; defenderName: string; attackerDie: number; defenderDie: number; attackSoldiers: number; defenderSoldiers: number; cityBonus: number; garrisonBonus: number }>
-  | WSMessage<'LOBBY_SETTINGS',      { turnTimeLimit: number | null; hornCooldownSecs: number; warMode: boolean; warVariants: Record<string, boolean> }>;
+  | WSMessage<'LOBBY_SETTINGS',         { turnTimeLimit: number | null; hornCooldownSecs: number; warMode: boolean; warVariants: Record<string, boolean> }>
+  | WSMessage<'COLISEUM_PLAYER_STATES', { states: Record<string, { x: number; z: number; rotation: number; shielding: boolean; swinging: boolean }> }>
+  | WSMessage<'COLISEUM_HIT',           { attackerId: string; defenderId: string; attackerScore: number; defenderScore: number; attackerHp: number; defenderHp: number; blocked: boolean }>
+  | WSMessage<'COLISEUM_BATTLE_OVER',   { winnerId: string; winnerSide: 'attacker' | 'defender'; attackerScore: number; defenderScore: number; effect: 'siege' | 'destruction_choice' | 'repelled'; attackerName: string; defenderName: string }>;

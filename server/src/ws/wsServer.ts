@@ -177,8 +177,8 @@ function scheduleTurnTimer(gameId: string): void {
   if (!orch) return;
 
   const state = orch.getState();
-  // Don't schedule during setup or game over — setup turns have no server-side auto-advance
-  if (!state.turnTimeLimit || !state.turnStartTime || state.phase === 'GAME_OVER' || state.phase === 'SETUP_FORWARD' || state.phase === 'SETUP_REVERSE') return;
+  // Don't schedule during setup, game over, or coliseum battle (timer is paused during battle)
+  if (!state.turnTimeLimit || !state.turnStartTime || state.phase === 'GAME_OVER' || state.phase === 'SETUP_FORWARD' || state.phase === 'SETUP_REVERSE' || state.phase === 'COLISEUM_BATTLE') return;
 
   const elapsed = Date.now() - state.turnStartTime;
   const remaining = Math.max(0, state.turnTimeLimit * 1000 - elapsed);
@@ -199,7 +199,7 @@ function serverAutoEndTurn(gameId: string, expectedTurnStart: number): void {
   const state = orch.getState();
   // If the turn already advanced (player acted in time), do nothing
   if (state.turnStartTime !== expectedTurnStart) return;
-  if (state.phase === 'GAME_OVER' || state.phase === 'SETUP_FORWARD' || state.phase === 'SETUP_REVERSE') return;
+  if (state.phase === 'GAME_OVER' || state.phase === 'SETUP_FORWARD' || state.phase === 'SETUP_REVERSE' || state.phase === 'COLISEUM_BATTLE') return;
 
   const activePlayer = state.players.find(p => p.id === state.activePlayerId);
   if (!activePlayer) return;

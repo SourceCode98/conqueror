@@ -13,6 +13,9 @@ export function CombatResultModal() {
   const localPlayerId = useGameStore(s => s.localPlayerId);
   const gameState = useGameStore(s => s.gameState);
 
+  // Never show dice combat UI when coliseum mode is active
+  if (gameState?.warVariants?.coliseum) return null;
+
   // Rolling animation state per side
   const [attackerRolling, setAttackerRolling] = useState(false);
   const [defenderRolling, setDefenderRolling] = useState(false);

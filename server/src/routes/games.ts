@@ -93,7 +93,7 @@ gamesRouter.post('/:id/start', (req, res) => {
     turnTimeLimit?: number | null;
     hornCooldownSecs?: number;
     warMode?: boolean;
-    warVariants?: { totalWar?: boolean; fortress?: boolean; reconstruction?: boolean };
+    warVariants?: { totalWar?: boolean; fortress?: boolean; reconstruction?: boolean; soldierFoodEnabled?: boolean; coliseum?: boolean };
   };
 
   const game = db.prepare('SELECT id, status, max_players, created_by FROM games WHERE id = ?')

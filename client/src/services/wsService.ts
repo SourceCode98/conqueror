@@ -261,6 +261,26 @@ class WSService {
         }
         break;
       }
+      case 'COLISEUM_PLAYER_STATES': {
+        store.setColiseumPlayerStates(msg.payload.states);
+        break;
+      }
+      case 'COLISEUM_HIT': {
+        store.setColiseumHitEvent(msg.payload);
+        break;
+      }
+      case 'COLISEUM_BATTLE_OVER': {
+        store.setColiseumBattleOver(msg.payload);
+        // Trigger war event overlay
+        const gs2 = store.gameState;
+        const atk = gs2?.players.find(p => p.username === msg.payload.attackerName);
+        const def = gs2?.players.find(p => p.username === msg.payload.defenderName);
+        if (atk && def) {
+          const eff = msg.payload.winnerSide === 'attacker' ? msg.payload.effect : 'repelled';
+          store.setWarEvent({ effect: eff as any, attackerId: atk.id, defenderId: def.id });
+        }
+        break;
+      }
     }
 
     // Notify extra handlers (for components that subscribe directly)

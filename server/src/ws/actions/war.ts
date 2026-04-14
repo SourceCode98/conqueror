@@ -7,7 +7,7 @@ import {
   roadDistanceToVertex, vertexToVertexDistance, countPlayerSoldiers, updateWarlord, edgeVertices, hexVertexIds,
   recalculateSpecialCards,
 } from '@conqueror/shared';
-import type { GameOrchestrator, PendingCombat } from '../../game/GameOrchestrator.js';
+import type { GameOrchestrator, PendingCombat, PendingColiseum } from '../../game/GameOrchestrator.js';
 import type { ClientMeta } from '../types.js';
 import type { ActionContext } from '../actionRouter.js';
 import { checkAndHandleWin } from './winCheck.js';
@@ -190,6 +190,41 @@ export function handleAttack(
   if (payload.soldiers > totalAttackerSoldiers) { err(ctx, ws, 'NOT_ENOUGH_SOLDIERS', 'Not enough soldiers'); return; }
   if (!targetBuilding.sieged && payload.soldiers < 2) {
     err(ctx, ws, 'NEED_TWO_SOLDIERS', 'Need at least 2 soldiers to besiege a building'); return;
+  }
+
+  // ── Coliseum mode: replace dice combat with 1v1 mini-game ──────────────────
+  if (state.warVariants?.coliseum) {
+    const now = Date.now();
+    orch.updateState(s => ({
+      ...s,
+      attackUsedThisTurn: true,
+      phase: 'COLISEUM_BATTLE',
+      coliseumBattle: {
+        attackerId: meta.userId,
+        defenderId: victim.id,
+        attackerScore: 0,
+        defenderScore: 0,
+        attackerHp: COLISEUM_MAX_HP,
+        defenderHp: COLISEUM_MAX_HP + Math.min(2, targetBuilding?.soldiers ?? 0) * COLISEUM_SOLDIER_HP_BONUS,
+      },
+    }));
+    orch.setPendingColiseum({
+      attackerId: meta.userId,
+      defenderId: victim.id,
+      attackerName: meta.username,
+      defenderName: victim.username,
+      targetVertexId: payload.targetVertexId,
+      attackSoldiers: payload.soldiers,
+      playerStates: {
+        [meta.userId]: { x: -3.5, z: 0, rotation: Math.PI / 2, shielding: false, swinging: false, lastUpdate: now },
+        [victim.id]:   { x:  3.5, z: 0, rotation: -Math.PI / 2, shielding: false, swinging: false, lastUpdate: now },
+      },
+      attackCooldowns: {},
+      battleStartedAt: now,
+      preBattleTurnStartTime: state.turnStartTime,
+    });
+    ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
+    return;
   }
 
   // Pre-compute combat (hidden from clients until they roll)
@@ -546,6 +581,248 @@ export function handleChooseDestruction(
     return;
   }
   ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
+}
+
+// ─── Coliseum Battle Handlers (Real-time 3D) ──────────────────────────────────
+
+const COLISEUM_ATTACK_RANGE = 2.8;
+const COLISEUM_ATTACK_COOLDOWN_MS = 900;
+const COLISEUM_WIN_SCORE = 3;  // rounds to win the match
+const COLISEUM_MAX_HP = 100;
+const COLISEUM_HIT_DAMAGE = 34; // ~3 hits to drain HP bar
+const COLISEUM_SOLDIER_HP_BONUS = 30; // each garrisoned soldier gives defender +30 HP/round
+const ARENA_RADIUS_SRV = 10.5;
+
+function normalizeAngle(a: number): number {
+  while (a > Math.PI) a -= 2 * Math.PI;
+  while (a < -Math.PI) a += 2 * Math.PI;
+  return a;
+}
+
+export function handleColiseumPlayerUpdate(
+  ws: WebSocket,
+  payload: { gameId: string; x: number; z: number; rotation: number; shielding: boolean; swinging: boolean },
+  meta: ClientMeta,
+  orch: GameOrchestrator,
+  ctx: ActionContext,
+): void {
+  const state = orch.getState();
+  if (state.phase !== 'COLISEUM_BATTLE') return;
+  const pending = orch.getPendingColiseum();
+  if (!pending) return;
+  if (meta.userId !== pending.attackerId && meta.userId !== pending.defenderId) return;
+
+  // Clamp position to arena
+  const dist = Math.sqrt(payload.x ** 2 + payload.z ** 2);
+  const scale = dist > ARENA_RADIUS_SRV ? ARENA_RADIUS_SRV / dist : 1;
+  pending.playerStates[meta.userId] = {
+    x: payload.x * scale,
+    z: payload.z * scale,
+    rotation: payload.rotation,
+    shielding: payload.shielding,
+    swinging: payload.swinging,
+    lastUpdate: Date.now(),
+  };
+
+  ctx.broadcastToRoom({
+    type: 'COLISEUM_PLAYER_STATES',
+    payload: { states: { ...pending.playerStates } },
+  });
+}
+
+export function handleColiseumAttack(
+  ws: WebSocket,
+  payload: { gameId: string },
+  meta: ClientMeta,
+  orch: GameOrchestrator,
+  ctx: ActionContext,
+): void {
+  const state = orch.getState();
+  if (state.phase !== 'COLISEUM_BATTLE') return;
+  const pending = orch.getPendingColiseum();
+  if (!pending) return;
+  if (meta.userId !== pending.attackerId && meta.userId !== pending.defenderId) return;
+
+  // Attack cooldown (server-side)
+  const now = Date.now();
+  if (now - (pending.attackCooldowns[meta.userId] ?? 0) < COLISEUM_ATTACK_COOLDOWN_MS) return;
+  pending.attackCooldowns[meta.userId] = now;
+
+  const opponentId = meta.userId === pending.attackerId ? pending.defenderId : pending.attackerId;
+  const myState = pending.playerStates[meta.userId];
+  const oppState = pending.playerStates[opponentId];
+  if (!myState || !oppState) return;
+
+  const dx = oppState.x - myState.x;
+  const dz = oppState.z - myState.z;
+  const dist = Math.sqrt(dx * dx + dz * dz);
+  if (dist > COLISEUM_ATTACK_RANGE) return; // miss (no message, client shows miss locally)
+
+  // Attacker must be roughly facing opponent (120° arc)
+  const angleToOpp = Math.atan2(dx, dz);
+  if (Math.abs(normalizeAngle(angleToOpp - myState.rotation)) > Math.PI * 0.65) return;
+
+  // Shield block: opponent blocks if their shield faces attacker (110° arc)
+  let blocked = false;
+  if (oppState.shielding) {
+    const angleToMe = Math.atan2(-dx, -dz);
+    if (Math.abs(normalizeAngle(angleToMe - oppState.rotation)) < Math.PI * 0.6) {
+      blocked = true;
+    }
+  }
+
+  const battle = state.coliseumBattle!;
+  const isBoardAttacker = meta.userId === pending.attackerId;
+
+  // Apply HP damage + check for round win
+  let newAttackerHp = battle.attackerHp;
+  let newDefenderHp = battle.defenderHp;
+  let newAttackerScore = battle.attackerScore;
+  let newDefenderScore = battle.defenderScore;
+  let roundWon = false;
+
+  if (!blocked) {
+    if (isBoardAttacker) {
+      newDefenderHp = Math.max(0, battle.defenderHp - COLISEUM_HIT_DAMAGE);
+      if (newDefenderHp === 0) { newAttackerScore++; newDefenderHp = COLISEUM_MAX_HP; newAttackerHp = COLISEUM_MAX_HP; roundWon = true; }
+    } else {
+      newAttackerHp = Math.max(0, battle.attackerHp - COLISEUM_HIT_DAMAGE);
+      if (newAttackerHp === 0) { newDefenderScore++; newAttackerHp = COLISEUM_MAX_HP; newDefenderHp = COLISEUM_MAX_HP; roundWon = true; }
+    }
+    orch.updateState(s => ({
+      ...s,
+      coliseumBattle: { ...s.coliseumBattle!, attackerScore: newAttackerScore, defenderScore: newDefenderScore, attackerHp: newAttackerHp, defenderHp: newDefenderHp },
+    }));
+  }
+
+  ctx.broadcastToRoom({
+    type: 'COLISEUM_HIT',
+    payload: { attackerId: meta.userId, defenderId: opponentId, attackerScore: newAttackerScore, defenderScore: newDefenderScore, attackerHp: newAttackerHp, defenderHp: newDefenderHp, blocked },
+  });
+
+  if (!blocked && roundWon && (newAttackerScore >= COLISEUM_WIN_SCORE || newDefenderScore >= COLISEUM_WIN_SCORE)) {
+    orch.clearPendingColiseum();
+    applyColiseumResult(orch, ctx, pending, newAttackerScore, newDefenderScore, newAttackerScore >= COLISEUM_WIN_SCORE);
+  }
+}
+
+function applyColiseumResult(
+  orch: GameOrchestrator,
+  ctx: ActionContext,
+  pending: PendingColiseum,
+  attackerScore: number,
+  defenderScore: number,
+  attackerWon: boolean,
+): void {
+  const state = orch.getState();
+  const targetBuilding = state.buildings[pending.targetVertexId as any];
+  const victim = state.players.find(p => p.id === pending.defenderId)!;
+
+  // Restore turn timer: elapsed time before battle began continues from now
+  const battleDuration = Date.now() - pending.battleStartedAt;
+  const preTurnStart = pending.preBattleTurnStartTime;
+  const restoredTurnStartTime = preTurnStart !== null ? preTurnStart + battleDuration : null;
+
+  const victimBuildingCount = Object.values(state.buildings).filter(b => b.playerId === pending.defenderId).length;
+  const canDestroy = victimBuildingCount > 1;
+
+  let effect: 'siege' | 'destruction_choice' | 'repelled';
+  if (!attackerWon) {
+    effect = 'repelled';
+  } else if (!targetBuilding?.sieged) {
+    effect = 'siege';
+  } else if (canDestroy) {
+    effect = 'destruction_choice';
+  } else {
+    effect = 'repelled';
+  }
+
+  ctx.broadcastToRoom({
+    type: 'COLISEUM_BATTLE_OVER',
+    payload: {
+      winnerId: attackerWon ? pending.attackerId : pending.defenderId,
+      winnerSide: attackerWon ? 'attacker' : 'defender',
+      attackerScore,
+      defenderScore,
+      effect,
+      attackerName: pending.attackerName,
+      defenderName: pending.defenderName,
+    },
+  });
+
+  if (!attackerWon) {
+    // Repelled: attacker loses soldiers
+    const lossCount = pending.attackSoldiers === 3 ? 1 : pending.attackSoldiers;
+    if (lossCount > 0) {
+      orch.updateState(s => {
+        const newBuildings = { ...s.buildings };
+        let toRemove = lossCount;
+        for (const vid of Object.keys(newBuildings)) {
+          if (toRemove <= 0) break;
+          const b = newBuildings[vid] as any;
+          if (b.playerId === pending.attackerId && (b.soldiers ?? 0) > 0) {
+            const remove = Math.min(b.soldiers, toRemove);
+            newBuildings[vid] = { ...b, soldiers: b.soldiers - remove };
+            toRemove -= remove;
+          }
+        }
+        return { ...s, buildings: newBuildings as any, phase: 'ACTION', coliseumBattle: null, turnStartTime: restoredTurnStartTime };
+      });
+    } else {
+      orch.updateState(s => ({ ...s, phase: 'ACTION', coliseumBattle: null, turnStartTime: restoredTurnStartTime }));
+    }
+    orch.addLogEntry('log.attackRepelled', { attacker: pending.attackerName, defender: pending.defenderName }, pending.attackerId);
+    ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
+    return;
+  }
+
+  if (!targetBuilding) {
+    orch.updateState(s => ({ ...s, phase: 'ACTION', coliseumBattle: null, turnStartTime: restoredTurnStartTime }));
+    ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
+    return;
+  }
+
+  if (!targetBuilding.sieged) {
+    orch.updateState(s => ({
+      ...s,
+      phase: 'ACTION',
+      coliseumBattle: null,
+      turnStartTime: restoredTurnStartTime,
+      buildings: { ...s.buildings, [pending.targetVertexId]: { ...targetBuilding, sieged: true, siegedBy: pending.attackerId, siegedAtTurn: s.turn } },
+    }));
+    orch.addLogEntry('log.siegeStarted', { attacker: pending.attackerName, defender: pending.defenderName }, pending.attackerId);
+    ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
+  } else if (!canDestroy) {
+    const lossCount2 = pending.attackSoldiers === 3 ? 1 : pending.attackSoldiers;
+    if (lossCount2 > 0) {
+      orch.updateState(s => {
+        const newBuildings = { ...s.buildings };
+        let toRemove = lossCount2;
+        for (const vid of Object.keys(newBuildings)) {
+          if (toRemove <= 0) break;
+          const b = newBuildings[vid] as any;
+          if (b.playerId === pending.attackerId && (b.soldiers ?? 0) > 0) {
+            const remove = Math.min(b.soldiers, toRemove);
+            newBuildings[vid] = { ...b, soldiers: b.soldiers - remove };
+            toRemove -= remove;
+          }
+        }
+        return { ...s, buildings: newBuildings as any, phase: 'ACTION', coliseumBattle: null, turnStartTime: restoredTurnStartTime };
+      });
+    } else {
+      orch.updateState(s => ({ ...s, phase: 'ACTION', coliseumBattle: null, turnStartTime: restoredTurnStartTime }));
+    }
+    ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
+  } else {
+    orch.updateState(s => ({
+      ...s,
+      phase: 'WAR_DESTRUCTION',
+      coliseumBattle: null,
+      turnStartTime: restoredTurnStartTime,
+      pendingDestruction: { targetVertex: pending.targetVertexId, attackerId: pending.attackerId },
+    }));
+    ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
+  }
 }
 
 export function handleReconstruct(

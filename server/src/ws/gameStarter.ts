@@ -16,7 +16,7 @@ export function startGame(
   turnTimeLimit: number | null = null,
   hornCooldownSecs: number = 30,
   warMode: boolean = false,
-  warVariants: { totalWar?: boolean; fortress?: boolean; reconstruction?: boolean } = {},
+  warVariants: { totalWar?: boolean; fortress?: boolean; reconstruction?: boolean; soldierFoodEnabled?: boolean; coliseum?: boolean } = {},
 ): GameOrchestrator {
   const orch = new GameOrchestrator(
     gameId,

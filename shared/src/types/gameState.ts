@@ -62,7 +62,17 @@ export type GamePhase =
   | 'ACTION'
   | 'TRADE_OFFER'
   | 'WAR_DESTRUCTION'
+  | 'COLISEUM_BATTLE'
   | 'GAME_OVER';
+
+export interface ColiseumBattle {
+  attackerId: string;
+  defenderId: string;
+  attackerScore: number;  // rounds won
+  defenderScore: number;  // rounds won
+  attackerHp: number;
+  defenderHp: number;
+}
 
 export interface TradeRespondent {
   status: 'pending' | 'accept' | 'reject' | 'counter' | 'rejected_by_offerer';
@@ -127,6 +137,7 @@ export interface GameState {
     fortress?: boolean;
     reconstruction?: boolean;
     soldierFoodEnabled?: boolean;
+    coliseum?: boolean;
   };
   warlordPlayerId?: string | null;
   destroyedByPlayer?: Record<string, { settlements: number; cities: number }>;
@@ -136,6 +147,7 @@ export interface GameState {
   pendingDestruction?: { targetVertex: VertexId; attackerId: string } | null;
   destroyedVertices?: Record<string, string>;  // vertexId → playerId (for reconstruction)
   fortressHits?: Record<string, number>;       // vertexId → hit count (fortress variant)
+  coliseumBattle?: ColiseumBattle | null;       // active coliseum battle (coliseum variant)
 }
 
 /**
