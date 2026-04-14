@@ -1,5 +1,8 @@
+[build]
+buildCommand = "npm run build"
+
 [deploy]
-startCommand = "npm run start"
+startCommand = "npm run start -w server"
 
 [[volumes]]
 mountPath = "/data"
