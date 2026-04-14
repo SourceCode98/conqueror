@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { config } from '../config.js';
 import { SCHEMA_SQL } from './schema.js';
+import { runMigrations } from './migrations.js';
 
 const dbDir = path.dirname(config.dbPath);
 if (!fs.existsSync(dbDir)) {
@@ -13,5 +14,6 @@ const db: DatabaseType = new Database(config.dbPath);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 db.exec(SCHEMA_SQL);
+runMigrations(db);
 
 export default db;

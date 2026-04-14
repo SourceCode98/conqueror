@@ -28,15 +28,15 @@ export function SettlementIcon({ size = 24, color = 'currentColor', ...p }: Icon
 
 /** Render a settlement inside an SVG at board coordinates (cx, cy). */
 export function SettlementSvg({
-  cx, cy, fill, opacity = 1,
-}: { cx: number; cy: number; fill: string; opacity?: number }) {
+  cx, cy, fill, opacity = 1, stroke = 'white',
+}: { cx: number; cy: number; fill: string; opacity?: number; stroke?: string }) {
   return (
     <g opacity={opacity}>
       <polygon
         points={`${cx},${cy - 13} ${cx - 10},${cy - 2} ${cx + 10},${cy - 2}`}
-        fill={fill} stroke="white" strokeWidth={1.5} strokeLinejoin="round"
+        fill={fill} stroke={stroke} strokeWidth={1.5} strokeLinejoin="round"
       />
-      <rect x={cx - 8} y={cy - 2} width={16} height={10} fill={fill} stroke="white" strokeWidth={1.5}/>
+      <rect x={cx - 8} y={cy - 2} width={16} height={10} fill={fill} stroke={stroke} strokeWidth={1.5}/>
       <rect x={cx - 3} y={cy + 2} width={6} height={6} fill="rgba(0,0,0,0.2)"/>
     </g>
   );
@@ -62,17 +62,17 @@ export function CityIcon({ size = 24, color = 'currentColor', ...p }: IconProps)
 
 /** Render a city inside an SVG at board coordinates (cx, cy). */
 export function CitySvg({
-  cx, cy, fill, opacity = 1,
-}: { cx: number; cy: number; fill: string; opacity?: number }) {
+  cx, cy, fill, opacity = 1, stroke = 'white',
+}: { cx: number; cy: number; fill: string; opacity?: number; stroke?: string }) {
   return (
     <g opacity={opacity}>
       {/* tall left tower */}
-      <rect x={cx - 13} y={cy - 18} width={11} height={18} fill={fill} stroke="white" strokeWidth={1.5}/>
+      <rect x={cx - 13} y={cy - 18} width={11} height={18} fill={fill} stroke={stroke} strokeWidth={1.5}/>
       {/* battlements */}
-      <rect x={cx - 13} y={cy - 21} width={3} height={4} fill={fill} stroke="white" strokeWidth={1}/>
-      <rect x={cx - 7}  y={cy - 21} width={3} height={4} fill={fill} stroke="white" strokeWidth={1}/>
+      <rect x={cx - 13} y={cy - 21} width={3} height={4} fill={fill} stroke={stroke} strokeWidth={1}/>
+      <rect x={cx - 7}  y={cy - 21} width={3} height={4} fill={fill} stroke={stroke} strokeWidth={1}/>
       {/* right wing */}
-      <rect x={cx - 2}  y={cy - 13} width={13} height={13} fill={fill} stroke="white" strokeWidth={1.5}/>
+      <rect x={cx - 2}  y={cy - 13} width={13} height={13} fill={fill} stroke={stroke} strokeWidth={1.5}/>
       {/* windows */}
       <rect x={cx - 11} y={cy - 14} width={3} height={4} fill="rgba(0,0,0,0.25)"/>
       <rect x={cx + 1}  y={cy - 10} width={3} height={4} fill="rgba(0,0,0,0.25)"/>

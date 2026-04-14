@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { gamesRouter } from './routes/games.js';
+import { profileRouter } from './routes/profile.js';
 import { setupWebSocket } from './ws/wsServer.js';
 import db from './db/index.js'; // ensure DB is initialized
 
@@ -17,6 +18,7 @@ app.use(express.json());
 // API routes
 app.use('/api/auth', authRouter);
 app.use('/api/games', gamesRouter);
+app.use('/api/profile', profileRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => res.json({ ok: true }));

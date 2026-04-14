@@ -1,8 +1,10 @@
 import { create } from 'zustand';
+import { useProfileStore } from './profileStore.js';
 
 interface User {
   id: string;
   username: string;
+  elo?: number;
 }
 
 interface AuthStore {
@@ -24,6 +26,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     if (token && user) {
       try {
         set({ token, user: JSON.parse(user) });
+        useProfileStore.getState().fetchProfile(token);
       } catch {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -42,6 +45,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     localStorage.setItem('token', data.token);
     localStorage.setItem('user', JSON.stringify(data.user));
     set({ token: data.token, user: data.user });
+    useProfileStore.getState().fetchProfile(data.token);
   },
 
   register: async (username, password) => {
@@ -55,6 +59,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     localStorage.setItem('token', data.token);
     localStorage.setItem('user', JSON.stringify(data.user));
     set({ token: data.token, user: data.user });
+    useProfileStore.getState().fetchProfile(data.token);
   },
 
   logout: () => {

@@ -3,6 +3,7 @@ export * from './types/resources.js';
 export * from './types/board.js';
 export * from './types/gameState.js';
 export * from './types/messages.js';
+export * from './types/unlocks.js';
 
 // Constants
 export * from './constants/board.js';

@@ -28,10 +28,12 @@ import WarRulesModal from '../components/game/WarRulesModal.js';
 import SoundPanel from '../components/game/SoundPanel.js';
 import { musicEngine } from '../components/game/musicEngine.js';
 import DiscardPanel from '../components/game/DiscardPanel.js';
+import ProfilePanel from '../components/profile/ProfilePanel.js';
 import { resolvePlayerColor } from '../components/HexBoard/hexLayout.js';
 import { RESOURCE_ICON_MAP } from '../components/icons/GameIcons.js';
 import { ALL_RESOURCES, edgeVertices } from '@conqueror/shared';
 import { cn } from '../lib/cn.js';
+import { useProfileStore } from '../store/profileStore.js';
 
 // Board padding: bottom = ContextBar + chat strip (top varies by hand anchor)
 const MOBILE_CHAT_H   = 44;        // compact chat input strip height
@@ -226,6 +228,9 @@ export default function GamePage() {
   const warRulesShownRef = useRef(false);
   const [warMode, setWarMode] = useState(false);
   const [warVariants, setWarVariants] = useState({ totalWar: false, fortress: false, reconstruction: false, soldierFoodEnabled: true });
+  const [showProfile, setShowProfile] = useState(false);
+  const [playerCosmetics, setPlayerCosmetics] = useState<Record<string, { road: string; building: string }>>({});
+  const { profile } = useProfileStore();
 
   // Sync hand anchor from ResourceHand via custom event
   useEffect(() => {
@@ -298,6 +303,21 @@ export default function GamePage() {
     const interval = setInterval(fetchLobbyInfo, 3000);
     return () => clearInterval(interval);
   }, [gameState, fetchLobbyInfo]);
+
+  // Fetch cosmetics for all players when game starts
+  useEffect(() => {
+    if (!gameState || !token) return;
+    const map: Record<string, { road: string; building: string }> = {};
+    Promise.all(gameState.players.map(async p => {
+      try {
+        const res = await fetch(`/api/profile/${p.id}`, { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) {
+          const data = await res.json();
+          map[p.id] = { road: data.selectedRoadSkin ?? 'road_default', building: data.selectedBuildingSkin ?? 'building_default' };
+        }
+      } catch { /* use defaults */ }
+    })).then(() => setPlayerCosmetics({ ...map }));
+  }, [gameState?.gameId, token]);
 
   // Handle lobby-specific WS events
   useEffect(() => {
@@ -379,7 +399,13 @@ export default function GamePage() {
             <h1 className="text-2xl font-bold text-amber-400">
               {lobbyInfo?.name ?? 'Loading…'}
             </h1>
-            <div />
+            <button
+              onClick={() => setShowProfile(true)}
+              className="text-xs text-gray-400 hover:text-amber-400 transition-colors flex flex-col items-center gap-0.5"
+            >
+              <span className="text-lg">👤</span>
+              {profile && <span className="tabular-nums" style={{ color: '#9ca3af' }}>{profile.elo}</span>}
+            </button>
           </div>
 
           <div className="card mb-4">
@@ -415,7 +441,13 @@ export default function GamePage() {
                   ⏱ Turn time limit
                 </label>
                 <div className="flex gap-2 flex-wrap">
-                  {[null, 60, 90, 120, 180].map(val => (
+                  {([
+                    { val: 30,  label: '⚡ Bullet 30s' },
+                    { val: 60,  label: '🔥 Blitz 60s' },
+                    { val: 90,  label: '⏩ Rapid 90s' },
+                    { val: 180, label: '🐢 Long 3min' },
+                    { val: null, label: '∞ No limit' },
+                  ] as { val: number | null; label: string }[]).map(({ val, label }) => (
                     <button
                       key={String(val)}
                       onClick={() => setTurnTimeLimit(val)}
@@ -426,7 +458,7 @@ export default function GamePage() {
                           : 'border-gray-700 text-gray-400 hover:border-gray-500',
                       )}
                     >
-                      {val === null ? 'No limit' : `${val}s`}
+                      {label}
                     </button>
                   ))}
                 </div>
@@ -572,6 +604,7 @@ export default function GamePage() {
             Game ID: <code className="text-gray-500">{gameId}</code>
           </p>
         </div>
+        {showProfile && <ProfilePanel onClose={() => setShowProfile(false)} />}
       </div>
     );
   }
@@ -825,7 +858,7 @@ export default function GamePage() {
           className="relative flex-1 flex items-center justify-center bg-[#060e1c] overflow-hidden"
           style={{ paddingTop: handAnchor.startsWith('top') ? HAND_PEEK : 0, paddingBottom: handAnchor.startsWith('bottom') ? MOBILE_BOARD_PB + HAND_PEEK : MOBILE_BOARD_PB }}
         >
-          <HexBoard state={gameState} />
+          <HexBoard state={gameState} playerCosmetics={playerCosmetics} />
 
           {/* Floating player list — top-left overlay */}
           <div className="absolute top-2 left-2 flex flex-col gap-1">

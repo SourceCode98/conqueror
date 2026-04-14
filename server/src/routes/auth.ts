@@ -32,8 +32,13 @@ authRouter.post('/register', (req, res) => {
     'INSERT INTO users (username, password_hash) VALUES (?, ?) RETURNING id'
   ).get(username, passwordHash) as { id: string };
 
+  // Grant default unlocks
+  db.prepare("INSERT OR IGNORE INTO user_unlocks (user_id, unlock_id) VALUES (?, 'horn_default')").run(result.id);
+  db.prepare("INSERT OR IGNORE INTO user_unlocks (user_id, unlock_id) VALUES (?, 'road_default')").run(result.id);
+  db.prepare("INSERT OR IGNORE INTO user_unlocks (user_id, unlock_id) VALUES (?, 'building_default')").run(result.id);
+
   const token = signToken({ userId: result.id, username });
-  res.status(201).json({ token, user: { id: result.id, username } });
+  res.status(201).json({ token, user: { id: result.id, username, elo: 1000 } });
 });
 
 authRouter.post('/login', (req, res) => {
@@ -44,8 +49,8 @@ authRouter.post('/login', (req, res) => {
     return;
   }
 
-  const user = db.prepare('SELECT id, username, password_hash FROM users WHERE username = ?')
-    .get(username) as { id: string; username: string; password_hash: string } | undefined;
+  const user = db.prepare('SELECT id, username, password_hash, elo FROM users WHERE username = ?')
+    .get(username) as { id: string; username: string; password_hash: string; elo: number } | undefined;
 
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
     res.status(401).json({ error: 'Invalid username or password' });
@@ -53,5 +58,5 @@ authRouter.post('/login', (req, res) => {
   }
 
   const token = signToken({ userId: user.id, username: user.username });
-  res.json({ token, user: { id: user.id, username: user.username } });
+  res.json({ token, user: { id: user.id, username: user.username, elo: user.elo ?? 1000 } });
 });

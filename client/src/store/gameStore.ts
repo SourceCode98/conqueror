@@ -105,7 +105,8 @@ interface GameStore {
 
   // Final scores revealed at game over (includes hidden VP cards for all players)
   finalScores: Record<string, number> | null;
-  setFinalScores: (scores: Record<string, number>) => void;
+  eloChanges: Record<string, number> | null;
+  setFinalScores: (scores: Record<string, number>, eloChanges?: Record<string, number>) => void;
 
   // Lobby settings broadcast by host
   lobbySettings: { turnTimeLimit: number | null; hornCooldownSecs: number; warMode: boolean; warVariants: Record<string, boolean> } | null;
@@ -160,6 +161,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   stolenReveal: null,
   finalScores: null,
+  eloChanges: null,
   boardMode: null,
   roadBuildingEdges: null,
   pendingBanditCoord: null,
@@ -192,7 +194,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setWarEvent: (e) => set({ warEvent: e }),
 
   clearStolenReveal: () => set({ stolenReveal: null }),
-  setFinalScores: (scores) => set({ finalScores: scores }),
+  setFinalScores: (scores, eloChanges) => set({ finalScores: scores, eloChanges: eloChanges ?? null }),
 
   lobbySettings: null,
   setLobbySettings: (s) => set({ lobbySettings: s }),
@@ -213,6 +215,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     warEvent: null,
     stolenReveal: null,
     finalScores: null,
+    eloChanges: null,
     boardMode: null,
     roadBuildingEdges: null,
     pendingBanditCoord: null,

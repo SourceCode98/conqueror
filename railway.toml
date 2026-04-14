@@ -1,0 +1,6 @@
+[deploy]
+startCommand = "npm run start"
+
+[[volumes]]
+mountPath = "/data"
+name = "conqueror-data"

@@ -3,6 +3,7 @@ import db from '../../db/index.js';
 import type { GameOrchestrator } from '../../game/GameOrchestrator.js';
 import type { ClientMeta } from '../types.js';
 import type { ActionContext } from '../actionRouter.js';
+import { applyEloForGame } from '../../game/applyElo.js';
 
 export function handleEndGame(
   ws: WebSocket,
@@ -37,18 +38,17 @@ export function handleEndGame(
   const topPlayers = sorted.filter(p => p.victoryPoints === topVP);
   const winner = topPlayers.length === 1 ? topPlayers[0].id : null;
 
-  orch.updateState(s => ({
-    ...s,
-    phase: 'GAME_OVER',
-    winner,
-  }));
-
+  orch.updateState(s => ({ ...s, phase: 'GAME_OVER', winner }));
   db.prepare('UPDATE games SET status = ? WHERE id = ?').run('finished', payload.gameId);
 
   orch.addLogEntry('log.hostEndedGame', { player: meta.username }, meta.userId);
   ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
+
+  const eloChanges = winner ? Object.fromEntries(applyEloForGame(orch, winner).map(r => [r.userId, r.delta])) : {};
+  const finalScores = Object.fromEntries(state.players.map(p => [p.id, p.victoryPoints]));
+
   ctx.broadcastToRoom({
     type: 'GAME_OVER',
-    payload: { winnerId: winner ?? '', finalScores: Object.fromEntries(state.players.map(p => [p.id, p.victoryPoints])) },
+    payload: { winnerId: winner ?? '', finalScores, eloChanges },
   });
 }

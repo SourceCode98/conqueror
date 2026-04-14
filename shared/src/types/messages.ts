@@ -58,7 +58,7 @@ export type ServerMessage =
   | WSMessage<'DEV_CARD_DRAWN',      { cardType: DevCardType }>
   | WSMessage<'TRADE_OFFERED',       { offer: TradeOffer }>
   | WSMessage<'TRADE_RESOLVED',      { accepted: boolean; byPlayerId?: string }>
-  | WSMessage<'GAME_OVER',           { winnerId: string; finalScores: Record<string, number> }>
+  | WSMessage<'GAME_OVER',           { winnerId: string; finalScores: Record<string, number>; eloChanges?: Record<string, number> }>
   | WSMessage<'CHAT',                { fromPlayerId: string; username: string; text: string; timestamp: number }>
   | WSMessage<'PLAYER_CONNECTED',    { playerId: string }>
   | WSMessage<'PLAYER_DISCONNECTED', { playerId: string }>

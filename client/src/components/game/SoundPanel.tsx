@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { wsService } from '../../services/wsService.js';
 import { useGameStore } from '../../store/gameStore.js';
+import { useProfileStore } from '../../store/profileStore.js';
 import { cn } from '../../lib/cn.js';
 import { musicEngine } from './musicEngine.js';
 import { VICTORY_POINTS_TO_WIN } from '@conqueror/shared';
@@ -86,6 +87,72 @@ export function playHornSound() {
   } catch { /* ignore */ }
 }
 
+function playFanfareHorn() {
+  try {
+    const ctx = getAudioCtx();
+    [261, 329, 392, 523].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'square'; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.18, ctx.currentTime + i * 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.12 + 0.2);
+      osc.start(ctx.currentTime + i * 0.12);
+      osc.stop(ctx.currentTime + i * 0.12 + 0.2);
+    });
+  } catch { /* ignore */ }
+}
+
+function playRoyalHorn() {
+  try {
+    const ctx = getAudioCtx();
+    const notes = [
+      { freq: 392, t: 0,    dur: 0.15 },
+      { freq: 523, t: 0.15, dur: 0.15 },
+      { freq: 659, t: 0.3,  dur: 0.15 },
+      { freq: 523, t: 0.45, dur: 0.1  },
+      { freq: 784, t: 0.55, dur: 0.35 },
+    ];
+    notes.forEach(n => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'triangle'; osc.frequency.value = n.freq;
+      gain.gain.setValueAtTime(0.22, ctx.currentTime + n.t);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + n.t + n.dur);
+      osc.start(ctx.currentTime + n.t);
+      osc.stop(ctx.currentTime + n.t + n.dur);
+    });
+  } catch { /* ignore */ }
+}
+
+function playWarHorn() {
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(110, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(55, ctx.currentTime + 0.3);
+    osc.frequency.setValueAtTime(110, ctx.currentTime + 0.35);
+    osc.frequency.exponentialRampToValueAtTime(55, ctx.currentTime + 0.7);
+    gain.gain.setValueAtTime(0.4, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.9);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.9);
+  } catch { /* ignore */ }
+}
+
+export function playHornById(hornId: string) {
+  switch (hornId) {
+    case 'horn_fanfare': return playFanfareHorn();
+    case 'horn_royal':   return playRoyalHorn();
+    case 'horn_war':     return playWarHorn();
+    default:             return playHornSound();
+  }
+}
+
 export function playTradeSound() {
   try {
     const ctx = getAudioCtx();
@@ -146,6 +213,8 @@ export default function SoundPanel({ gameId, className }: Props) {
   const [hornCooldown, setHornCooldown] = useState(0);
   const [trackIdx, setTrackIdx] = useState(0);
   const { toasts, gameState } = useGameStore();
+  const { profile } = useProfileStore();
+  const selectedHorn = profile?.selectedHorn ?? 'horn_default';
   const hornCooldownMs = ((gameState?.hornCooldownSecs) ?? 30) * 1000;
   const musicAutoStarted = useRef(false);
 
@@ -154,7 +223,7 @@ export default function SoundPanel({ gameId, className }: Props) {
   useEffect(() => {
     if (toasts.length > prevToastLen.current) {
       const latest = toasts[toasts.length - 1];
-      if (latest?.type === 'horn') safePlay(playHornSound);
+      if (latest?.type === 'horn') safePlay(() => playHornById(selectedHorn));
       if (latest?.type === 'dice_resources') safePlay(playResourceSound);
       if (latest?.type === 'bank_trade') safePlay(playTradeSound);
       if (latest?.type === 'action') {
@@ -234,7 +303,7 @@ export default function SoundPanel({ gameId, className }: Props) {
   function blowHorn() {
     if (hornDisabled) return;
     wsService.send({ type: 'HORN', payload: { gameId } });
-    safePlay(playHornSound);
+    safePlay(() => playHornById(selectedHorn));
     setHornDisabled(true);
     let remaining = hornCooldownMs / 1000;
     setHornCooldown(remaining);

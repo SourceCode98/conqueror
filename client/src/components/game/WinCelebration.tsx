@@ -111,7 +111,7 @@ export default function WinCelebration({ gameState, localPlayerId }: Props) {
   const navigate = useNavigate();
   const audioCtx = useRef<AudioContext | null>(null);
 
-  const { finalScores, playAgainPoll, playAgainResult, clearPlayAgain } = useGameStore();
+  const { finalScores, eloChanges, playAgainPoll, playAgainResult, clearPlayAgain } = useGameStore();
 
   const winner = gameState.players.find(p => p.id === gameState.winner);
   const iAmWinner = localPlayerId === gameState.winner;
@@ -227,10 +227,22 @@ export default function WinCelebration({ gameState, localPlayerId }: Props) {
 
             {/* Score table */}
             <div className="flex flex-col gap-1.5">
-              {sorted.map((p, i) => (
-                <ScoreRow key={p.id} rank={i + 1} username={p.username} color={p.color}
-                  total={getScore(p)} isWinner={p.id === gameState.winner} isMe={p.id === localPlayerId} />
-              ))}
+              {sorted.map((p, i) => {
+                const eloDelta = eloChanges?.[p.id];
+                return (
+                  <div key={p.id} className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <ScoreRow rank={i + 1} username={p.username} color={p.color}
+                        total={getScore(p)} isWinner={p.id === gameState.winner} isMe={p.id === localPlayerId} />
+                    </div>
+                    {eloDelta !== undefined && (
+                      <span className={`text-xs font-bold tabular-nums w-12 text-right ${eloDelta >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {eloDelta >= 0 ? '+' : ''}{eloDelta} ELO
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             {/* ── Play-again voting panel ── */}

@@ -222,7 +222,7 @@ class WSService {
         break;
       }
       case 'GAME_OVER': {
-        store.setFinalScores(msg.payload.finalScores);
+        store.setFinalScores(msg.payload.finalScores, msg.payload.eloChanges);
         break;
       }
       case 'PLAY_AGAIN_POLL': {

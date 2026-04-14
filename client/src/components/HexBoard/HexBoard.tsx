@@ -21,7 +21,10 @@ import {
   TOKEN_PIPS,
 } from './hexLayout.js';
 
-interface HexBoardProps { state: PublicGameState }
+interface HexBoardProps {
+  state: PublicGameState;
+  playerCosmetics?: Record<string, { road: string; building: string }>;
+}
 
 const SNAP_RADIUS = 28;
 
@@ -266,20 +269,35 @@ function TerrainIcon({ terrain, cx, cy }: { terrain: string; cx: number; cy: num
   return null;
 }
 
-function RoadSvg({ edgeId, color, opacity = 1, dashed = false }: {
-  edgeId: EdgeId; color: string; opacity?: number; dashed?: boolean;
+const ROAD_SKIN_STYLES: Record<string, { width: number; highlight: string; shadow: string; extraDash?: string }> = {
+  road_default: { width: 5,   highlight: 'rgba(255,255,255,0.15)', shadow: 'rgba(0,0,0,0.5)' },
+  road_iron:    { width: 6,   highlight: 'rgba(150,180,200,0.25)', shadow: 'rgba(0,0,0,0.7)' },
+  road_stone:   { width: 5.5, highlight: 'rgba(160,160,170,0.3)',  shadow: 'rgba(0,0,0,0.6)', extraDash: '9 2' },
+  road_gold:    { width: 5,   highlight: 'rgba(251,191,36,0.5)',   shadow: 'rgba(120,80,0,0.6)' },
+};
+
+const BUILDING_SKIN_STROKE: Record<string, string> = {
+  building_default: 'white',
+  building_iron:    '#64748b',
+  building_stone:   '#94a3b8',
+  building_gold:    '#f59e0b',
+};
+
+function RoadSvg({ edgeId, color, opacity = 1, dashed = false, skin = 'road_default' }: {
+  edgeId: EdgeId; color: string; opacity?: number; dashed?: boolean; skin?: string;
 }) {
   const [v1id, v2id] = edgeVertices(edgeId);
   const p1 = vertexToPixel(v1id), p2 = vertexToPixel(v2id);
+  const s = ROAD_SKIN_STYLES[skin] ?? ROAD_SKIN_STYLES.road_default;
   return (
     <>
       <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
-        stroke="rgba(0,0,0,0.5)" strokeWidth={8} strokeLinecap="round" opacity={opacity}/>
+        stroke={s.shadow} strokeWidth={s.width + 3} strokeLinecap="round" opacity={opacity}/>
       <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
-        stroke={color} strokeWidth={5} strokeLinecap="round" opacity={opacity}
-        strokeDasharray={dashed ? '7 4' : undefined}/>
+        stroke={color} strokeWidth={s.width} strokeLinecap="round" opacity={opacity}
+        strokeDasharray={dashed ? '7 4' : (s.extraDash ?? undefined)}/>
       <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
-        stroke="rgba(255,255,255,0.15)" strokeWidth={1.5} strokeLinecap="round" opacity={opacity}/>
+        stroke={s.highlight} strokeWidth={1.5} strokeLinecap="round" opacity={opacity}/>
     </>
   );
 }
@@ -358,7 +376,7 @@ function PortLabel({
 
 const MIN_DRAG_PX = 12; // minimum screen pixels to move before a drag becomes a placement
 
-export default function HexBoard({ state }: HexBoardProps) {
+export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps) {
   const { t } = useTranslation('game');
   const svgRef = useRef<SVGSVGElement>(null);
   const dragStartClientPos = useRef<{ x: number; y: number } | null>(null);
@@ -740,7 +758,8 @@ export default function HexBoard({ state }: HexBoardProps) {
         {/* ── Roads ── */}
         {Object.entries(state.roads).map(([edgeId, road]) => {
           const playerColor = state.players.find(p => p.id === road.playerId)?.color ?? 'red';
-          return <RoadSvg key={edgeId} edgeId={edgeId as EdgeId} color={resolvePlayerColor(playerColor)}/>;
+          const roadSkin = playerCosmetics[road.playerId]?.road ?? 'road_default';
+          return <RoadSvg key={edgeId} edgeId={edgeId as EdgeId} color={resolvePlayerColor(playerColor)} skin={roadSkin}/>;
         })}
 
         {/* ── Buildings ── */}
@@ -748,6 +767,8 @@ export default function HexBoard({ state }: HexBoardProps) {
           const pos = vertexToPixel(vertexId as VertexId);
           const playerColor = state.players.find(p => p.id === building.playerId)?.color ?? 'red';
           const fill = resolvePlayerColor(playerColor);
+          const bldSkin = playerCosmetics[building.playerId]?.building ?? 'building_default';
+          const bldStroke = BUILDING_SKIN_STROKE[bldSkin] ?? 'white';
           const bld = building as any;
           const soldiers: number = bld.soldiers ?? 0;
           const sieged: boolean = !!bld.sieged;
@@ -760,8 +781,8 @@ export default function HexBoard({ state }: HexBoardProps) {
                   strokeDasharray="5 3"/>
               )}
               {building.type === 'settlement'
-                ? <SettlementSvg cx={pos.x} cy={pos.y} fill={fill}/>
-                : <CitySvg       cx={pos.x} cy={pos.y} fill={fill}/>
+                ? <SettlementSvg cx={pos.x} cy={pos.y} fill={fill} stroke={bldStroke}/>
+                : <CitySvg       cx={pos.x} cy={pos.y} fill={fill} stroke={bldStroke}/>
               }
               {/* Soldier helmets — 🪖 emoji per soldier, dashed ring for empty slots */}
               {(state as any).warMode && (() => {
