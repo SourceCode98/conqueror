@@ -72,6 +72,8 @@ export interface ColiseumBattle {
   defenderScore: number;  // rounds won
   attackerHp: number;
   defenderHp: number;
+  attackSoldiers: number;        // soldiers attacker brought (affects cooldown + stamina)
+  readyPlayerIds: string[];      // players who have pressed Ready
 }
 
 export interface TradeRespondent {

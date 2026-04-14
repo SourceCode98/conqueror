@@ -206,6 +206,8 @@ export function handleAttack(
         defenderScore: 0,
         attackerHp: COLISEUM_MAX_HP,
         defenderHp: COLISEUM_MAX_HP + Math.min(2, targetBuilding?.soldiers ?? 0) * COLISEUM_SOLDIER_HP_BONUS,
+        attackSoldiers: payload.soldiers,
+        readyPlayerIds: [],
       },
     }));
     orch.setPendingColiseum({
@@ -643,9 +645,12 @@ export function handleColiseumAttack(
   if (!pending) return;
   if (meta.userId !== pending.attackerId && meta.userId !== pending.defenderId) return;
 
-  // Attack cooldown (server-side)
+  // Attack cooldown — attacker gets reduced cooldown per extra soldier (beyond min 2)
   const now = Date.now();
-  if (now - (pending.attackCooldowns[meta.userId] ?? 0) < COLISEUM_ATTACK_COOLDOWN_MS) return;
+  const isBoardAttacker = meta.userId === pending.attackerId;
+  const extraSoldiers = isBoardAttacker ? Math.max(0, pending.attackSoldiers - 2) : 0;
+  const cooldown = COLISEUM_ATTACK_COOLDOWN_MS - extraSoldiers * 80; // 80ms reduction per extra soldier
+  if (now - (pending.attackCooldowns[meta.userId] ?? 0) < cooldown) return;
   pending.attackCooldowns[meta.userId] = now;
 
   const opponentId = meta.userId === pending.attackerId ? pending.defenderId : pending.attackerId;
@@ -672,7 +677,6 @@ export function handleColiseumAttack(
   }
 
   const battle = state.coliseumBattle!;
-  const isBoardAttacker = meta.userId === pending.attackerId;
 
   // Apply HP damage + check for round win
   let newAttackerHp = battle.attackerHp;
@@ -874,5 +878,25 @@ export function handleReconstruct(
     ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
     return;
   }
+  ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
+}
+
+export function handleColiseumReady(
+  _ws: WebSocket,
+  _payload: { gameId: string },
+  meta: ClientMeta,
+  orch: GameOrchestrator,
+  ctx: ActionContext,
+): void {
+  const state = orch.getState();
+  if (state.phase !== 'COLISEUM_BATTLE' || !state.coliseumBattle) return;
+  const battle = state.coliseumBattle;
+  if (meta.userId !== battle.attackerId && meta.userId !== battle.defenderId) return;
+  if (battle.readyPlayerIds.includes(meta.userId)) return;
+
+  orch.updateState(s => ({
+    ...s,
+    coliseumBattle: { ...s.coliseumBattle!, readyPlayerIds: [...s.coliseumBattle!.readyPlayerIds, meta.userId] },
+  }));
   ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
 }

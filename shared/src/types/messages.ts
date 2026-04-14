@@ -49,6 +49,7 @@ export type ClientMessage =
   | WSMessage<'RECONSTRUCT',        { gameId: string; vertexId: VertexId }>
   | WSMessage<'COLISEUM_PLAYER_UPDATE', { gameId: string; x: number; z: number; rotation: number; shielding: boolean; swinging: boolean }>
   | WSMessage<'COLISEUM_ATTACK',        { gameId: string }>
+  | WSMessage<'COLISEUM_READY',         { gameId: string }>
   | WSMessage<'LOBBY_SETTINGS',         { gameId: string; turnTimeLimit: number | null; hornCooldownSecs: number; warMode: boolean; warVariants: Record<string, boolean> }>;
 
 // ─── Server → Client ──────────────────────────────────────────────────────────

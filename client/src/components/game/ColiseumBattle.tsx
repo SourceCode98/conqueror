@@ -236,9 +236,13 @@ export function ColiseumBattle() {
   };
   const [portrait, setPortrait]       = useState(isPortrait);
   const [showControls, setShowControls] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [awaitingPortraitReturn, setAwaitingPortraitReturn] = useState(false);
+  const [fightFlash, setFightFlash] = useState(false);
   const staminaRef    = useRef(STAMINA_MAX);
+  const staminaMaxRef = useRef(STAMINA_MAX);
   const [staminaDisplay, setStaminaDisplay] = useState(STAMINA_MAX);
+  const [staminaMax, setStaminaMax]         = useState(STAMINA_MAX);
 
   const battle        = gameState?.coliseumBattle;
   const isActive      = gameState?.phase === 'COLISEUM_BATTLE' && !!battle;
@@ -267,6 +271,30 @@ export function ColiseumBattle() {
   const yawRef    = useRef(0);
   // Re-render joystick every frame on mobile
   const [, forceJoy] = useState(0);
+
+  // ── Fullscreen helpers ──
+  const enterFullscreen = () => {
+    const el = document.documentElement as any;
+    (el.requestFullscreen?.() ?? el.webkitRequestFullscreen?.())?.catch?.(() => {});
+  };
+  const exitFullscreen = () => {
+    const doc = document as any;
+    (doc.exitFullscreen?.() ?? doc.webkitExitFullscreen?.())?.catch?.(() => {});
+  };
+
+  // Track actual fullscreen state
+  useEffect(() => {
+    const onChange = () => {
+      const doc = document as any;
+      setIsFullscreen(!!(doc.fullscreenElement ?? doc.webkitFullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', onChange);
+    document.addEventListener('webkitfullscreenchange', onChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      document.removeEventListener('webkitfullscreenchange', onChange);
+    };
+  }, []);
 
   // Orientation — use small delay after orientationchange so dimensions have updated
   useEffect(() => {
@@ -298,6 +326,16 @@ export function ColiseumBattle() {
     return () => clearTimeout(t);
   }, [hitEventStore]);
 
+  // When both players become ready, flash "FIGHT!"
+  const readyCount = battle?.readyPlayerIds?.length ?? 0;
+  useEffect(() => {
+    if (readyCount >= 2) {
+      setFightFlash(true);
+      const t = setTimeout(() => setFightFlash(false), 1200);
+      return () => clearTimeout(t);
+    }
+  }, [readyCount]);
+
   // Auto-dismiss battle result; on mobile+landscape hand off to portrait-return gate
   useEffect(() => {
     if (!battleOver) return;
@@ -311,9 +349,10 @@ export function ColiseumBattle() {
     return () => clearTimeout(t);
   }, [battleOver]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Once user rotates back to portrait after battle, unblock normal game
+  // Once user rotates back to portrait after battle, exit fullscreen + unblock normal game
   useEffect(() => {
     if (awaitingPortraitReturn && portrait) {
+      if (isFullscreen) exitFullscreen();
       setAwaitingPortraitReturn(false);
       clearBattleOver();
     }
@@ -386,19 +425,32 @@ export function ColiseumBattle() {
     const remote = { x: -startX, z: 0, rotation: -startYaw, shielding: false, swinging: false };
     let remotePrevSwinging = false;
 
+    // Ready state — read from latest game store state each frame
+    const getBothReady = () => {
+      const b = useGameStore.getState().gameState?.coliseumBattle;
+      return (b?.readyPlayerIds?.length ?? 0) >= 2;
+    };
+
     // Controls state
     const keys = new Set<string>();
     let lastSend = 0;
     let lastAttack = 0;
     let lastStaminaSync = 0;
     let swordSwing = false;
-    staminaRef.current = STAMINA_MAX;
-    setStaminaDisplay(STAMINA_MAX);
+    // Attacker gets bonus max stamina per extra soldier (beyond min 2)
+    const myMaxStamina = isLocalAttacker
+      ? STAMINA_MAX + Math.max(0, battle.attackSoldiers - 2) * 15
+      : STAMINA_MAX;
+    staminaRef.current = myMaxStamina;
+    staminaMaxRef.current = myMaxStamina;
+    setStaminaDisplay(myMaxStamina);
+    setStaminaMax(myMaxStamina);
     let walkPhase = 0;       // walk cycle accumulator
     let remoteWalkPhase = 0; // for remote player
 
     // ── Expose attack + shield to React buttons ──
     function doAttack() {
+      if (!getBothReady()) return;
       const now = performance.now();
       if (now - lastAttack < 950) return;
       if (swordSwing) return;
@@ -520,6 +572,7 @@ export function ColiseumBattle() {
     // ── Game loop ──
     let animId = 0;
     let lastT  = performance.now();
+    let lastJoyUpdate = 0;
     let shakeAmt = 0;
 
     const tick = () => {
@@ -540,15 +593,16 @@ export function ColiseumBattle() {
         );
         camera.lookAt(0, 1.4, 0);
       } else {
-        // ── Input ──
+        // ── Input (frozen until both players ready) ──
         const DEAD = 8;
+        if (!getBothReady()) { /* no movement */ } else
         if (mobile) {
           const jm = joyMove.current;
           if (Math.abs(jm.dx) > DEAD) mx = Math.max(-1, Math.min(1, jm.dx / 55));
           if (Math.abs(jm.dy) > DEAD) mz = Math.max(-1, Math.min(1, jm.dy / -55));
           // Look joystick: x-offset → yaw rotation speed
           if (joyLook.current.active && Math.abs(joyLook.current.dx) > DEAD) {
-            yawRef.current += Math.max(-1, Math.min(1, joyLook.current.dx / 50)) * dt * 2.8;
+            yawRef.current -= Math.max(-1, Math.min(1, joyLook.current.dx / 50)) * dt * 2.8;
           }
         } else {
           if (keys.has('KeyW') || keys.has('ArrowUp'))    mz =  1;
@@ -594,7 +648,7 @@ export function ColiseumBattle() {
           staminaRef.current = Math.max(0, staminaRef.current - STAMINA_SHD_DRAIN * dt);
           if (staminaRef.current === 0) shielding.current = false; // force drop shield
         } else {
-          staminaRef.current = Math.min(STAMINA_MAX, staminaRef.current + STAMINA_REGEN * dt);
+          staminaRef.current = Math.min(staminaMaxRef.current, staminaRef.current + STAMINA_REGEN * dt);
         }
         if (now - lastStaminaSync > 80) {
           lastStaminaSync = now;
@@ -667,7 +721,7 @@ export function ColiseumBattle() {
       }
 
       // Refresh joystick visuals at ~30fps
-      if (mobile && Math.floor(now / 33) !== Math.floor(lastT / 33)) forceJoy(n => n + 1);
+      if (mobile && now - lastJoyUpdate > 33) { lastJoyUpdate = now; forceJoy(n => n + 1); }
 
       renderer.render(scene, camera);
     };
@@ -690,11 +744,23 @@ export function ColiseumBattle() {
   // After battle: mobile + still landscape → gate until user rotates back to portrait
   if (awaitingPortraitReturn) {
     return (
-      <div className="fixed inset-0 z-[60] bg-black flex flex-col items-center justify-center gap-6 p-8 text-center">
+      <div className="fixed inset-0 z-[60] bg-black flex flex-col items-center justify-center gap-6 p-8 text-center"
+        style={{ background: 'radial-gradient(ellipse at center, #051a0e 0%, #000 70%)' }}>
         <div className="text-7xl" style={{ animation: 'spin 2s linear infinite', animationDirection: 'reverse' }}>📱</div>
-        <p className="text-white text-2xl font-black">Rotate Back</p>
-        <p className="text-gray-400 text-sm">Rotate your device back to portrait to continue playing</p>
-        <div className="text-emerald-400 text-4xl mt-2">✓</div>
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-white text-2xl font-black">Rotate Back</p>
+          <p className="text-gray-400 text-sm">Rotate your device back to portrait to continue playing</p>
+        </div>
+        {isFullscreen && (
+          <button
+            onClick={exitFullscreen}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm active:scale-95 transition-all"
+            style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171' }}
+          >
+            <span>⛶</span> Exit Fullscreen
+          </button>
+        )}
+        <div className="text-emerald-400 text-4xl">✓</div>
       </div>
     );
   }
@@ -702,11 +768,37 @@ export function ColiseumBattle() {
   // During battle: mobile + portrait → show rotate-to-landscape prompt (battle frozen)
   if (mobile && portrait && isActive) {
     return (
-      <div className="fixed inset-0 z-[60] bg-black flex flex-col items-center justify-center gap-6 p-8 text-center">
+      <div className="fixed inset-0 z-[60] bg-black flex flex-col items-center justify-center gap-6 p-8 text-center"
+        style={{ background: 'radial-gradient(ellipse at center, #1a0e05 0%, #000 70%)' }}>
+        {/* Spinning phone icon */}
         <div className="text-7xl" style={{ animation: 'spin 2s linear infinite' }}>📱</div>
-        <p className="text-white text-2xl font-black">Rotate to Landscape</p>
-        <p className="text-gray-400 text-sm">The coliseum battle requires landscape orientation</p>
-        <div className="text-amber-400 text-4xl mt-2">⚔️</div>
+
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-white text-2xl font-black">Rotate to Landscape</p>
+          <p className="text-gray-400 text-sm">The coliseum battle requires landscape orientation</p>
+        </div>
+
+        {/* Fullscreen permission button */}
+        <button
+          onClick={enterFullscreen}
+          className="flex items-center gap-3 px-7 py-3.5 rounded-2xl font-black text-base transition-all active:scale-95"
+          style={isFullscreen
+            ? { background: 'rgba(74,222,128,0.15)', border: '2px solid rgba(74,222,128,0.6)', color: '#4ade80' }
+            : { background: 'linear-gradient(135deg, #7c3aed, #a855f7)', boxShadow: '0 0 24px rgba(168,85,247,0.5)', color: 'white', border: '2px solid rgba(168,85,247,0.4)' }
+          }
+        >
+          {isFullscreen ? (
+            <><span className="text-xl">✓</span> Fullscreen Active</>
+          ) : (
+            <><span className="text-xl">⛶</span> Enable Fullscreen</>
+          )}
+        </button>
+
+        <p className="text-gray-600 text-xs">
+          {isFullscreen ? 'Now rotate your device ↻' : 'Tap to request fullscreen for an immersive experience'}
+        </p>
+
+        <div className="text-amber-400 text-4xl">⚔️</div>
       </div>
     );
   }
@@ -759,6 +851,82 @@ export function ColiseumBattle() {
           </div>
         </div>
 
+        {/* Ready screen overlay */}
+        <AnimatePresence>
+          {isCombatant && readyCount < 2 && (
+            <motion.div
+              key="ready-screen"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, transition: { duration: 0.4 } }}
+              className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-6 pointer-events-auto"
+              style={{ background: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(6px)' }}
+            >
+              <p className="text-amber-400 text-2xl font-black tracking-widest">⚔️ COLISEUM</p>
+
+              {/* Player readiness cards */}
+              <div className="flex gap-4">
+                {[
+                  { id: battle?.attackerId, name: attackerPlayer?.username ?? '?', color: atkColor },
+                  { id: battle?.defenderId, name: defenderPlayer?.username ?? '?', color: defColor },
+                ].map(p => {
+                  const isReady = battle?.readyPlayerIds?.includes(p.id ?? '') ?? false;
+                  return (
+                    <div key={p.id}
+                      className="flex flex-col items-center gap-2 rounded-2xl px-5 py-4 transition-all duration-300"
+                      style={{ background: isReady ? `${p.color}22` : 'rgba(255,255,255,0.05)', border: `2px solid ${isReady ? p.color : 'rgba(255,255,255,0.1)'}` }}
+                    >
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center font-black text-lg"
+                        style={{ background: `${p.color}33`, color: p.color }}>
+                        {p.name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <span className="text-xs font-bold" style={{ color: p.color }}>{p.name}</span>
+                      <span className="text-xs font-black" style={{ color: isReady ? '#4ade80' : '#6b7280' }}>
+                        {isReady ? '✓ READY' : '…'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Ready button for local combatant */}
+              {(() => {
+                const localIsReady = battle?.readyPlayerIds?.includes(localId ?? '') ?? false;
+                return !localIsReady ? (
+                  <motion.button
+                    whileTap={{ scale: 0.93 }}
+                    onClick={() => wsService.send({ type: 'COLISEUM_READY', payload: { gameId: gameState!.gameId } })}
+                    className="px-10 py-4 rounded-2xl font-black text-xl tracking-wider"
+                    style={{ background: 'linear-gradient(135deg, #b45309, #f59e0b)', boxShadow: '0 0 30px rgba(245,158,11,0.5)' }}
+                  >
+                    READY
+                  </motion.button>
+                ) : (
+                  <p className="text-green-400 font-black text-lg animate-pulse">Waiting for opponent…</p>
+                );
+              })()}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* FIGHT! flash when both ready */}
+        <AnimatePresence>
+          {fightFlash && (
+            <motion.div
+              key="fight-flash"
+              initial={{ opacity: 0, scale: 1.5 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              transition={{ duration: 0.25 }}
+              className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"
+            >
+              <p className="font-black text-6xl" style={{ color: '#f59e0b', textShadow: '0 0 40px #f59e0b, 0 0 80px #f59e0b88' }}>
+                FIGHT!
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Centre: hit notice */}
         <div className="flex-1 flex items-start justify-center pt-16">
           <AnimatePresence>
@@ -790,7 +958,7 @@ export function ColiseumBattle() {
               <div
                 className="h-full rounded-full"
                 style={{
-                  width: `${(staminaDisplay / STAMINA_MAX) * 100}%`,
+                  width: `${(staminaDisplay / staminaMax) * 100}%`,
                   background: staminaDisplay > 50 ? '#eab308' : staminaDisplay > 25 ? '#f97316' : '#ef4444',
                   boxShadow: `0 0 8px ${staminaDisplay > 50 ? '#eab308aa' : '#f97316aa'}`,
                   transition: 'width 0.08s linear, background 0.3s',
