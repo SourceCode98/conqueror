@@ -139,6 +139,18 @@ interface GameStore {
   setPlayAgainResult: (result: { type: 'start'; newGameId: string } | { type: 'closed' }) => void;
   clearPlayAgain: () => void;
 
+  // Vote-kick
+  kickVote: {
+    targetId: string;
+    targetUsername: string;
+    initiatorUsername: string;
+    votes: Record<string, boolean | null>;
+    secondsLeft: number;
+    eligibleCount: number;
+  } | null;
+  setKickVote: (v: GameStore['kickVote']) => void;
+  clearKickVote: () => void;
+
   // Setters
   setLocalPlayerId: (id: string) => void;
   resetGame: () => void;
@@ -204,6 +216,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setPlayAgainPoll: (votes, secondsLeft) => set({ playAgainPoll: { votes, secondsLeft } }),
   setPlayAgainResult: (result) => set({ playAgainPoll: null, playAgainResult: result }),
   clearPlayAgain: () => set({ playAgainPoll: null, playAgainResult: null }),
+  kickVote: null,
+  setKickVote: (v) => set({ kickVote: v }),
+  clearKickVote: () => set({ kickVote: null }),
 
   dealClosed: null,
   setDealClosed: (deal) => set({ dealClosed: deal }),
@@ -258,6 +273,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     _tradeCardCb: null,
     playAgainPoll: null,
     playAgainResult: null,
+    kickVote: null,
     coliseumPlayerStates: null,
     coliseumHitEvent: null,
     coliseumBattleOver: null,

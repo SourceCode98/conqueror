@@ -6,7 +6,8 @@
       "Bash(npx vite:*)",
       "Bash(npx tsc:*)",
       "Bash(npm install:*)",
-      "Bash(node \"C:/Users/Stream/Desktop/Conqueror/node_modules/typescript/bin/tsc\" --noEmit -p \"C:/Users/Stream/Desktop/Conqueror/client/tsconfig.json\")"
+      "Bash(node \"C:/Users/Stream/Desktop/Conqueror/node_modules/typescript/bin/tsc\" --noEmit -p \"C:/Users/Stream/Desktop/Conqueror/client/tsconfig.json\")",
+      "Bash(xargs cat:*)"
     ]
   }
 }

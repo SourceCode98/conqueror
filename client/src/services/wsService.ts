@@ -180,7 +180,7 @@ class WSService {
             type: 'horn',
             playerId: msg.payload.fromPlayerId,
             username: msg.payload.username,
-            data: {},
+            data: { hornId: msg.payload.hornId },
           });
         }
         break;
@@ -286,6 +286,24 @@ class WSService {
           const eff = msg.payload.winnerSide === 'attacker' ? msg.payload.effect : 'repelled';
           store.setWarEvent({ effect: eff as any, attackerId: atk.id, defenderId: def.id });
         }
+        break;
+      }
+      case 'KICK_VOTE_UPDATE': {
+        store.setKickVote(msg.payload);
+        break;
+      }
+      case 'PLAYER_KICKED': {
+        store.clearKickVote();
+        store.addToast({
+          type: 'action',
+          playerId: msg.payload.playerId,
+          username: msg.payload.username,
+          data: { action: 'player_kicked' },
+        });
+        break;
+      }
+      case 'KICK_VOTE_ENDED': {
+        store.clearKickVote();
         break;
       }
     }

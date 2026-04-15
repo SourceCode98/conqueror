@@ -12,15 +12,15 @@ export const UNLOCKS: UnlockDefinition[] = [
   { id: 'horn_royal',   type: 'horn', eloRequired: 1200, label: 'Royal Fanfare' },
   { id: 'horn_war',     type: 'horn', eloRequired: 1400, label: 'War Horn' },
   // Road skins
-  { id: 'road_default', type: 'road', eloRequired: 0,    label: 'Wooden' },
-  { id: 'road_iron',    type: 'road', eloRequired: 1050, label: 'Iron' },
-  { id: 'road_stone',   type: 'road', eloRequired: 1200, label: 'Stone' },
-  { id: 'road_gold',    type: 'road', eloRequired: 1400, label: 'Golden' },
+  { id: 'road_default', type: 'road', eloRequired: 0,    label: 'Dirt Path' },
+  { id: 'road_iron',    type: 'road', eloRequired: 1050, label: 'Rustic Trail' },
+  { id: 'road_stone',   type: 'road', eloRequired: 1200, label: 'Cobblestone' },
+  { id: 'road_gold',    type: 'road', eloRequired: 1400, label: 'Royal Road' },
   // Building skins
-  { id: 'building_default', type: 'building', eloRequired: 0,    label: 'Wooden' },
-  { id: 'building_iron',    type: 'building', eloRequired: 1050, label: 'Iron' },
-  { id: 'building_stone',   type: 'building', eloRequired: 1200, label: 'Stone' },
-  { id: 'building_gold',    type: 'building', eloRequired: 1400, label: 'Golden' },
+  { id: 'building_default', type: 'building', eloRequired: 0,    label: 'Wooden Hut' },
+  { id: 'building_iron',    type: 'building', eloRequired: 1050, label: 'Rustic Cabin' },
+  { id: 'building_stone',   type: 'building', eloRequired: 1200, label: 'Stone Keep' },
+  { id: 'building_gold',    type: 'building', eloRequired: 1400, label: 'Grand Fortress' },
 ];
 
 export const ELO_TIERS = [

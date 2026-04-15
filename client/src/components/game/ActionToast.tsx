@@ -6,6 +6,7 @@
  * - Horn
  */
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'motion/react';
 import type { PublicGameState, ResourceType } from '@conqueror/shared';
 import { ALL_RESOURCES } from '@conqueror/shared';
@@ -35,6 +36,7 @@ interface Props {
 }
 
 export default function ActionToast({ gameState }: Props) {
+  const { t } = useTranslation('game');
   const { toasts, removeToast } = useGameStore();
   const timerRefs = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -99,7 +101,7 @@ export default function ActionToast({ gameState }: Props) {
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-2xl font-bold tabular-nums" style={{ color: rollColor }}>{total}</span>
                     <span className="text-xs text-gray-400">
-                      {gainers.length === 0 ? 'No resources' : 'Resources distributed'}
+                      {gainers.length === 0 ? t('toast.noResources') : t('toast.resourcesDistributed')}
                     </span>
                   </div>
                   {gainers.length > 0 && (
@@ -136,7 +138,7 @@ export default function ActionToast({ gameState }: Props) {
                   <span className="text-[10px] font-bold shrink-0" style={{ color }}>
                     {toast.username}
                   </span>
-                  <span className="text-[10px] text-gray-500 shrink-0">traded with 🏦</span>
+                  <span className="text-[10px] text-gray-500 shrink-0">{t('toast.tradedWithBank')}</span>
                   <div className="flex gap-1 flex-wrap items-center">
                     {ALL_RESOURCES.filter(r => give[r] > 0).map(r => (
                       <ResourceChip key={r} r={r} count={give[r]}/>
@@ -155,32 +157,33 @@ export default function ActionToast({ gameState }: Props) {
               const { action, extra } = toast.data as { action: string; extra?: string };
               const color = playerColor(toast.playerId);
               const actionLabel: Record<string, string> = {
-                builtRoad: '🛣 built a road',
-                builtSettlement: '🏠 placed a settlement',
-                builtCity: '🏙 upgraded to a city',
-                boughtDevCard: '🃏 bought a dev card',
-                played_warrior: '⚔️ played a Warrior',
-                played_roadBuilding: '🛣️ played Road Building',
-                played_yearOfPlenty: '🌟 played Year of Plenty',
-                played_monopoly: '💰 played Monopoly',
-                attack_won: '⚔️ won a battle!',
-                attack_repelled: '🛡️ attack was repelled',
-                siege_started: '🔴 started a siege',
-                destruction_choice: '💥 is choosing destruction…',
-                soldierMaintenance: '🌾 paid grain for soldiers',
-                soldierDesertion: '💀 lost soldiers (can\'t pay)',
-                trade_offered: '🤝 made a trade offer',
-                trade_countered: '↩ sent a counter-offer',
+                builtRoad:           t('toast.actions.builtRoad'),
+                builtSettlement:     t('toast.actions.builtSettlement'),
+                builtCity:           t('toast.actions.builtCity'),
+                boughtDevCard:       t('toast.actions.boughtDevCard'),
+                played_warrior:      t('toast.actions.played_warrior'),
+                played_roadBuilding: t('toast.actions.played_roadBuilding'),
+                played_yearOfPlenty: t('toast.actions.played_yearOfPlenty'),
+                played_monopoly:     t('toast.actions.played_monopoly'),
+                attack_won:          t('toast.actions.attack_won'),
+                attack_repelled:     t('toast.actions.attack_repelled'),
+                siege_started:       t('toast.actions.siege_started'),
+                destruction_choice:  t('toast.actions.destruction_choice'),
+                soldierMaintenance:  t('toast.actions.soldierMaintenance'),
+                soldierDesertion:    t('toast.actions.soldierDesertion'),
+                trade_offered:       t('toast.actions.trade_offered'),
+                trade_countered:     t('toast.actions.trade_countered'),
+                player_kicked:       t('toast.actions.player_kicked'),
               };
               if (action === 'hurry_up') {
                 return (
                   <div className="flex items-center gap-2">
                     <span className="text-xl">⏰</span>
                     <div className="flex flex-col leading-tight">
-                      <span className="text-sm font-bold text-red-400">Hurry up!</span>
+                      <span className="text-sm font-bold text-red-400">{t('toast.hurryUp')}</span>
                       <span className="text-[10px] text-gray-400">
                         <span className="font-semibold" style={{ color }}>{toast.username}</span>
-                        {' '}honked — <span className="text-red-400 font-bold">−2s</span>
+                        {' '}{t('toast.honked').replace('−2s', '')} <span className="text-red-400 font-bold">−2s</span>
                       </span>
                     </div>
                   </div>
@@ -191,7 +194,7 @@ export default function ActionToast({ gameState }: Props) {
                 return (
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-bold" style={{ color }}>{toast.username}</span>
-                    <span className="text-xs text-gray-300">💰 played Monopoly</span>
+                    <span className="text-xs text-gray-300">{t('toast.actions.played_monopoly')}</span>
                     <span className="text-xs text-yellow-400 font-semibold">({resource} ×{count})</span>
                   </div>
                 );
@@ -200,9 +203,9 @@ export default function ActionToast({ gameState }: Props) {
                 return (
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-bold" style={{ color }}>{toast.username}</span>
-                    <span className="text-xs text-gray-300">💀 lost</span>
-                    <span className="text-xs text-red-400 font-semibold">{extra} soldier{+extra !== 1 ? 's' : ''}</span>
-                    <span className="text-xs text-gray-400">(can't pay)</span>
+                    <span className="text-xs text-gray-300">{t('toast.lostSoldier')}</span>
+                    <span className="text-xs text-red-400 font-semibold">{extra} {+extra !== 1 ? t('ui.soldiers_other') : t('ui.soldiers_one')}</span>
+                    <span className="text-xs text-gray-400">{t('toast.cantPay')}</span>
                   </div>
                 );
               }
@@ -210,9 +213,9 @@ export default function ActionToast({ gameState }: Props) {
                 return (
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-bold" style={{ color }}>{toast.username}</span>
-                    <span className="text-xs text-gray-300">🌾 paid</span>
-                    <span className="text-xs text-yellow-400 font-semibold">{extra} grain</span>
-                    <span className="text-xs text-gray-400">maintenance</span>
+                    <span className="text-xs text-gray-300">{t('toast.paidGrain')}</span>
+                    <span className="text-xs text-yellow-400 font-semibold">{extra} {t('toast.grain')}</span>
+                    <span className="text-xs text-gray-400">{t('toast.maintenance')}</span>
                   </div>
                 );
               }
@@ -241,7 +244,7 @@ export default function ActionToast({ gameState }: Props) {
                   style={{ color: playerColor(toast.playerId) }}>
                   {toast.username}
                 </span>
-                <span className="text-xs text-gray-400">is honking at you!</span>
+                <span className="text-xs text-gray-400">{t('toast.isHonking')}</span>
               </div>
             )}
 
@@ -255,17 +258,17 @@ export default function ActionToast({ gameState }: Props) {
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="text-[11px] font-bold" style={{ color }}>{toast.username}</span>
-                      <span className="text-xs text-red-300 font-semibold">stole from you!</span>
+                      <span className="text-xs text-red-300 font-semibold">{t('toast.stolenFromYou')}</span>
                     </div>
                     <div className="flex items-center gap-1 mt-0.5">
                       <div className="flex items-center gap-1 rounded-lg px-1.5 py-0.5 border"
                         style={{ backgroundColor: CARD_THEME[resource].bg, borderColor: CARD_THEME[resource].border }}>
                         {RESOURCE_ICON_MAP[resource]?.({ size: 14 })}
                         <span className="text-[10px] font-bold" style={{ color: CARD_THEME[resource].border }}>
-                          {resource.charAt(0).toUpperCase() + resource.slice(1)}
+                          {t(`resources.${resource}`, resource.charAt(0).toUpperCase() + resource.slice(1))}
                         </span>
                       </div>
-                      <span className="text-[10px] text-gray-500">was taken</span>
+                      <span className="text-[10px] text-gray-500">{t('toast.wasTaken')}</span>
                     </div>
                   </div>
                 </div>

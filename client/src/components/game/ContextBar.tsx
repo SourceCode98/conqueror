@@ -4,6 +4,7 @@
  * Every action is reachable in a single tap.
  */
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'motion/react';
 import type { PublicGameState, ResourceType, EdgeId } from '@conqueror/shared';
 import { ALL_RESOURCES, hexVertexIds, hasResources, SOLDIER_COST, MAX_SOLDIERS_SETTLEMENT, MAX_SOLDIERS_CITY } from '@conqueror/shared';
@@ -31,7 +32,8 @@ const CARD_EMOJI: Record<string, string> = {
   warrior: '⚔️', roadBuilding: '🛣️', yearOfPlenty: '🌟', monopoly: '💰',
   troopSupply: '🪖', marchOrders: '🚶',
 };
-const CARD_LABEL: Record<string, string> = {
+// CARD_LABEL now filled at render time via t(), kept as fallback
+const CARD_LABEL_FALLBACK: Record<string, string> = {
   warrior: 'Warrior', roadBuilding: 'Road Build', yearOfPlenty: 'Plenty', monopoly: 'Monopoly',
   troopSupply: 'Troop Supply', marchOrders: 'March Orders',
 };
@@ -89,6 +91,7 @@ interface Props {
 }
 
 export default function ContextBar({ gameState, gameId }: Props) {
+  const { t } = useTranslation('game');
   const {
     isMyTurn, myPlayer, canAfford, boardMode, setBoardMode,
     openTradePanel, roadBuildingEdges, startRoadBuilding, cancelRoadBuilding,
@@ -152,7 +155,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
   if (yopPicking) {
     return (
       <div className="bg-green-950/50 px-3 py-2 space-y-2">
-        <p className="text-green-300 text-xs font-semibold">Year of Plenty — pick 2 resources</p>
+        <p className="text-green-300 text-xs font-semibold">{t('ctx.yearOfPlenty', t('devCards.yearOfPlenty'))}</p>
         <div className="flex items-center gap-2">
           <div className="flex gap-1.5">
             {ALL_RESOURCES.map(r => {
@@ -178,7 +181,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
               send('PLAY_DEV_CARD', { cardType: 'yearOfPlenty', params: { resources: yopPicks as [ResourceType, ResourceType] } });
               setYopPicking(false); setYopPicks([]);
             }}
-          >Confirm ({yopPicks.length}/2)</button>
+          >{t('ctx.confirmCount', { count: yopPicks.length }) || `Confirm (${yopPicks.length}/2)`}</button>
           <button className="text-gray-500 text-sm px-1" onClick={() => { setYopPicking(false); setYopPicks([]); }}>✕</button>
         </div>
       </div>
@@ -189,7 +192,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
   if (monoPicking) {
     return (
       <div className="bg-purple-950/50 px-3 py-2 space-y-2">
-        <p className="text-purple-300 text-xs font-semibold">Monopoly — claim all of one resource</p>
+        <p className="text-purple-300 text-xs font-semibold">{t('ctx.monopolyClaim', t('devCards.monopoly'))}</p>
         <div className="flex items-center gap-1.5">
           {ALL_RESOURCES.map(r => (
             <button key={r}
@@ -209,13 +212,13 @@ export default function ContextBar({ gameState, gameId }: Props) {
   // Attack mode with a target selected falls through to ACTION phase instead
   if (((boardMode && boardMode !== 'move_bandit') || roadBuildingEdges !== null) && !(boardMode === 'attack' && attackTargetVertex)) {
     const hintText =
-      boardMode === 'place_settlement' ? 'Tap an intersection to place your Settlement' :
-      boardMode === 'place_city'       ? 'Tap your settlement to upgrade to a City' :
-      boardMode === 'place_road'       ? 'Tap an edge to place your Road' :
-      boardMode === 'recruit_soldier'  ? '🪖 Tap one of your buildings to recruit' :
-      boardMode === 'attack'           ? '⚔️ Tap an enemy building to attack' :
-      roadBuildingEdges !== null       ? `Road Building — pick edge ${(roadBuildingEdges?.length ?? 0) + 1}/2` :
-      'Select a location';
+      boardMode === 'place_settlement' ? t('ctx.tapSettlement') :
+      boardMode === 'place_city'       ? t('ctx.tapCity') :
+      boardMode === 'place_road'       ? t('ctx.tapRoad') :
+      boardMode === 'recruit_soldier'  ? t('ctx.tapRecruit') :
+      boardMode === 'attack'           ? t('ctx.tapAttack') :
+      roadBuildingEdges !== null       ? t('ctx.roadBuildingPick', { count: (roadBuildingEdges?.length ?? 0) + 1 }) :
+      t('ctx.selectLocation');
     const cancel = () => {
       if (roadBuildingEdges !== null) cancelRoadBuilding();
       else setBoardMode(null);
@@ -227,7 +230,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
           className="shrink-0 rounded-xl border border-gray-600 bg-gray-800 text-gray-300 text-sm font-semibold px-4 py-2 active:scale-95 transition-transform"
           onClick={cancel}
         >
-          Cancel
+          {t('ui.cancel')}
         </button>
       </div>
     );
@@ -242,7 +245,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
           className="flex-1 rounded-xl bg-amber-600 hover:bg-amber-500 active:scale-[0.97] text-white font-bold text-sm py-3 flex items-center justify-center gap-2 transition-all shadow-lg"
           onClick={() => send('ROLL_DICE')}
         >
-          🎲 Roll Dice
+          {t('ctx.rollDice')}
         </button>
         {hasWarrior && (
           <button
@@ -250,7 +253,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
             onClick={() => send('PLAY_DEV_CARD', { cardType: 'warrior' })}
           >
             <BanditIcon size={14} color="#93c5fd"/>
-            Warrior
+            {t('ctx.warrior')}
           </button>
         )}
       </div>
@@ -270,7 +273,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
           onClick={() => setBoardMode(mode)}
         >
           {isSettlement ? <SettlementIcon size={16} color="white"/> : <RoadIcon size={16} color="white"/>}
-          {isSettlement ? 'Tap board to place Settlement' : 'Tap board to place Road'}
+          {isSettlement ? t('ctx.tapPlaceSettlement') : t('ctx.tapPlaceRoad')}
         </button>
       </div>
     );
@@ -296,10 +299,10 @@ export default function ContextBar({ gameState, gameId }: Props) {
 
     return (
       <div className="bg-orange-950/30 px-3 py-2 space-y-2">
-        <p className="text-orange-300 text-xs font-semibold">Bandit moved — steal from:</p>
+        <p className="text-orange-300 text-xs font-semibold">{t('ctx.banditMoved')}</p>
         {protectedVictims.length > 0 && (
           <div className="rounded-lg border border-yellow-700/50 bg-yellow-950/30 px-2 py-1.5 text-xs text-yellow-300">
-            🛡️ {protectedVictims.map(p => p!.username).join(', ')} {protectedVictims.length === 1 ? 'is' : 'are'} protected by soldier{protectedVictims.length > 1 ? 's' : ''}
+            🛡️ {t('ctx.isProtected', { count: protectedVictims.length, players: protectedVictims.map(p => p!.username).join(', ') })}
           </div>
         )}
         <div className="flex flex-wrap gap-2">
@@ -320,7 +323,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
             className="rounded-xl border border-gray-700 bg-gray-800 text-gray-400 text-xs px-3 py-1.5"
             onClick={() => { send('MOVE_BANDIT', { coord: pendingBanditCoord }); setPendingBanditCoord(null); }}
           >
-            {stealableVictims.length > 0 ? 'Skip steal' : 'Confirm'}
+            {stealableVictims.length > 0 ? t('ctx.skipSteal') : t('actions.confirmTrade', 'Confirm')}
           </button>
         </div>
       </div>
@@ -338,7 +341,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
     const myCardCount = me ? ALL_RESOURCES.reduce((s, r) => s + ((me.resources as any)[r] ?? 0), 0) : 0;
     return (
       <div className="bg-gray-900/80 px-3 py-2 space-y-1.5">
-        <p className="text-orange-300 text-xs font-semibold">⚔️ {thief?.username} is moving the bandit…</p>
+        <p className="text-orange-300 text-xs font-semibold">⚔️ {t('ctx.isMovingBandit', { player: thief?.username })}</p>
         {myCardCount > 0 && (
           <div className="flex gap-1 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
             {Array.from({ length: Math.min(myCardCount, 12) }, (_, i) => (
@@ -361,7 +364,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
     if (needed > 0) return null; // discard overlay handled in GamePage
     return (
       <div className="px-4 py-2.5">
-        <span className="text-yellow-400 text-sm">Waiting for others to discard…</span>
+        <span className="text-yellow-400 text-sm">{t('ctx.waitingDiscard')}</span>
       </div>
     );
   }
@@ -377,11 +380,11 @@ export default function ContextBar({ gameState, gameId }: Props) {
       return (
         <div className="bg-amber-950/30 px-4 py-3 flex items-center gap-2">
           <span className="text-amber-200 text-sm font-medium">
-            🤝 Your offer —{' '}
-            {acceptCount > 0 && <span className="text-green-400">{acceptCount} accepted</span>}
+            {t('ctx.yourOffer')} —{' '}
+            {acceptCount > 0 && <span className="text-green-400">{acceptCount} {t('ctx.accepted')}</span>}
             {acceptCount > 0 && pendingCount > 0 && ', '}
-            {pendingCount > 0 && <span className="text-gray-400">{pendingCount} deciding</span>}
-            {acceptCount === 0 && pendingCount === 0 && <span className="text-red-400">all declined</span>}
+            {pendingCount > 0 && <span className="text-gray-400">{pendingCount} {t('ctx.deciding')}</span>}
+            {acceptCount === 0 && pendingCount === 0 && <span className="text-red-400">{t('ctx.allDeclined')}</span>}
           </span>
         </div>
       );
@@ -390,13 +393,13 @@ export default function ContextBar({ gameState, gameId }: Props) {
     if (myResponse?.status === 'reject') {
       return (
         <div className="px-4 py-3">
-          <span className="text-gray-500 text-sm">You declined {offerer?.username}'s offer — waiting for others…</span>
+          <span className="text-gray-500 text-sm">{t('ctx.youDeclined', { player: offerer?.username })}</span>
         </div>
       );
     }
     return (
       <div className="bg-amber-950/30 px-4 py-3">
-        <span className="text-amber-200 text-sm font-medium">🤝 Trade offer from {offerer?.username} — see panel above</span>
+        <span className="text-amber-200 text-sm font-medium">{t('ctx.tradeOfferFrom', { player: offerer?.username })}</span>
       </div>
     );
   }
@@ -443,7 +446,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
                       else send('PLAY_DEV_CARD', { cardType: card.type });
                     }}
                   >
-                    {CARD_EMOJI[card.type] ?? '🃏'} {CARD_LABEL[card.type] ?? card.type}
+                    {CARD_EMOJI[card.type] ?? '🃏'} {t(`devCards.${card.type}`, CARD_LABEL_FALLBACK[card.type] ?? card.type)}
                   </button>
                 ))}
               </div>
@@ -456,7 +459,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
           const fb = (gameState.buildings as any)[attackFromVertex];
           return (
             <div className="mx-2 mb-1 rounded-xl border border-amber-700 bg-amber-950/30 px-3 py-2 flex items-center justify-between">
-              <span className="text-amber-300 text-xs">🪖 From your {fb?.type} ({fb?.soldiers ?? 0} soldiers) — tap enemy building</span>
+              <span className="text-amber-300 text-xs">{t('ctx.fromBuilding', { type: fb?.type, soldiers: fb?.soldiers ?? 0 })}</span>
               <button className="text-gray-500 hover:text-gray-300 text-sm leading-none ml-2"
                 onClick={() => setAttackFromVertex(null)}>✕</button>
             </div>
@@ -477,18 +480,18 @@ export default function ContextBar({ gameState, gameId }: Props) {
             <div className="mx-2 mb-1 rounded-xl border border-red-700 bg-red-950/40 p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <p className="text-red-300 text-xs font-semibold">
-                  ⚔️ {victim?.username}'s {tb?.type}{tb?.sieged ? ' (BESIEGED)' : ''}
+                  ⚔️ {victim?.username}'s {tb?.type}{tb?.sieged ? ` ${t('ctx.besieged')}` : ''}
                 </p>
                 <button className="text-gray-500 hover:text-gray-300 text-sm leading-none"
                   onClick={() => { setAttackFromVertex(null); setAttackTargetVertex(null); }}>✕</button>
               </div>
               <p className="text-gray-400 text-xs">
-                Defenders: {tb?.soldiers ?? 0} soldiers{tb?.type === 'city' ? ' +1 city bonus' : ''}
+                {t('ctx.defenders', { count: tb?.soldiers ?? 0, cityBonus: tb?.type === 'city' ? t('ctx.cityBonus') : '' })}
               </p>
               {canSendEnough ? (
                 <>
                   <div className="flex flex-col gap-1">
-                    <span className="text-xs text-gray-400">Send soldiers:</span>
+                    <span className="text-xs text-gray-400">{t('ctx.sendSoldiers')}</span>
                     <div className="flex gap-1 flex-wrap">
                       {Array.from({ length: maxSendable }, (_, i) => i + 1).map(n => {
                         const selected = n <= clampedSoldiers;
@@ -506,7 +509,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
                         );
                       })}
                     </div>
-                    <span className="text-xs text-gray-500">{clampedSoldiers} of {maxSendable} selected</span>
+                    <span className="text-xs text-gray-500">{t('ctx.ofCount', { count: clampedSoldiers, max: maxSendable })}</span>
                   </div>
                   <button
                     className="w-full rounded-lg bg-red-700 hover:bg-red-600 active:bg-red-800 text-white text-xs py-2 font-semibold"
@@ -518,11 +521,11 @@ export default function ContextBar({ gameState, gameId }: Props) {
                       setAttackFromVertex(null);
                       setAttackTargetVertex(null);
                     }}>
-                    Attack with {clampedSoldiers} soldier{clampedSoldiers !== 1 ? 's' : ''}
+                    {clampedSoldiers === 1 ? t('ctx.attackWith') : t('ctx.attackWith_plural', { count: clampedSoldiers })}
                   </button>
                 </>
               ) : (
-                <p className="text-yellow-500 text-xs">Need at least {minSoldiers} soldiers in this building to attack</p>
+                <p className="text-yellow-500 text-xs">{t('ctx.needSoldiers', { min: minSoldiers })}</p>
               )}
             </div>
           );
@@ -541,38 +544,38 @@ export default function ContextBar({ gameState, gameId }: Props) {
         {/* Free soldiers banner (from Troop Supply card) */}
         {myTurn && (me?.freeSoldiers ?? 0) > 0 && (
           <div className="mx-2 mb-1 rounded-xl border border-red-700 bg-red-950/30 px-3 py-1.5 flex items-center gap-2">
-            <span className="text-red-300 text-xs font-semibold">🪖 ×{me!.freeSoldiers} soldados gratis — recluta sin coste</span>
+            <span className="text-red-300 text-xs font-semibold">{t('ctx.freeSoldiers', { count: me!.freeSoldiers })}</span>
           </div>
         )}
 
         {/* March Orders distance bonus banner */}
         {myTurn && ((gameState as any).transferDistanceBonus ?? 0) > 0 && (
           <div className="mx-2 mb-1 rounded-xl border border-cyan-700 bg-cyan-950/30 px-3 py-1.5 flex items-center gap-2">
-            <span className="text-cyan-300 text-xs font-semibold">🚶 March Orders: distancia +{(gameState as any).transferDistanceBonus} este turno</span>
+            <span className="text-cyan-300 text-xs font-semibold">{t('ctx.marchOrders', { bonus: (gameState as any).transferDistanceBonus })}</span>
           </div>
         )}
 
         {/* Action buttons row */}
         <div className="flex items-center gap-0.5 px-1 pt-1.5 pb-1 overflow-x-auto scrollbar-none">
-          <ActionBtn label="Settle" disabled={!canSettle} active={mode === 'place_settlement'}
+          <ActionBtn label={t('ctx.settle')} disabled={!canSettle} active={mode === 'place_settlement'}
             pieces={settlementsLeft}
             onClick={() => setBoardMode(mode === 'place_settlement' ? null : 'place_settlement')}>
             <SettlementIcon size={18} color={canSettle ? '#4ade80' : '#4b5563'}/>
           </ActionBtn>
 
-          <ActionBtn label="Road" disabled={!canRoad} active={mode === 'place_road'}
+          <ActionBtn label={t('ctx.road')} disabled={!canRoad} active={mode === 'place_road'}
             pieces={roadsLeft}
             onClick={() => setBoardMode(mode === 'place_road' ? null : 'place_road')}>
             <RoadIcon size={18} color={canRoad ? '#4ade80' : '#4b5563'}/>
           </ActionBtn>
 
-          <ActionBtn label="City" disabled={!canCity} active={mode === 'place_city'}
+          <ActionBtn label={t('ctx.city')} disabled={!canCity} active={mode === 'place_city'}
             pieces={citiesLeft}
             onClick={() => setBoardMode(mode === 'place_city' ? null : 'place_city')}>
             <CityIcon size={18} color={canCity ? '#4ade80' : '#4b5563'}/>
           </ActionBtn>
 
-          <ActionBtn label="Dev" disabled={!canDevBuy}
+          <ActionBtn label={t('ctx.dev')} disabled={!canDevBuy}
             onClick={() => send('BUY_DEV_CARD')}>
             <DevCardIcon size={18} color={canDevBuy ? '#f59e0b' : '#4b5563'}/>
           </ActionBtn>
@@ -595,11 +598,11 @@ export default function ContextBar({ gameState, gameId }: Props) {
             return (
               <>
                 <div className="w-px h-6 bg-gray-700 mx-0.5 shrink-0"/>
-                <ActionBtn label="Recruit" active={mode === 'recruit_soldier'} disabled={!canRecruit}
+                <ActionBtn label={t('ctx.recruit')} active={mode === 'recruit_soldier'} disabled={!canRecruit}
                   onClick={() => { if (canRecruit) setBoardMode(mode === 'recruit_soldier' ? null : 'recruit_soldier'); }}>
                   <span className={cn('text-lg leading-none', !canRecruit && 'opacity-40')}>🪖</span>
                 </ActionBtn>
-                <ActionBtn label="Attack" disabled={!canAttack} active={mode === 'attack'}
+                <ActionBtn label={t('ctx.attack')} disabled={!canAttack} active={mode === 'attack'}
                   badge={totalSoldiers > 0 ? totalSoldiers : undefined}
                   onClick={() => {
                     if (!canAttack) return;
@@ -608,7 +611,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
                   }}>
                   <span className={cn('text-lg leading-none', !canAttack && 'opacity-40')}>⚔️</span>
                 </ActionBtn>
-                <ActionBtn label="Mover" disabled={!canTransfer} active={mode === 'transfer_soldiers'}
+                <ActionBtn label={t('ctx.transfer')} disabled={!canTransfer} active={mode === 'transfer_soldiers'}
                   badge={transfersLeft < 2 ? transfersLeft : undefined}
                   onClick={() => {
                     if (!canTransfer) return;
@@ -624,16 +627,16 @@ export default function ContextBar({ gameState, gameId }: Props) {
           {/* Divider */}
           <div className="w-px h-6 bg-gray-700 mx-0.5 shrink-0"/>
 
-          <ActionBtn label="Bank" onClick={() => openTradePanel('bank')}>
+          <ActionBtn label={t('ctx.bank')} onClick={() => openTradePanel('bank')}>
             <span className="text-lg leading-none">🏦</span>
           </ActionBtn>
 
-          <ActionBtn label="Trade" onClick={() => openTradePanel('offer')}>
+          <ActionBtn label={t('ctx.trade')} onClick={() => openTradePanel('offer')}>
             <span className="text-lg leading-none">🤝</span>
           </ActionBtn>
 
           {playable.length > 0 && (
-            <ActionBtn label="Cards" badge={playable.length} active={showCards}
+            <ActionBtn label={t('ctx.cards')} badge={playable.length} active={showCards}
               onClick={() => setShowCards(s => !s)}>
               <span className="text-lg leading-none">🃏</span>
             </ActionBtn>
@@ -646,7 +649,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
             className="w-full rounded-xl bg-green-700 hover:bg-green-600 active:scale-[0.98] text-white font-bold text-sm py-2.5 transition-all shadow-md"
             onClick={() => send('END_TURN')}
           >
-            Terminar turno →
+            {t('ctx.endTurn')}
           </button>
         </div>
       </div>
@@ -660,7 +663,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
     if (isAttacker) {
       return (
         <div className="bg-red-950/50 px-4 py-3 flex items-center gap-2">
-          <span className="text-red-400 text-sm font-semibold">💥 Choose destruction — see overlay above</span>
+          <span className="text-red-400 text-sm font-semibold">{t('ctx.chooseDestruction')}</span>
         </div>
       );
     }
@@ -668,7 +671,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
     return (
       <div className="bg-gray-900 px-4 py-3 flex items-center gap-2">
         <span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse"/>
-        <span className="text-gray-500 text-sm"><span className="text-red-300 font-medium">{attacker?.username}</span> is choosing destruction…</span>
+        <span className="text-gray-500 text-sm"><span className="text-red-300 font-medium">{attacker?.username}</span> {t('ctx.isChoosingDestruction', { player: '' }).trim()}</span>
       </div>
     );
   }
@@ -680,7 +683,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
       return (
         <div className="bg-gray-900 px-4 py-3 flex items-center gap-2">
           <span className="w-1.5 h-1.5 rounded-full bg-gray-600 animate-pulse"/>
-          <span className="text-gray-500 text-sm">Waiting for <span className="text-gray-300 font-medium">{activeName}</span>…</span>
+          <span className="text-gray-500 text-sm">{t('ctx.waitingFor', { player: activeName })}</span>
         </div>
       );
     }

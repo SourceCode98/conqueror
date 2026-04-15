@@ -6,15 +6,15 @@ import { wsService } from '../../services/wsService.js';
 import { resolvePlayerColor } from '../HexBoard/hexLayout.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const ARENA_RADIUS  = 11;
-const MOVE_SPEED    = 5.5;
-const POS_SEND_MS   = 50;   // 20 fps position sync
+const ARENA_RADIUS = 11;
+const MOVE_SPEED = 5.5;
+const POS_SEND_MS = 50;   // 20 fps position sync
 const ATTACK_ANIM_MS = 280;
-const WIN_SCORE        = 3;
-const STAMINA_MAX      = 100;
+const WIN_SCORE = 3;
+const STAMINA_MAX = 100;
 const STAMINA_ATK_COST = 28;  // consumed per swing
 const STAMINA_SHD_DRAIN = 18; // per second while shielding
-const STAMINA_REGEN    = 22;  // per second while not shielding
+const STAMINA_REGEN = 22;  // per second while not shielding
 const isMobileDevice = () => /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || ('ontouchstart' in window);
 
 // ─── Arena builder ────────────────────────────────────────────────────────────
@@ -38,7 +38,7 @@ function buildArena(scene: THREE.Scene) {
 
   // Pillars + torches
   for (let i = 0; i < 8; i++) {
-    const a  = (i / 8) * Math.PI * 2;
+    const a = (i / 8) * Math.PI * 2;
     const px = Math.sin(a) * (ARENA_RADIUS - 0.8);
     const pz = Math.cos(a) * (ARENA_RADIUS - 0.8);
 
@@ -75,11 +75,11 @@ function buildArena(scene: THREE.Scene) {
 
 // ─── Player mesh ──────────────────────────────────────────────────────────────
 function buildPlayerMesh(hexColor: string): THREE.Group {
-  const col    = new THREE.Color(hexColor);
-  const body   = new THREE.MeshStandardMaterial({ color: col, roughness: 0.6 });
-  const skin   = new THREE.MeshStandardMaterial({ color: 0xf0c080, roughness: 0.7 });
-  const metal  = new THREE.MeshStandardMaterial({ color: 0xbbbbbb, metalness: 0.85, roughness: 0.2 });
-  const wood   = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.9 });
+  const col = new THREE.Color(hexColor);
+  const body = new THREE.MeshStandardMaterial({ color: col, roughness: 0.6 });
+  const skin = new THREE.MeshStandardMaterial({ color: 0xf0c080, roughness: 0.7 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0xbbbbbb, metalness: 0.85, roughness: 0.2 });
+  const wood = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.9 });
 
   const g = new THREE.Group();
 
@@ -87,7 +87,7 @@ function buildPlayerMesh(hexColor: string): THREE.Group {
   const legGeo = new THREE.CylinderGeometry(0.11, 0.1, 0.75, 7);
   // Legs are pivot-groups so we can rotate them at the hip
   const legLPivot = new THREE.Group(); legLPivot.position.set(-0.14, 0.75, 0); g.add(legLPivot);
-  const legRPivot = new THREE.Group(); legRPivot.position.set( 0.14, 0.75, 0); g.add(legRPivot);
+  const legRPivot = new THREE.Group(); legRPivot.position.set(0.14, 0.75, 0); g.add(legRPivot);
   const legLMesh = new THREE.Mesh(legGeo, body); legLMesh.position.set(0, -0.375, 0); legLPivot.add(legLMesh);
   const legRMesh = new THREE.Mesh(legGeo, body); legRMesh.position.set(0, -0.375, 0); legRPivot.add(legRMesh);
   g.userData.legL = legLPivot;
@@ -115,18 +115,18 @@ function buildPlayerMesh(hexColor: string): THREE.Group {
   const blade = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.95, 0.04), metal);
   blade.position.y = 0.47;
   const guard = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.065, 0.065), metal);
-  const hilt  = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.22, 0.05), wood);
+  const hilt = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.22, 0.05), wood);
   hilt.position.y = -0.11;
   swGrp.add(blade, guard, hilt);
   g.add(swGrp);
-  g.userData.sword       = swGrp;
-  g.userData.swordRestZ  = 0.15;
+  g.userData.sword = swGrp;
+  g.userData.swordRestZ = 0.15;
 
   // ── Shield (left side, hidden when not blocking) ──
   const shGrp = new THREE.Group();
   shGrp.position.set(-0.44, 1.1, 0.22);
   const shBody = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.65, 0.09), new THREE.MeshStandardMaterial({ color: col, metalness: 0.25, roughness: 0.6 }));
-  const shRim  = new THREE.Mesh(new THREE.BoxGeometry(0.59, 0.69, 0.06), metal);
+  const shRim = new THREE.Mesh(new THREE.BoxGeometry(0.59, 0.69, 0.06), metal);
   shRim.position.z = 0.025;
   const shBoss = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), metal);
   shGrp.add(shBody, shRim, shBoss);
@@ -219,33 +219,33 @@ function RoundDots({ score, color }: { score: number; color: string }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export function ColiseumBattle() {
-  const mountRef     = useRef<HTMLDivElement>(null);
-  const gameState    = useGameStore(s => s.gameState);
-  const localId      = useGameStore(s => s.localPlayerId);
+  const mountRef = useRef<HTMLDivElement>(null);
+  const gameState = useGameStore(s => s.gameState);
+  const localId = useGameStore(s => s.localPlayerId);
   const hitEventStore = useGameStore(s => s.coliseumHitEvent);
-  const battleOver   = useGameStore(s => s.coliseumBattleOver);
+  const battleOver = useGameStore(s => s.coliseumBattleOver);
   const clearBattleOver = useGameStore(s => s.clearColiseumBattleOver);
 
-  const [scores, setScores]           = useState({ attacker: 0, defender: 0, attackerHp: MAX_HP, defenderHp: MAX_HP, defenderMaxHp: MAX_HP });
-  const [hitNotice, setHitNotice]     = useState<{ label: string; color: string } | null>(null);
+  const [scores, setScores] = useState({ attacker: 0, defender: 0, attackerHp: MAX_HP, defenderHp: MAX_HP, defenderMaxHp: MAX_HP });
+  const [hitNotice, setHitNotice] = useState<{ label: string; color: string } | null>(null);
   const isPortrait = () => {
     if (typeof screen !== 'undefined' && screen.orientation?.type) {
       return screen.orientation.type.includes('portrait');
     }
     return window.innerHeight > window.innerWidth;
   };
-  const [portrait, setPortrait]       = useState(isPortrait);
+  const [portrait, setPortrait] = useState(isPortrait);
   const [showControls, setShowControls] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [awaitingPortraitReturn, setAwaitingPortraitReturn] = useState(false);
   const [fightFlash, setFightFlash] = useState(false);
-  const staminaRef    = useRef(STAMINA_MAX);
+  const staminaRef = useRef(STAMINA_MAX);
   const staminaMaxRef = useRef(STAMINA_MAX);
   const [staminaDisplay, setStaminaDisplay] = useState(STAMINA_MAX);
-  const [staminaMax, setStaminaMax]         = useState(STAMINA_MAX);
+  const [staminaMax, setStaminaMax] = useState(STAMINA_MAX);
 
-  const battle        = gameState?.coliseumBattle;
-  const isActive      = gameState?.phase === 'COLISEUM_BATTLE' && !!battle;
+  const battle = gameState?.coliseumBattle;
+  const isActive = gameState?.phase === 'COLISEUM_BATTLE' && !!battle;
 
   // Set defenderMaxHp once when battle starts (first time we see the battle state)
   useEffect(() => {
@@ -261,25 +261,25 @@ export function ColiseumBattle() {
         : prev.defenderMaxHp,
     }));
   }, [battle?.attackerScore, battle?.defenderScore, battle?.attackerHp, battle?.defenderHp]);
-  const mobile        = isMobileDevice();
+  const mobile = isMobileDevice();
 
   // Live refs used inside the Three.js loop (no re-render needed)
-  const joyMove   = useRef<JoyState>({ cx: 0, cy: 0, dx: 0, dy: 0, active: false });
-  const joyLook   = useRef<JoyState>({ cx: 0, cy: 0, dx: 0, dy: 0, active: false });
+  const joyMove = useRef<JoyState>({ cx: 0, cy: 0, dx: 0, dy: 0, active: false });
+  const joyLook = useRef<JoyState>({ cx: 0, cy: 0, dx: 0, dy: 0, active: false });
   const shielding = useRef(false);
   const localPosRef = useRef({ x: 0, z: 0 });
-  const yawRef    = useRef(0);
+  const yawRef = useRef(0);
   // Re-render joystick every frame on mobile
   const [, forceJoy] = useState(0);
 
   // ── Fullscreen helpers ──
   const enterFullscreen = () => {
     const el = document.documentElement as any;
-    (el.requestFullscreen?.() ?? el.webkitRequestFullscreen?.())?.catch?.(() => {});
+    (el.requestFullscreen?.() ?? el.webkitRequestFullscreen?.())?.catch?.(() => { });
   };
   const exitFullscreen = () => {
     const doc = document as any;
-    (doc.exitFullscreen?.() ?? doc.webkitExitFullscreen?.())?.catch?.(() => {});
+    (doc.exitFullscreen?.() ?? doc.webkitExitFullscreen?.())?.catch?.(() => { });
   };
 
   // Track actual fullscreen state
@@ -403,7 +403,7 @@ export function ColiseumBattle() {
     const isCombatant = isLocalAttacker || isLocalDefender;
 
     // For spectators: localMesh = attacker, remoteMesh = defender
-    const localColor  = isCombatant ? (isLocalAttacker ? atkColor : defColor) : atkColor;
+    const localColor = isCombatant ? (isLocalAttacker ? atkColor : defColor) : atkColor;
     const remoteColor = isCombatant ? (isLocalAttacker ? defColor : atkColor) : defColor;
 
     const startX = (isCombatant ? isLocalAttacker : true) ? -3.5 : 3.5;
@@ -412,7 +412,7 @@ export function ColiseumBattle() {
     localPosRef.current = { x: startX, z: 0 };
     yawRef.current = startYaw;
 
-    const localMesh  = buildPlayerMesh(localColor);
+    const localMesh = buildPlayerMesh(localColor);
     localMesh.position.set(startX, 0, 0);
     localMesh.rotation.y = startYaw;
     scene.add(localMesh);
@@ -470,8 +470,8 @@ export function ColiseumBattle() {
     }
 
     // Attach to DOM node so React buttons can call them
-    (container as any).__attack    = doAttack;
-    (container as any).__shieldOn  = () => { shielding.current = true; };
+    (container as any).__attack = doAttack;
+    (container as any).__shieldOn = () => { shielding.current = true; };
     (container as any).__shieldOff = () => { shielding.current = false; };
 
     // ── WS subscription ──
@@ -509,7 +509,7 @@ export function ColiseumBattle() {
     // ── Keyboard ──
     const onKeyDown = (e: KeyboardEvent) => {
       // Prevent scrolling while game is active
-      if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
       keys.add(e.code);
       if (e.code === 'KeyF' || e.code === 'Space') doAttack();
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyQ') shielding.current = true;
@@ -588,14 +588,14 @@ export function ColiseumBattle() {
 
     // ── Game loop ──
     let animId = 0;
-    let lastT  = performance.now();
+    let lastT = performance.now();
     let lastJoyUpdate = 0;
     let shakeAmt = 0;
 
     const tick = () => {
       animId = requestAnimationFrame(tick);
       const now = performance.now();
-      const dt  = Math.min((now - lastT) / 1000, 0.05);
+      const dt = Math.min((now - lastT) / 1000, 0.05);
       lastT = now;
 
       let mx = 0, mz = 0; // movement input (used for leg anim outside combatant block)
@@ -613,24 +613,24 @@ export function ColiseumBattle() {
         // ── Input (frozen until both players ready) ──
         const DEAD = 8;
         if (!getBothReady()) { /* no movement */ } else
-        if (mobile) {
-          const jm = joyMove.current;
-          if (Math.abs(jm.dx) > DEAD) mx = Math.max(-1, Math.min(1, jm.dx / 55));
-          if (Math.abs(jm.dy) > DEAD) mz = Math.max(-1, Math.min(1, jm.dy / -55));
-          // Look joystick: x-offset → yaw rotation speed
-          if (joyLook.current.active && Math.abs(joyLook.current.dx) > DEAD) {
-            yawRef.current -= Math.max(-1, Math.min(1, joyLook.current.dx / 50)) * dt * 2.8;
+          if (mobile) {
+            const jm = joyMove.current;
+            if (Math.abs(jm.dx) > DEAD) mx = Math.max(-1, Math.min(1, jm.dx / 55));
+            if (Math.abs(jm.dy) > DEAD) mz = Math.max(-1, Math.min(1, jm.dy / -55));
+            // Look joystick: x-offset → yaw rotation speed
+            if (joyLook.current.active && Math.abs(joyLook.current.dx) > DEAD) {
+              yawRef.current -= Math.max(-1, Math.min(1, joyLook.current.dx / 50)) * dt * 2.8;
+            }
+          } else {
+            if (keys.has('KeyW') || keys.has('ArrowUp')) mz = 1;
+            if (keys.has('KeyS') || keys.has('ArrowDown')) mz = -1;
+            if (keys.has('KeyA') || keys.has('ArrowLeft')) mx = -1;
+            if (keys.has('KeyD') || keys.has('ArrowRight')) mx = 1;
           }
-        } else {
-          if (keys.has('KeyW') || keys.has('ArrowUp'))    mz =  1;
-          if (keys.has('KeyS') || keys.has('ArrowDown'))  mz = -1;
-          if (keys.has('KeyA') || keys.has('ArrowLeft'))  mx = -1;
-          if (keys.has('KeyD') || keys.has('ArrowRight')) mx =  1;
-        }
 
         // ── Movement (relative to camera yaw) ──
-        const y    = yawRef.current;
-        const spd  = MOVE_SPEED * dt;
+        const y = yawRef.current;
+        const spd = MOVE_SPEED * dt;
         const fwdX = Math.sin(y), fwdZ = Math.cos(y);
         const rgtX = -Math.cos(y), rgtZ = Math.sin(y);
         const p = localPosRef.current;
@@ -719,7 +719,7 @@ export function ColiseumBattle() {
           slL.rotation.x = 0.3; slR.rotation.x = 0.3;
         } else if (localMoving) {
           walkPhase += dt * 7;
-          slL.rotation.x =  Math.sin(walkPhase) * 0.55;
+          slL.rotation.x = Math.sin(walkPhase) * 0.55;
           slR.rotation.x = -Math.sin(walkPhase) * 0.55;
         } else {
           slL.rotation.x *= 0.82; slR.rotation.x *= 0.82;
@@ -734,14 +734,14 @@ export function ColiseumBattle() {
         if (swordSwing) {
           // Attack pose: legs spread apart slightly
           lL.rotation.x = -0.35;
-          lR.rotation.x =  0.35;
+          lR.rotation.x = 0.35;
         } else if (shielding.current) {
           // Shield stance: crouch forward
           lL.rotation.x = 0.3;
           lR.rotation.x = 0.3;
         } else if (isMoving) {
           walkPhase += dt * 8.5;
-          lL.rotation.x =  Math.sin(walkPhase) * 0.55;
+          lL.rotation.x = Math.sin(walkPhase) * 0.55;
           lR.rotation.x = -Math.sin(walkPhase) * 0.55;
         } else {
           // Idle: return to neutral
@@ -760,7 +760,7 @@ export function ColiseumBattle() {
         if (remote.shielding) {
           rlL.rotation.x = 0.3; rlR.rotation.x = 0.3;
         } else if (remoteMoving) {
-          rlL.rotation.x =  Math.sin(remoteWalkPhase) * 0.55;
+          rlL.rotation.x = Math.sin(remoteWalkPhase) * 0.55;
           rlR.rotation.x = -Math.sin(remoteWalkPhase) * 0.55;
         } else {
           rlL.rotation.x *= 0.82; rlR.rotation.x *= 0.82;
@@ -1084,7 +1084,7 @@ export function ColiseumBattle() {
               style={{
                 width: 48, height: 48,
                 left: 36 + (joyMove.current.active ? Math.max(-36, Math.min(36, joyMove.current.dx)) : 0),
-                top:  36 + (joyMove.current.active ? Math.max(-36, Math.min(36, joyMove.current.dy)) : 0),
+                top: 36 + (joyMove.current.active ? Math.max(-36, Math.min(36, joyMove.current.dy)) : 0),
                 background: 'rgba(255,255,255,0.30)',
                 border: '2px solid rgba(255,255,255,0.5)',
                 transition: joyMove.current.active ? 'none' : 'left 0.1s, top 0.1s',
@@ -1101,7 +1101,7 @@ export function ColiseumBattle() {
               style={{
                 width: 48, height: 48,
                 left: 36 + (joyLook.current.active ? Math.max(-36, Math.min(36, joyLook.current.dx)) : 0),
-                top:  36 + (joyLook.current.active ? Math.max(-36, Math.min(36, joyLook.current.dy)) : 0),
+                top: 36 + (joyLook.current.active ? Math.max(-36, Math.min(36, joyLook.current.dy)) : 0),
                 background: 'rgba(255,255,255,0.22)',
                 border: '2px solid rgba(255,255,255,0.42)',
                 transition: joyLook.current.active ? 'none' : 'left 0.1s, top 0.1s',

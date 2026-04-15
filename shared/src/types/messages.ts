@@ -39,7 +39,7 @@ export type ClientMessage =
   | WSMessage<'FORCE_END_TURN',      { gameId: string }>
   | WSMessage<'END_GAME',            { gameId: string }>
   | WSMessage<'CHAT',                { gameId: string; text: string }>
-  | WSMessage<'HORN',                { gameId: string }>
+  | WSMessage<'HORN',                { gameId: string; hornId?: string }>
   | WSMessage<'PLAY_AGAIN_VOTE',     { gameId: string; accept: boolean }>
   | WSMessage<'RECRUIT_SOLDIER',    { gameId: string; vertexId: VertexId }>
   | WSMessage<'TRANSFER_SOLDIERS',  { gameId: string; fromVertexId: VertexId; toVertexId: VertexId; count: number }>
@@ -50,7 +50,9 @@ export type ClientMessage =
   | WSMessage<'COLISEUM_PLAYER_UPDATE', { gameId: string; x: number; z: number; rotation: number; shielding: boolean; swinging: boolean }>
   | WSMessage<'COLISEUM_ATTACK',        { gameId: string }>
   | WSMessage<'COLISEUM_READY',         { gameId: string }>
-  | WSMessage<'LOBBY_SETTINGS',         { gameId: string; turnTimeLimit: number | null; hornCooldownSecs: number; warMode: boolean; warVariants: Record<string, boolean> }>;
+  | WSMessage<'LOBBY_SETTINGS',         { gameId: string; turnTimeLimit: number | null; hornCooldownSecs: number; warMode: boolean; warVariants: Record<string, boolean> }>
+  | WSMessage<'VOTE_KICK',              { gameId: string; targetId: string }>
+  | WSMessage<'KICK_VOTE',              { gameId: string; vote: boolean }>;
 
 // ─── Server → Client ──────────────────────────────────────────────────────────
 
@@ -66,7 +68,7 @@ export type ServerMessage =
   | WSMessage<'PLAYER_CONNECTED',    { playerId: string }>
   | WSMessage<'PLAYER_DISCONNECTED', { playerId: string }>
   | WSMessage<'BANK_TRADE_EXECUTED', { playerId: string; username: string; give: ResourceBundle; want: ResourceBundle }>
-  | WSMessage<'HORN_PLAYED',         { fromPlayerId: string; username: string }>
+  | WSMessage<'HORN_PLAYED',         { fromPlayerId: string; username: string; hornId: string }>
   | WSMessage<'ACTION_TOAST',        { playerId: string; username: string; action: string; extra?: string }>
   | WSMessage<'PLAY_AGAIN_POLL',     { votes: Record<string, boolean | null>; secondsLeft: number }>
   | WSMessage<'PLAY_AGAIN_START',    { newGameId: string }>
@@ -78,4 +80,7 @@ export type ServerMessage =
   | WSMessage<'LOBBY_SETTINGS',         { turnTimeLimit: number | null; hornCooldownSecs: number; warMode: boolean; warVariants: Record<string, boolean> }>
   | WSMessage<'COLISEUM_PLAYER_STATES', { states: Record<string, { x: number; z: number; rotation: number; shielding: boolean; swinging: boolean }> }>
   | WSMessage<'COLISEUM_HIT',           { attackerId: string; defenderId: string; attackerScore: number; defenderScore: number; attackerHp: number; defenderHp: number; blocked: boolean }>
-  | WSMessage<'COLISEUM_BATTLE_OVER',   { winnerId: string; winnerSide: 'attacker' | 'defender'; attackerScore: number; defenderScore: number; effect: 'siege' | 'destruction_choice' | 'repelled'; attackerName: string; defenderName: string }>;
+  | WSMessage<'COLISEUM_BATTLE_OVER',   { winnerId: string; winnerSide: 'attacker' | 'defender'; attackerScore: number; defenderScore: number; effect: 'siege' | 'destruction_choice' | 'repelled'; attackerName: string; defenderName: string }>
+  | WSMessage<'KICK_VOTE_UPDATE',       { targetId: string; targetUsername: string; initiatorUsername: string; votes: Record<string, boolean | null>; secondsLeft: number; eligibleCount: number }>
+  | WSMessage<'KICK_VOTE_ENDED',        { targetUsername: string; result: 'kicked' | 'failed' }>
+  | WSMessage<'PLAYER_KICKED',          { playerId: string; username: string }>;

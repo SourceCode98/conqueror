@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 
 interface Props {
   onClose: () => void;
-  variants?: { totalWar?: boolean; fortress?: boolean; reconstruction?: boolean; soldierFoodEnabled?: boolean };
+  variants?: { totalWar?: boolean; fortress?: boolean; reconstruction?: boolean; soldierFoodEnabled?: boolean; coliseum?: boolean };
 }
 
 const SECTION_KEYS = ['soldiers', 'attacking', 'siege', 'destruction', 'warlord'] as const;
@@ -18,7 +18,7 @@ const SECTION_ICONS: Record<string, string> = {
   destruction: '💥',
   warlord: '🏆',
 };
-const VARIANT_KEYS = ['totalWar', 'fortress', 'reconstruction'] as const;
+const VARIANT_KEYS = ['totalWar', 'fortress', 'reconstruction', 'coliseum'] as const;
 
 export default function WarRulesModal({ onClose, variants }: Props) {
   const { t } = useTranslation('game');
@@ -81,6 +81,26 @@ export default function WarRulesModal({ onClose, variants }: Props) {
                 )}
               </div>
             )}
+
+            {/* Coliseum section — shown only when coliseum variant is active */}
+            {variants?.coliseum && (() => {
+              const lines = t('warRules.sections.coliseum.lines', { returnObjects: true }) as string[];
+              return (
+                <div className="border border-purple-800/50 rounded-xl p-3 bg-purple-900/10">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-lg">🏟️</span>
+                    <h3 className="text-sm font-bold text-purple-300">{t('warRules.sections.coliseum.title')}</h3>
+                  </div>
+                  <ul className="space-y-1 pl-7">
+                    {lines.map((line, i) => (
+                      <li key={i} className="text-xs text-purple-200/70 leading-relaxed list-disc list-outside">
+                        {line}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })()}
 
             {/* Rule sections */}
             {SECTION_KEYS.map(key => {

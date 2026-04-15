@@ -30,7 +30,7 @@ export default function PlayerPanel({ player, isActive }: Props) {
       <div className="flex items-center justify-between mb-1.5">
         <span className="font-semibold truncate" style={{ color }}>
           {player.username}
-          {isMe && <span className="text-xs text-gray-400 ml-1">(you)</span>}
+          {isMe && <span className="text-xs text-gray-400 ml-1">{t('ui.you')}</span>}
         </span>
         <span className="text-amber-400 font-bold text-xs tabular-nums shrink-0">
           {player.victoryPoints} VP
@@ -50,7 +50,7 @@ export default function PlayerPanel({ player, isActive }: Props) {
       ) : (
         <div className="flex items-center gap-1.5 mb-1.5 text-xs text-gray-400">
           <span className="inline-block size-2 rounded-full bg-gray-500"/>
-          <span className="tabular-nums">{totalCards} resource{totalCards !== 1 ? 's' : ''}</span>
+          <span className="tabular-nums">{totalCards} {totalCards !== 1 ? t('ui.resources_other') : t('ui.resources_one')}</span>
         </div>
       )}
 
@@ -83,17 +83,17 @@ export default function PlayerPanel({ player, isActive }: Props) {
         </span>
         <div className="flex items-center gap-1.5">
           {/* Pieces remaining */}
-          <span className="flex items-center gap-0.5" title="Roads left">
+          <span className="flex items-center gap-0.5" title={t('ui.roadsLeft')}>
             <RoadIcon size={10} color={color}/>
             <span className="tabular-nums">{player.roadsLeft}</span>
           </span>
-          <span className="flex items-center gap-0.5" title="Settlements left">
+          <span className="flex items-center gap-0.5" title={t('ui.settlementsLeft')}>
             <SettlementIcon size={10} color={color}/>
             <span className="tabular-nums">{player.settlementsLeft}</span>
           </span>
           <span
             className="relative flex items-center justify-center size-2.5"
-            title={player.connected ? 'Online' : 'Offline'}
+            title={player.connected ? t('ui.online') : t('ui.offline')}
           >
             {player.connected ? (
               <>

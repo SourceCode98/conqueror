@@ -132,26 +132,52 @@ function innerHexPoints(center: { x: number; y: number }, scale = 0.88): string 
 
 /** Terrain icon drawn inside each hex tile (SVG, centered at cx/cy offset from tile center) */
 function TerrainIcon({ terrain, cx, cy }: { terrain: string; cx: number; cy: number }) {
-  const op = 0.55; // base opacity — readable but not overwhelming
-  const hi = { opacity: op };
+  // Pseudo-random per-tile offset for staggered animations (0–3s)
+  const d = ((Math.abs(cx) * 7 + Math.abs(cy) * 13) % 30) / 10;
+  const d2 = ((Math.abs(cx) * 11 + Math.abs(cy) * 7) % 20) / 10;
+  const op = 0.6;
 
   if (terrain === 'timber') {
-    // Three pine trees
+    const trees = [
+      { dx: -14, dur: 2.4 + d,  begin: 0 },
+      { dx:   0, dur: 2.8 + d2, begin: d * 0.3 },
+      { dx:  14, dur: 2.2 + d,  begin: d2 * 0.4 },
+    ];
     return (
-      <g style={hi} pointerEvents="none">
-        {([-14, 0, 14] as number[]).map((dx, i) => (
-          <g key={i} transform={`translate(${cx + dx},${cy})`}>
-            <polygon points="0,-14 -8,0 8,0" fill="#4ade80" opacity={0.9}/>
-            <polygon points="0,-22 -10,-6 10,-6" fill="#22c55e" opacity={0.7}/>
-            <rect x={-2} y={0} width={4} height={7} fill="#854d0e" opacity={0.8}/>
-          </g>
-        ))}
+      <g opacity={op} pointerEvents="none">
+        {trees.map(({ dx, dur, begin }, i) => {
+          const bx = cx + dx, by = cy + 7;
+          return (
+            <g key={i}>
+              <g>
+                <animateTransform attributeName="transform" type="rotate"
+                  values={`-4 ${bx} ${by};4 ${bx} ${by};-4 ${bx} ${by}`}
+                  dur={`${dur}s`} begin={`${begin}s`} repeatCount="indefinite"/>
+                <polygon points={`${bx},${by-14} ${bx-9},${by} ${bx+9},${by}`} fill="#4ade80" opacity={0.9}/>
+                <polygon points={`${bx},${by-23} ${bx-11},${by-6} ${bx+11},${by-6}`} fill="#22c55e" opacity={0.75}/>
+                <rect x={bx-2.5} y={by} width={5} height={8} fill="#6b3a10" opacity={0.85}/>
+              </g>
+            </g>
+          );
+        })}
+        {/* Occasional falling leaf */}
+        <circle cx={cx+8} cy={cy-5} r={2} fill="#86efac" opacity={0}>
+          <animate attributeName="cy"
+            values={`${cy-5};${cy+20};${cy-5}`}
+            dur={`${4+d}s`} begin={`${2+d2}s`} repeatCount="indefinite"/>
+          <animate attributeName="cx"
+            values={`${cx+8};${cx+14};${cx+8}`}
+            dur={`${4+d}s`} begin={`${2+d2}s`} repeatCount="indefinite"/>
+          <animate attributeName="opacity"
+            values="0;0.5;0.5;0"
+            keyTimes="0;0.1;0.8;1"
+            dur={`${4+d}s`} begin={`${2+d2}s`} repeatCount="indefinite"/>
+        </circle>
       </g>
     );
   }
 
   if (terrain === 'clay') {
-    // Brick wall pattern — 4 rows × 3 bricks, offset every other row
     const bricks: { x: number; y: number; key: string }[] = [];
     for (let row = 0; row < 4; row++) {
       for (let col = 0; col < 3; col++) {
@@ -163,54 +189,82 @@ function TerrainIcon({ terrain, cx, cy }: { terrain: string; cx: number; cy: num
       }
     }
     return (
-      <g style={hi} pointerEvents="none">
+      <g opacity={op} pointerEvents="none">
         {bricks.map(b => (
           <rect key={b.key} x={b.x} y={b.y} width={16} height={7}
-            fill="#f97316" stroke="#7c2d12" strokeWidth={1} rx={1} opacity={0.85}/>
+            fill="#f97316" stroke="#7c2d12" strokeWidth={1} rx={1} opacity={0.88}/>
         ))}
+        {/* Heat shimmer — subtle wave on top bricks */}
+        <rect x={cx-27} y={cy-18} width={52} height={4} fill="#f97316" opacity={0}>
+          <animate attributeName="opacity" values="0;0.12;0" dur={`${3+d}s`} repeatCount="indefinite"/>
+          <animate attributeName="y" values={`${cy-18};${cy-22};${cy-18}`}
+            dur={`${3+d}s`} repeatCount="indefinite"/>
+        </rect>
       </g>
     );
   }
 
   if (terrain === 'iron') {
-    // Mountain peaks
+    // Sparkle positions on snow cap
+    const sparks = [
+      { sx: cx-3, sy: cy-23 },
+      { sx: cx+4, sy: cy-20 },
+      { sx: cx,   sy: cy-18 },
+    ];
     return (
-      <g style={hi} pointerEvents="none">
-        {/* Back peak */}
-        <polygon points={`${cx},${cy - 26} ${cx - 20},${cy + 4} ${cx + 20},${cy + 4}`}
+      <g opacity={op} pointerEvents="none">
+        <polygon points={`${cx},${cy-27} ${cx-21},${cy+4} ${cx+21},${cy+4}`}
           fill="#94a3b8" opacity={0.5}/>
-        {/* Snow cap */}
-        <polygon points={`${cx},${cy - 26} ${cx - 6},${cy - 14} ${cx + 6},${cy - 14}`}
-          fill="#f1f5f9" opacity={0.8}/>
-        {/* Left peak */}
-        <polygon points={`${cx - 16},${cy - 14} ${cx - 30},${cy + 4} ${cx - 2},${cy + 4}`}
+        <polygon points={`${cx},${cy-27} ${cx-7},${cy-14} ${cx+7},${cy-14}`}
+          fill="#f1f5f9" opacity={0.88}/>
+        <polygon points={`${cx-17},${cy-14} ${cx-31},${cy+4} ${cx-3},${cy+4}`}
           fill="#64748b" opacity={0.7}/>
-        {/* Right peak */}
-        <polygon points={`${cx + 16},${cy - 16} ${cx + 2},${cy + 4} ${cx + 30},${cy + 4}`}
+        <polygon points={`${cx+17},${cy-15} ${cx+3},${cy+4} ${cx+31},${cy+4}`}
           fill="#64748b" opacity={0.65}/>
+        {/* Snow sparkles */}
+        {sparks.map((s, i) => (
+          <circle key={i} cx={s.sx} cy={s.sy} r={1.2} fill="white" opacity={0}>
+            <animate attributeName="opacity"
+              values="0;0.9;0"
+              dur={`${2+i*0.7+d}s`} begin={`${i*0.8+d2}s`} repeatCount="indefinite"/>
+          </circle>
+        ))}
+        {/* Drifting snow dot */}
+        <circle cx={cx+12} cy={cy-10} r={1} fill="white" opacity={0}>
+          <animate attributeName="cy" values={`${cy-10};${cy+8};${cy-10}`}
+            dur={`${3.5+d}s`} begin={`${d2}s`} repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0;0.6;0;0.6;0"
+            dur={`${3.5+d}s`} begin={`${d2}s`} repeatCount="indefinite"/>
+        </circle>
       </g>
     );
   }
 
   if (terrain === 'grain') {
-    // Wheat stalks
+    const stalks = [-16, -8, 0, 8, 16];
     return (
-      <g style={hi} pointerEvents="none">
-        {([-16, -8, 0, 8, 16] as number[]).map((dx, i) => {
-          const yBase = cy + 8;
+      <g opacity={op} pointerEvents="none">
+        {stalks.map((dx, i) => {
+          const bx = cx + dx, by = cy + 8;
           const lean = (dx / 16) * 5;
+          const dur = 2 + (i % 3) * 0.5 + d * 0.4;
+          const begin = (i * 0.2 + d2 * 0.3).toFixed(1);
+          const maxLean = 4;
           return (
             <g key={i}>
-              <line x1={cx + dx} y1={yBase} x2={cx + dx + lean} y2={cy - 18}
-                stroke="#fbbf24" strokeWidth={1.5} opacity={0.8}/>
-              {/* grain head */}
-              <ellipse cx={cx + dx + lean} cy={cy - 20} rx={3} ry={7}
-                fill="#fcd34d" opacity={0.9}/>
-              {/* side grains */}
-              <line x1={cx + dx + lean - 1} y1={cy - 22} x2={cx + dx + lean - 5} y2={cy - 16}
-                stroke="#fbbf24" strokeWidth={1} opacity={0.7}/>
-              <line x1={cx + dx + lean + 1} y1={cy - 22} x2={cx + dx + lean + 5} y2={cy - 16}
-                stroke="#fbbf24" strokeWidth={1} opacity={0.7}/>
+              <g>
+                <animateTransform attributeName="transform" type="rotate"
+                  values={`-${maxLean} ${bx} ${by};${maxLean} ${bx} ${by};-${maxLean} ${bx} ${by}`}
+                  dur={`${dur}s`} begin={`${begin}s`} repeatCount="indefinite"/>
+                <line x1={bx} y1={by} x2={bx+lean} y2={cy-18}
+                  stroke="#fbbf24" strokeWidth={1.5} opacity={0.82}/>
+                <ellipse cx={bx+lean} cy={cy-21} rx={3} ry={7}
+                  fill="#fcd34d" opacity={0.92}/>
+                <line x1={bx+lean-1} y1={cy-23} x2={bx+lean-6} y2={cy-16}
+                  stroke="#fbbf24" strokeWidth={1} opacity={0.7}/>
+                <line x1={bx+lean+1} y1={cy-23} x2={bx+lean+6} y2={cy-16}
+                  stroke="#fbbf24" strokeWidth={1} opacity={0.7}/>
+              </g>
             </g>
           );
         })}
@@ -219,49 +273,90 @@ function TerrainIcon({ terrain, cx, cy }: { terrain: string; cx: number; cy: num
   }
 
   if (terrain === 'wool') {
-    // Two fluffy sheep
+    const sheep = [
+      { dx: -13, delay: 0 },
+      { dx:  10, delay: d * 0.5 },
+    ];
     return (
-      <g style={hi} pointerEvents="none">
-        {([-14, 10] as number[]).map((dx, i) => (
-          <g key={i} transform={`translate(${cx + dx},${cy - 4})`}>
-            {/* Body (fluffy cloud) */}
-            <circle cx={0}  cy={0} r={9}  fill="#e2e8f0" opacity={0.9}/>
-            <circle cx={7}  cy={2} r={7}  fill="#f1f5f9" opacity={0.85}/>
-            <circle cx={-6} cy={3} r={7}  fill="#e2e8f0" opacity={0.85}/>
-            <circle cx={2}  cy={-5} r={6} fill="#f8fafc" opacity={0.8}/>
-            {/* Head */}
-            <circle cx={10} cy={-3} r={5} fill="#cbd5e1" opacity={0.95}/>
-            {/* Eye */}
-            <circle cx={12} cy={-4} r={1} fill="#1e293b"/>
-            {/* Legs */}
-            <rect x={-4} y={8} width={3} height={8} fill="#94a3b8" rx={1}/>
-            <rect x={1}  y={8} width={3} height={8} fill="#94a3b8" rx={1}/>
-          </g>
-        ))}
+      <g opacity={op} pointerEvents="none">
+        {sheep.map(({ dx, delay }, i) => {
+          const sx = cx + dx, sy = cy - 4;
+          return (
+            <g key={i}>
+              {/* Breathing body */}
+              <g>
+                <animateTransform attributeName="transform" type="scale"
+                  values={`1 1;1.04 1.03;1 1`}
+                  additive="sum"
+                  dur={`${2.8+d}s`} begin={`${delay}s`} repeatCount="indefinite"/>
+                <circle cx={sx}   cy={sy}   r={9}  fill="#e2e8f0" opacity={0.92}/>
+                <circle cx={sx+7} cy={sy+2} r={7}  fill="#f1f5f9" opacity={0.87}/>
+                <circle cx={sx-6} cy={sy+3} r={7}  fill="#e2e8f0" opacity={0.87}/>
+                <circle cx={sx+2} cy={sy-5} r={6}  fill="#f8fafc" opacity={0.82}/>
+              </g>
+              {/* Head (no breathing) */}
+              <circle cx={sx+10} cy={sy-3} r={5}  fill="#cbd5e1" opacity={0.95}/>
+              <circle cx={sx+12} cy={sy-4} r={1}  fill="#1e293b"/>
+              {/* Legs */}
+              <rect x={sx-4} y={sy+8} width={3} height={8} fill="#94a3b8" rx={1}/>
+              <rect x={sx+1} y={sy+8} width={3} height={8} fill="#94a3b8" rx={1}/>
+            </g>
+          );
+        })}
       </g>
     );
   }
 
   if (terrain === 'desert') {
-    // Sun above dune lines
+    const rays = [0, 45, 90, 135, 180, 225, 270, 315];
     return (
-      <g style={hi} pointerEvents="none">
-        {/* Sun */}
-        <circle cx={cx} cy={cy - 14} r={8} fill="#fde68a" opacity={0.9}/>
-        {([0, 45, 90, 135, 180, 225, 270, 315] as number[]).map(angle => {
-          const rad = (angle * Math.PI) / 180;
-          return (
-            <line key={angle}
-              x1={cx + Math.cos(rad) * 10} y1={cy - 14 + Math.sin(rad) * 10}
-              x2={cx + Math.cos(rad) * 14} y2={cy - 14 + Math.sin(rad) * 14}
-              stroke="#fcd34d" strokeWidth={1.5} opacity={0.8}/>
-          );
-        })}
-        {/* Dune lines */}
-        <path d={`M ${cx - 28},${cy + 6} Q ${cx - 14},${cy - 2} ${cx},${cy + 6} Q ${cx + 14},${cy + 14} ${cx + 28},${cy + 6}`}
-          fill="none" stroke="#d97706" strokeWidth={2} opacity={0.7}/>
-        <path d={`M ${cx - 22},${cy + 14} Q ${cx - 8},${cy + 6} ${cx + 8},${cy + 14} Q ${cx + 18},${cy + 20} ${cx + 28},${cy + 14}`}
-          fill="none" stroke="#b45309" strokeWidth={1.5} opacity={0.5}/>
+      <g opacity={op} pointerEvents="none">
+        {/* Rotating sun group */}
+        <g>
+          <animateTransform attributeName="transform" type="rotate"
+            values={`0 ${cx} ${cy-14};360 ${cx} ${cy-14}`}
+            dur={`${12+d*2}s`} repeatCount="indefinite"/>
+          {rays.map(angle => {
+            const rad = (angle * Math.PI) / 180;
+            return (
+              <line key={angle}
+                x1={cx + Math.cos(rad) * 10} y1={cy - 14 + Math.sin(rad) * 10}
+                x2={cx + Math.cos(rad) * 15} y2={cy - 14 + Math.sin(rad) * 15}
+                stroke="#fcd34d" strokeWidth={1.5} opacity={0.8}/>
+            );
+          })}
+        </g>
+        <circle cx={cx} cy={cy-14} r={8} fill="#fde68a" opacity={0.92}>
+          <animate attributeName="r" values="8;9;8" dur={`${3+d}s`} repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.92;0.75;0.92" dur={`${3+d}s`} repeatCount="indefinite"/>
+        </circle>
+        {/* Dune wave */}
+        <path d={`M ${cx-28},${cy+6} Q ${cx-14},${cy-2} ${cx},${cy+6} Q ${cx+14},${cy+14} ${cx+28},${cy+6}`}
+          fill="none" stroke="#d97706" strokeWidth={2} opacity={0.72}>
+          <animate attributeName="d"
+            values={`M ${cx-28},${cy+6} Q ${cx-14},${cy-2} ${cx},${cy+6} Q ${cx+14},${cy+14} ${cx+28},${cy+6};
+                     M ${cx-28},${cy+8} Q ${cx-14},${cy} ${cx},${cy+8} Q ${cx+14},${cy+16} ${cx+28},${cy+8};
+                     M ${cx-28},${cy+6} Q ${cx-14},${cy-2} ${cx},${cy+6} Q ${cx+14},${cy+14} ${cx+28},${cy+6}`}
+            dur={`${2.5+d}s`} repeatCount="indefinite"/>
+        </path>
+        <path d={`M ${cx-22},${cy+14} Q ${cx-8},${cy+6} ${cx+8},${cy+14} Q ${cx+18},${cy+20} ${cx+28},${cy+14}`}
+          fill="none" stroke="#b45309" strokeWidth={1.5} opacity={0.5}>
+          <animate attributeName="d"
+            values={`M ${cx-22},${cy+14} Q ${cx-8},${cy+6} ${cx+8},${cy+14} Q ${cx+18},${cy+20} ${cx+28},${cy+14};
+                     M ${cx-22},${cy+16} Q ${cx-8},${cy+8} ${cx+8},${cy+16} Q ${cx+18},${cy+22} ${cx+28},${cy+16};
+                     M ${cx-22},${cy+14} Q ${cx-8},${cy+6} ${cx+8},${cy+14} Q ${cx+18},${cy+20} ${cx+28},${cy+14}`}
+            dur={`${2.5+d}s`} begin={`${d2*0.5}s`} repeatCount="indefinite"/>
+        </path>
+        {/* Sand particles */}
+        {[0,1].map(i => (
+          <circle key={i} cx={cx-10+i*20} cy={cy+10} r={1} fill="#d97706" opacity={0}>
+            <animate attributeName="cx"
+              values={`${cx-10+i*20};${cx+5+i*10};${cx-10+i*20}`}
+              dur={`${3+i+d}s`} begin={`${i*1.5}s`} repeatCount="indefinite"/>
+            <animate attributeName="opacity" values="0;0.5;0"
+              dur={`${3+i+d}s`} begin={`${i*1.5}s`} repeatCount="indefinite"/>
+          </circle>
+        ))}
       </g>
     );
   }
@@ -270,17 +365,21 @@ function TerrainIcon({ terrain, cx, cy }: { terrain: string; cx: number; cy: num
 }
 
 const ROAD_SKIN_STYLES: Record<string, { width: number; highlight: string; shadow: string; extraDash?: string }> = {
-  road_default: { width: 5,   highlight: 'rgba(255,255,255,0.15)', shadow: 'rgba(0,0,0,0.5)' },
-  road_iron:    { width: 6,   highlight: 'rgba(150,180,200,0.25)', shadow: 'rgba(0,0,0,0.7)' },
-  road_stone:   { width: 5.5, highlight: 'rgba(160,160,170,0.3)',  shadow: 'rgba(0,0,0,0.6)', extraDash: '9 2' },
-  road_gold:    { width: 5,   highlight: 'rgba(251,191,36,0.5)',   shadow: 'rgba(120,80,0,0.6)' },
+  // Rookie — simple dirt track
+  road_default: { width: 4.5, highlight: 'rgba(255,255,255,0.10)', shadow: 'rgba(0,0,0,0.45)' },
+  // Bronze — rustic trail: earthy brown shadow, irregular stone-like dashes
+  road_iron:    { width: 5.5, highlight: 'rgba(180,110,40,0.30)',  shadow: 'rgba(70,35,5,0.75)',   extraDash: '6 5' },
+  // Silver — cobblestone: tight uniform blocks, cool grey tones
+  road_stone:   { width: 6,   highlight: 'rgba(200,215,225,0.38)', shadow: 'rgba(35,50,70,0.72)',   extraDash: '8 2' },
+  // Gold — royal road: solid wide path, rich amber glow
+  road_gold:    { width: 7,   highlight: 'rgba(251,191,36,0.65)',  shadow: 'rgba(130,75,0,0.80)' },
 };
 
 const BUILDING_SKIN_STROKE: Record<string, string> = {
-  building_default: 'white',
-  building_iron:    '#64748b',
-  building_stone:   '#94a3b8',
-  building_gold:    '#f59e0b',
+  building_default: '#d4d4d4',   // Rookie  — plain light grey
+  building_iron:    '#92400e',   // Bronze  — warm wood brown (rustic cabin)
+  building_stone:   '#7fb5cc',   // Silver  — blue-grey stone (medieval keep)
+  building_gold:    '#fbbf24',   // Gold    — bright amber (grand fortress)
 };
 
 function RoadSvg({ edgeId, color, opacity = 1, dashed = false, skin = 'road_default' }: {
@@ -793,8 +892,8 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
                   strokeDasharray="5 3"/>
               )}
               {building.type === 'settlement'
-                ? <SettlementSvg cx={pos.x} cy={pos.y} fill={fill} stroke={bldStroke}/>
-                : <CitySvg       cx={pos.x} cy={pos.y} fill={fill} stroke={bldStroke}/>
+                ? <SettlementSvg cx={pos.x} cy={pos.y} fill={fill} stroke={bldStroke} skin={bldSkin}/>
+                : <CitySvg       cx={pos.x} cy={pos.y} fill={fill} stroke={bldStroke} skin={bldSkin}/>
               }
               {/* Soldier helmets — 🪖 emoji per soldier, dashed ring for empty slots */}
               {(state as any).warMode && (() => {

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
 import { UNLOCKS, getTier, ELO_TIERS } from '@conqueror/shared';
 import { useProfileStore } from '../../store/profileStore.js';
@@ -8,31 +9,33 @@ interface Props {
   onClose: () => void;
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  horn: '📯 Horn Sounds',
-  road: '🛤 Road Skins',
-  building: '🏠 Building Skins',
-};
+// Labels now rendered via t() inside the component
 
 const SKIN_PREVIEWS: Record<string, string> = {
-  horn_default:     '🔔',
+  horn_default:     '📯',
   horn_fanfare:     '🎺',
-  horn_royal:       '👑',
+  horn_royal:       '🎶',
   horn_war:         '⚔️',
-  road_default:     '🪵',
-  road_iron:        '⚙️',
+  road_default:     '🥾',
+  road_iron:        '🪵',
   road_stone:       '🪨',
   road_gold:        '✨',
   building_default: '🏠',
-  building_iron:    '🏭',
+  building_iron:    '🛖',
   building_stone:   '🏰',
-  building_gold:    '🏆',
+  building_gold:    '👑',
 };
 
 export default function ProfilePanel({ onClose }: Props) {
+  const { t } = useTranslation('game');
   const { profile, updateCosmetics } = useProfileStore();
   const { token } = useAuthStore();
   const [saving, setSaving] = useState(false);
+  const CATEGORY_LABELS: Record<string, string> = {
+    horn: t('profile.hornSounds'),
+    road: t('profile.roadSkins'),
+    building: t('profile.buildingSkins'),
+  };
 
   if (!profile) return null;
 
@@ -95,7 +98,7 @@ export default function ProfilePanel({ onClose }: Props) {
               <div>
                 <div className="text-sm font-semibold" style={{ color: tier.color }}>{tier.label}</div>
                 {nextTier && (
-                  <div className="text-xs text-gray-500">{nextTier.min - profile.elo} to {nextTier.label}</div>
+                  <div className="text-xs text-gray-500">{t('profile.toTier', { tier: nextTier.label, n: nextTier.min - profile.elo })}</div>
                 )}
               </div>
             </div>
@@ -113,9 +116,9 @@ export default function ProfilePanel({ onClose }: Props) {
 
             <div className="grid grid-cols-3 gap-2 text-center">
               {[
-                { label: 'Played', value: profile.gamesPlayed },
-                { label: 'Won', value: profile.gamesWon },
-                { label: 'Win %', value: `${winRate}%` },
+                { label: t('profile.played'), value: profile.gamesPlayed },
+                { label: t('profile.won'), value: profile.gamesWon },
+                { label: t('profile.winRate'), value: `${winRate}%` },
               ].map(s => (
                 <div key={s.label} className="bg-gray-800 rounded-lg py-2">
                   <div className="text-lg font-bold text-white">{s.value}</div>
@@ -173,14 +176,14 @@ export default function ProfilePanel({ onClose }: Props) {
           {/* Unlock guide */}
           <div className="px-4 pb-4">
             <div className="bg-gray-800 rounded-lg p-3">
-              <div className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">ELO Tiers</div>
+              <div className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">{t('profile.eloTiers')}</div>
               <div className="space-y-1">
-                {ELO_TIERS.map(t => (
-                  <div key={t.label} className="flex items-center gap-2 text-xs">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }} />
-                    <span style={{ color: t.color }} className="font-semibold w-14">{t.label}</span>
+                {ELO_TIERS.map(tier => (
+                  <div key={tier.label} className="flex items-center gap-2 text-xs">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: tier.color }} />
+                    <span style={{ color: tier.color }} className="font-semibold w-14">{tier.label}</span>
                     <span className="text-gray-500">
-                      {t.min === 0 ? 'Default' : `${t.min}+ ELO`}
+                      {tier.min === 0 ? t('profile.defaultUnlock') : `${tier.min}+ ELO`}
                     </span>
                   </div>
                 ))}

@@ -223,7 +223,7 @@ export default function SoundPanel({ gameId, className }: Props) {
   useEffect(() => {
     if (toasts.length > prevToastLen.current) {
       const latest = toasts[toasts.length - 1];
-      if (latest?.type === 'horn') safePlay(() => playHornById(selectedHorn));
+      if (latest?.type === 'horn') safePlay(() => playHornById((latest.data?.hornId as string) ?? selectedHorn));
       if (latest?.type === 'dice_resources') safePlay(playResourceSound);
       if (latest?.type === 'bank_trade') safePlay(playTradeSound);
       if (latest?.type === 'action') {
@@ -302,7 +302,7 @@ export default function SoundPanel({ gameId, className }: Props) {
 
   function blowHorn() {
     if (hornDisabled) return;
-    wsService.send({ type: 'HORN', payload: { gameId } });
+    wsService.send({ type: 'HORN', payload: { gameId, hornId: selectedHorn } });
     safePlay(() => playHornById(selectedHorn));
     setHornDisabled(true);
     let remaining = hornCooldownMs / 1000;

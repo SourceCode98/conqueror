@@ -9,11 +9,10 @@ import { cn } from '../lib/cn.js';
 
 // ─── ELO tier system ─────────────────────────────────────────────────────────
 const TIERS = [
-  { min: 0,    max: 999,   name: 'Bronze',   icon: '🥉', color: '#cd7f32', next: 1000 },
-  { min: 1000, max: 1199,  name: 'Silver',   icon: '🥈', color: '#c0c0c0', next: 1200 },
-  { min: 1200, max: 1399,  name: 'Gold',     icon: '🥇', color: '#ffd700', next: 1400 },
-  { min: 1400, max: 1599,  name: 'Platinum', icon: '💎', color: '#a0ffe8', next: 1600 },
-  { min: 1600, max: 99999, name: 'Diamond',  icon: '👑', color: '#a8d8ff', next: null },
+  { min: 0,    max: 1049,  name: 'Rookie',  icon: '🔩', color: '#9ca3af', next: 1050 },
+  { min: 1050, max: 1199,  name: 'Bronze',  icon: '🥉', color: '#cd7f32', next: 1200 },
+  { min: 1200, max: 1399,  name: 'Silver',  icon: '🥈', color: '#94a3b8', next: 1400 },
+  { min: 1400, max: 99999, name: 'Gold',    icon: '🥇', color: '#f59e0b', next: null  },
 ];
 function getTier(elo: number) {
   return TIERS.find(t => elo >= t.min && elo <= t.max) ?? TIERS[0];
@@ -23,6 +22,7 @@ function getTier(elo: number) {
 function ColorPicker({ value, onChange, takenColors = [] }: {
   value: string; onChange: (c: string) => void; takenColors?: string[];
 }) {
+  const { t: tg } = useTranslation('game');
   return (
     <div className="flex flex-wrap gap-2">
       {PLAYER_COLOR_OPTIONS.map(c => {
@@ -30,7 +30,7 @@ function ColorPicker({ value, onChange, takenColors = [] }: {
         return (
           <button
             key={c} disabled={taken} onClick={() => onChange(c)}
-            title={taken ? 'Taken' : c}
+            title={taken ? tg('lobby.taken') : c}
             className={cn(
               'w-7 h-7 rounded-full border-2 transition-all',
               value === c ? 'border-white scale-110 shadow-lg' : 'border-transparent',
@@ -52,6 +52,7 @@ interface GameListing {
 
 // ─── Profile card ─────────────────────────────────────────────────────────────
 function ProfileCard({ onLogout }: { onLogout: () => void }) {
+  const { t: tg } = useTranslation('game');
   const { user } = useAuthStore();
   const profile = useProfileStore(s => s.profile);
   const elo = profile?.elo ?? user?.elo ?? 1000;
@@ -98,7 +99,7 @@ function ProfileCard({ onLogout }: { onLogout: () => void }) {
           />
         </div>
         {tier.next && (
-          <p className="text-[10px] text-gray-600 mt-0.5 text-right">{tier.next - elo} to {TIERS[TIERS.indexOf(tier) + 1]?.name}</p>
+          <p className="text-[10px] text-gray-600 mt-0.5 text-right">{tg('lobby.toTier', { n: tier.next - elo, tier: TIERS[TIERS.indexOf(tier) + 1]?.name })}</p>
         )}
       </div>
 
@@ -106,9 +107,9 @@ function ProfileCard({ onLogout }: { onLogout: () => void }) {
       {profile && (
         <div className="grid grid-cols-3 gap-2">
           {[
-            { label: 'Games', value: profile.gamesPlayed },
-            { label: 'Wins',  value: profile.gamesWon },
-            { label: 'Win %', value: `${winRate}%` },
+            { label: tg('profile.played'), value: profile.gamesPlayed },
+            { label: tg('profile.won'),    value: profile.gamesWon },
+            { label: tg('profile.winRate'), value: `${winRate}%` },
           ].map(s => (
             <div key={s.label} className="rounded-xl p-2 text-center" style={{ background: 'rgba(255,255,255,0.04)' }}>
               <p className="text-white font-black text-base leading-none">{s.value}</p>
@@ -126,7 +127,7 @@ function ProfileCard({ onLogout }: { onLogout: () => void }) {
           className="flex-1 text-xs text-gray-400 hover:text-white transition-colors py-1.5 rounded-lg"
           style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
         >
-          Log out
+          {tg('lobby.logOut')}
         </button>
       </div>
     </div>
@@ -136,6 +137,7 @@ function ProfileCard({ onLogout }: { onLogout: () => void }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function LobbyPage() {
   const { t } = useTranslation();
+  const { t: tg } = useTranslation('game');
   const navigate = useNavigate();
   const { token, user, logout } = useAuthStore();
   const { profile, fetchProfile } = useProfileStore();
@@ -259,7 +261,7 @@ export default function LobbyPage() {
                     value={newGameName}
                     onChange={e => setNewGameName(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && createGame()}
-                    placeholder="My game…"
+                    placeholder={tg('lobby.writeMessage', 'My game…')}
                     autoFocus
                   />
                 </div>
@@ -269,7 +271,7 @@ export default function LobbyPage() {
                     className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none"
                     value={maxPlayers} onChange={e => setMaxPlayers(Number(e.target.value))}
                   >
-                    {[2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n} players</option>)}
+                    {[2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{tg('lobby.nPlayers', { n })}</option>)}
                   </select>
                 </div>
                 <div>
@@ -301,14 +303,14 @@ export default function LobbyPage() {
           {games.length === 0 && (
             <div className="text-center py-12 text-gray-600">
               <p className="text-4xl mb-3">🏟️</p>
-              <p className="font-bold">No games yet</p>
-              <p className="text-sm mt-1">Create one to get started</p>
+              <p className="font-bold">{tg('lobby.noGamesYet')}</p>
+              <p className="text-sm mt-1">{tg('lobby.createOneToStart')}</p>
             </div>
           )}
 
           {lobbyGames.length > 0 && (
             <div>
-              <p className="text-xs font-black tracking-widest text-gray-500 mb-2 px-1">OPEN GAMES</p>
+              <p className="text-xs font-black tracking-widest text-gray-500 mb-2 px-1">{tg('lobby.openGames')}</p>
               <div className="space-y-2">
                 {lobbyGames.map(game => (
                   <GameRow
@@ -329,7 +331,7 @@ export default function LobbyPage() {
 
           {activeGames.length > 0 && (
             <div>
-              <p className="text-xs font-black tracking-widest text-gray-500 mb-2 px-1">IN PROGRESS</p>
+              <p className="text-xs font-black tracking-widest text-gray-500 mb-2 px-1">{tg('lobby.inProgress')}</p>
               <div className="space-y-2">
                 {activeGames.map(game => (
                   <GameRow
@@ -363,6 +365,8 @@ function GameRow({ game, joiningId, joinColor, joinTakenColors, joinPlayers = []
   onColorChange: (c: string) => void;
   onConfirmJoin: () => void;
 }) {
+  const { t: tg } = useTranslation('game');
+  const { t } = useTranslation();
   const isJoining = joiningId === game.id;
   const isFull    = game.player_count >= game.max_players;
   const isActive  = game.status === 'active';
@@ -376,8 +380,8 @@ function GameRow({ game, joiningId, joinColor, joinTakenColors, joinPlayers = []
         <div className="min-w-0">
           <p className="font-bold text-white truncate">{game.name}</p>
           <p className="text-xs text-gray-500 mt-0.5">
-            {game.player_count}/{game.max_players} players · by {game.created_by_username}
-            {isActive && <span className="ml-2 text-green-400 font-bold">● live</span>}
+            {game.player_count}/{game.max_players} {t('players')} · by {game.created_by_username}
+            {isActive && <span className="ml-2 text-green-400 font-bold">{tg('lobby.live')}</span>}
           </p>
         </div>
 
@@ -387,7 +391,7 @@ function GameRow({ game, joiningId, joinColor, joinTakenColors, joinPlayers = []
             className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold text-green-300 transition-colors hover:bg-green-400/10"
             style={{ border: '1px solid rgba(74,222,128,0.3)' }}
           >
-            Rejoin
+            {tg('lobby.rejoin')}
           </button>
         ) : !isFull ? (
           <button
@@ -400,10 +404,10 @@ function GameRow({ game, joiningId, joinColor, joinTakenColors, joinPlayers = []
             )}
             style={{ border: `1px solid ${isJoining ? 'rgba(255,255,255,0.1)' : 'rgba(251,191,36,0.3)'}` }}
           >
-            {isJoining ? 'Cancel' : 'Join'}
+            {isJoining ? t('cancel') : t('joinGame')}
           </button>
         ) : (
-          <span className="text-xs text-gray-600 font-bold shrink-0">Full</span>
+          <span className="text-xs text-gray-600 font-bold shrink-0">{tg('lobby.full')}</span>
         )}
       </div>
 
@@ -412,7 +416,7 @@ function GameRow({ game, joiningId, joinColor, joinTakenColors, joinPlayers = []
         <div className="mt-3 pt-3 border-t border-white/5 space-y-3">
           {joinPlayers.length > 0 && (
             <div>
-              <p className="text-xs text-gray-400 mb-2 font-bold">Players in room</p>
+              <p className="text-xs text-gray-400 mb-2 font-bold">{tg('lobby.playersInRoom')}</p>
               <div className="space-y-1.5">
                 {joinPlayers.map(p => {
                   const tier = getTier(p.elo ?? 1000);
@@ -429,7 +433,7 @@ function GameRow({ game, joiningId, joinColor, joinTakenColors, joinPlayers = []
             </div>
           )}
           <div>
-            <p className="text-xs text-gray-400 mb-2 font-bold">Pick your color</p>
+            <p className="text-xs text-gray-400 mb-2 font-bold">{tg('lobby.pickColor')}</p>
             <ColorPicker value={joinColor} onChange={onColorChange} takenColors={joinTakenColors} />
           </div>
           <button
@@ -437,7 +441,7 @@ function GameRow({ game, joiningId, joinColor, joinTakenColors, joinPlayers = []
             className="w-full py-2 rounded-lg text-sm font-black transition-all active:scale-95"
             style={{ background: 'linear-gradient(135deg, #b45309, #d97706)' }}
           >
-            Join Game
+            {tg('lobby.joinGame')}
           </button>
         </div>
       )}

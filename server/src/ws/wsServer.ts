@@ -38,6 +38,22 @@ const playAgainSessions = new Map<string, PlayAgainSession>();
 const PLAY_AGAIN_TIMEOUT_MS = 60_000;
 const PLAY_AGAIN_MIN_PLAYERS = 2;
 
+// ─── Vote-kick sessions ───────────────────────────────────────────────────────
+
+interface KickVoteSession {
+  targetId: string;
+  targetUsername: string;
+  initiatorId: string;
+  initiatorUsername: string;
+  votes: Map<string, boolean>; // voterId → yes/no
+  eligibleIds: string[];       // all players except target
+  timer: ReturnType<typeof setTimeout>;
+  startedAt: number;
+}
+
+const kickVoteSessions = new Map<string, KickVoteSession>();
+const KICK_VOTE_TIMEOUT_MS = 30_000;
+
 function startPlayAgainSession(gameId: string, playerIds: string[], turnTimeLimit: number | null, hornCooldownSecs: number): void {
   const existing = playAgainSessions.get(gameId);
   if (existing) { clearTimeout(existing.timer); playAgainSessions.delete(gameId); }
@@ -295,6 +311,16 @@ function handleMessage(ws: WebSocket, data: RawData): void {
     return;
   }
 
+  if (msg.type === 'VOTE_KICK') {
+    handleVoteKick(ws, msg.payload as { gameId: string; targetId: string });
+    return;
+  }
+
+  if (msg.type === 'KICK_VOTE') {
+    handleKickVote(ws, msg.payload as { gameId: string; vote: boolean });
+    return;
+  }
+
   const orch = getOrLoadOrchestrator(meta.gameId);
   if (!orch) {
     sendTo(ws, { type: 'ERROR', payload: { code: 'GAME_NOT_FOUND', message: 'Game not found' } });
@@ -415,7 +441,7 @@ function handleChat(ws: WebSocket, payload: { gameId: string; text: string }): v
   });
 }
 
-function handleHorn(ws: WebSocket, payload: { gameId: string }): void {
+function handleHorn(ws: WebSocket, payload: { gameId: string; hornId?: string }): void {
   const meta = clientMeta.get(ws);
   if (!meta) return;
   const key = `${meta.gameId}:${meta.userId}`;
@@ -452,8 +478,191 @@ function handleHorn(ws: WebSocket, payload: { gameId: string }): void {
 
   broadcastToRoom(meta.gameId, {
     type: 'HORN_PLAYED',
-    payload: { fromPlayerId: meta.userId, username: meta.username },
+    payload: { fromPlayerId: meta.userId, username: meta.username, hornId: payload.hornId ?? 'horn_default' },
   });
+}
+
+function broadcastKickVoteUpdate(gameId: string, session: KickVoteSession): void {
+  const votes: Record<string, boolean | null> = {};
+  for (const id of session.eligibleIds) {
+    votes[id] = session.votes.has(id) ? (session.votes.get(id)!) : null;
+  }
+  const secondsLeft = Math.max(0, Math.round((KICK_VOTE_TIMEOUT_MS - (Date.now() - session.startedAt)) / 1000));
+  broadcastToRoom(gameId, {
+    type: 'KICK_VOTE_UPDATE',
+    payload: {
+      targetId: session.targetId,
+      targetUsername: session.targetUsername,
+      initiatorUsername: session.initiatorUsername,
+      votes,
+      secondsLeft,
+      eligibleCount: session.eligibleIds.length,
+    },
+  });
+}
+
+function resolveKickVote(gameId: string, passed: boolean): void {
+  const session = kickVoteSessions.get(gameId);
+  if (!session) return;
+
+  clearTimeout(session.timer);
+  kickVoteSessions.delete(gameId);
+
+  if (!passed) {
+    broadcastToRoom(gameId, {
+      type: 'KICK_VOTE_ENDED',
+      payload: { targetUsername: session.targetUsername, result: 'failed' },
+    });
+    return;
+  }
+
+  const orch = getOrLoadOrchestrator(gameId);
+  if (!orch) return;
+
+  const prevState = orch.getState();
+
+  // 🔴 encontrar índice del jugador antes de eliminarlo
+  const removedIndex = prevState.players.findIndex(p => p.id === session.targetId);
+
+  // 🧹 eliminar jugador + sus piezas
+  orch.updateState(s => {
+    const newPlayers = s.players.filter(p => p.id !== session.targetId);
+
+    return {
+      ...s,
+      buildings: Object.fromEntries(
+        Object.entries(s.buildings).filter(([, b]) => (b as any).playerId !== session.targetId)
+      ),
+      roads: Object.fromEntries(
+        Object.entries(s.roads).filter(([, r]) => (r as any).playerId !== session.targetId)
+      ),
+      players: newPlayers,
+    };
+  });
+
+  const stateAfter = orch.getState();
+
+if (stateAfter.players.length <= 1) {
+  const winner = stateAfter.players[0];
+  if (!winner) return;
+
+  const ctx = {
+    broadcastToRoom: (outMsg: any) => {
+      if (outMsg.type === 'GAME_STATE') {
+        broadcastPersonalizedGameState(gameId, orch);
+      } else {
+        broadcastToRoom(gameId, outMsg);
+      }
+    },
+    sendTo,
+    sendPrivate: (targetPlayerId: string, outMsg: any) =>
+      sendToPlayer(gameId, targetPlayerId, outMsg),
+  };
+
+  // usa tu sistema real de victoria
+  checkAndHandleWin(orch, ctx);
+  return;
+}
+
+  // 🔄 arreglar turno si el expulsado estaba jugando
+  if (prevState.activePlayerId === session.targetId && prevState.phase !== 'GAME_OVER') {
+    const newPlayers = stateAfter.players;
+
+    // siguiente jugador en la misma posición
+    const nextIdx = removedIndex % newPlayers.length;
+    const nextPlayer = newPlayers[nextIdx];
+
+    orch.updateState(s => ({
+      ...s,
+      activePlayerId: nextPlayer.id,
+      turn: s.turn + 1,
+      phase: 'ROLL',
+      turnStartTime: Date.now(),
+      diceRoll: null,
+      tradeOffer: null,
+      discardsPending: {},
+    }));
+  }
+
+  // 🔌 cerrar sockets del jugador expulsado
+  const room = rooms.get(gameId);
+  if (room) {
+    for (const client of room) {
+      const m = clientMeta.get(client);
+      if (m && m.userId === session.targetId) {
+        client.close(4001, 'kicked');
+      }
+    }
+  }
+
+  // 📢 notificar a todos
+  broadcastToRoom(gameId, {
+    type: 'PLAYER_KICKED',
+    payload: {
+      playerId: session.targetId,
+      username: session.targetUsername,
+    },
+  });
+
+  // 🔄 actualizar estado final
+  broadcastPersonalizedGameState(gameId, orch);
+}
+
+function handleVoteKick(ws: WebSocket, payload: { gameId: string; targetId: string }): void {
+  const meta = clientMeta.get(ws);
+  if (!meta) return;
+
+  const orch = getOrLoadOrchestrator(meta.gameId);
+  if (!orch) return;
+
+  const state = orch.getState();
+  if (state.phase === 'GAME_OVER') return;
+  if (kickVoteSessions.has(meta.gameId)) {
+    sendTo(ws, { type: 'ERROR', payload: { code: 'KICK_VOTE_ACTIVE', message: 'A vote is already in progress' } });
+    return;
+  }
+  if (payload.targetId === meta.userId) return;
+
+  const target = state.players.find(p => p.id === payload.targetId);
+  const initiator = state.players.find(p => p.id === meta.userId);
+  if (!target || !initiator) return;
+
+  const eligibleIds = state.players.map(p => p.id).filter(id => id !== payload.targetId);
+
+  const session: KickVoteSession = {
+    targetId: payload.targetId,
+    targetUsername: target.username,
+    initiatorId: meta.userId,
+    initiatorUsername: initiator.username,
+    votes: new Map([[meta.userId, true]]), // initiator auto-votes yes
+    eligibleIds,
+    startedAt: Date.now(),
+    timer: setTimeout(() => resolveKickVote(meta.gameId, false), KICK_VOTE_TIMEOUT_MS),
+  };
+  kickVoteSessions.set(meta.gameId, session);
+  broadcastKickVoteUpdate(meta.gameId, session);
+}
+
+function handleKickVote(ws: WebSocket, payload: { gameId: string; vote: boolean }): void {
+  const meta = clientMeta.get(ws);
+  if (!meta) return;
+
+  const session = kickVoteSessions.get(meta.gameId);
+  if (!session) return;
+  if (meta.userId === session.targetId) return;
+  if (!session.eligibleIds.includes(meta.userId)) return;
+
+  session.votes.set(meta.userId, payload.vote);
+  broadcastKickVoteUpdate(meta.gameId, session);
+
+  const yesCount = [...session.votes.values()].filter(Boolean).length;
+  const noCount  = [...session.votes.values()].filter(v => !v).length;
+  const majority = Math.ceil(session.eligibleIds.length / 2) + (session.eligibleIds.length % 2 === 0 ? 0 : 0);
+  // Strictly more than half
+  const threshold = Math.floor(session.eligibleIds.length / 2) + 1;
+
+  if (yesCount >= threshold) resolveKickVote(meta.gameId, true);
+  else if (noCount > session.eligibleIds.length - threshold) resolveKickVote(meta.gameId, false);
 }
 
 function handleDisconnect(ws: WebSocket): void {

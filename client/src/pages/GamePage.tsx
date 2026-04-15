@@ -31,6 +31,7 @@ import SoundPanel from '../components/game/SoundPanel.js';
 import { musicEngine } from '../components/game/musicEngine.js';
 import DiscardPanel from '../components/game/DiscardPanel.js';
 import ProfilePanel from '../components/profile/ProfilePanel.js';
+import KickVoteModal from '../components/game/KickVoteModal.js';
 import { resolvePlayerColor } from '../components/HexBoard/hexLayout.js';
 import { RESOURCE_ICON_MAP } from '../components/icons/GameIcons.js';
 import { ALL_RESOURCES, edgeVertices } from '@conqueror/shared';
@@ -116,6 +117,7 @@ function MobileDiceWidget({ diceRoll, phase, gameId }: {
 
 // ── Persistent mobile chat input strip ──────────────────────────────────────
 function MobileChatBar({ gameId }: { gameId: string }) {
+  const { t } = useTranslation('game');
   const chatMessages = useGameStore(s => s.chatMessages);
   const [text, setText] = useState('');
   const [kbOffset, setKbOffset] = useState(0);
@@ -160,7 +162,7 @@ function MobileChatBar({ gameId }: { gameId: string }) {
         </p>
       )}
       {!lastMsg && (
-        <p className="flex-1 text-[10px] text-gray-600 italic">No messages yet</p>
+        <p className="flex-1 text-[10px] text-gray-600 italic">{t('lobby.noMessagesShort')}</p>
       )}
 
       {/* Input + send */}
@@ -170,7 +172,7 @@ function MobileChatBar({ gameId }: { gameId: string }) {
       >
         <input
           className="w-28 rounded-lg bg-gray-800 border border-gray-700 px-2 py-1 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-gray-500"
-          placeholder="Message…"
+          placeholder={t('lobby.messageShort')}
           value={text}
           onChange={e => setText(e.target.value)}
           maxLength={200}
@@ -389,7 +391,7 @@ export default function GamePage() {
     return (
       <div className="h-dvh bg-gray-900 flex flex-col items-center justify-center gap-4">
         <div className="w-10 h-10 rounded-full border-4 border-amber-500 border-t-transparent animate-spin" />
-        <p className="text-amber-400 text-lg font-semibold">Reconnecting…</p>
+        <p className="text-amber-400 text-lg font-semibold">{t('game.reconnecting')}</p>
         <p className="text-gray-500 text-sm">{lobbyInfo?.name}</p>
       </div>
     );
@@ -407,7 +409,7 @@ export default function GamePage() {
         <div className="w-full max-w-md">
           <div className="flex items-center justify-between mb-6">
             <button className="text-gray-400 hover:text-white text-sm" onClick={() => navigate('/lobby')}>
-              ← Back
+              {t('ui.back')}
             </button>
             <h1 className="text-2xl font-bold text-amber-400">
               {lobbyInfo?.name ?? 'Loading…'}
@@ -431,11 +433,10 @@ export default function GamePage() {
               {lobbyInfo?.players.map(p => {
                 const tier = (() => {
                   const TIERS = [
-                    { min: 0, max: 999, icon: '🥉', color: '#cd7f32' },
-                    { min: 1000, max: 1199, icon: '🥈', color: '#c0c0c0' },
-                    { min: 1200, max: 1399, icon: '🥇', color: '#ffd700' },
-                    { min: 1400, max: 1599, icon: '💎', color: '#a0ffe8' },
-                    { min: 1600, max: 99999, icon: '👑', color: '#a8d8ff' },
+                    { min: 0,    max: 1049,  icon: '🔩', color: '#9ca3af' },
+                    { min: 1050, max: 1199,  icon: '🥉', color: '#cd7f32' },
+                    { min: 1200, max: 1399,  icon: '🥈', color: '#94a3b8' },
+                    { min: 1400, max: 99999, icon: '🥇', color: '#f59e0b' },
                   ];
                   return TIERS.find(t => (p.elo ?? 1000) >= t.min && (p.elo ?? 1000) <= t.max) ?? TIERS[1];
                 })();
@@ -454,7 +455,7 @@ export default function GamePage() {
               {Array.from({ length: maxPlayers - playerCount }, (_, i) => (
                 <div key={`empty-${i}`} className="flex items-center gap-3 opacity-40">
                   <div className="w-4 h-4 rounded-full border border-gray-600" />
-                  <span className="text-gray-500 text-sm">Waiting for player…</span>
+                  <span className="text-gray-500 text-sm">{t('lobby.waitingForPlayer')}</span>
                 </div>
               ))}
             </div>
@@ -465,15 +466,15 @@ export default function GamePage() {
               {/* Turn time limit selector */}
               <div className="card py-2 px-3">
                 <label className="block text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wide">
-                  ⏱ Turn time limit
+                  {t('lobby.turnTimeLimit')}
                 </label>
                 <div className="flex gap-2 flex-wrap">
                   {([
-                    { val: 30,  label: '⚡ Bullet 30s' },
-                    { val: 60,  label: '🔥 Blitz 60s' },
-                    { val: 90,  label: '⏩ Rapid 90s' },
-                    { val: 180, label: '🐢 Long 3min' },
-                    { val: null, label: '∞ No limit' },
+                    { val: 30,  label: t('lobby.bullet') },
+                    { val: 60,  label: t('lobby.blitz') },
+                    { val: 90,  label: t('lobby.rapid') },
+                    { val: 180, label: t('lobby.long') },
+                    { val: null, label: t('lobby.noLimit') },
                   ] as { val: number | null; label: string }[]).map(({ val, label }) => (
                     <button
                       key={String(val)}
@@ -494,7 +495,7 @@ export default function GamePage() {
               {/* Horn cooldown selector */}
               <div className="card py-2 px-3">
                 <label className="block text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wide">
-                  📯 Horn cooldown
+                  {t('lobby.hornCooldown')}
                 </label>
                 <div className="flex gap-2 flex-wrap">
                   {[10, 30, 60, 120].map(val => (
@@ -517,36 +518,36 @@ export default function GamePage() {
               {/* War mode */}
               <div className="card py-2 px-3">
                 <label className="block text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wide">
-                  War &amp; Sieges mode
+                  {t('lobby.warMode')}
                 </label>
                 <button
                   onClick={() => { setWarMode(w => !w); if (warMode) setWarVariants({ totalWar: false, fortress: false, reconstruction: false, soldierFoodEnabled: true, coliseum: false }); }}
                   className={cn('rounded-lg px-3 py-1.5 text-sm border transition-colors w-full text-left', warMode ? 'border-red-500 bg-red-900/30 text-red-300' : 'border-gray-700 text-gray-400 hover:border-gray-500')}
                 >
-                  {warMode ? 'Enabled — soldiers, sieges & destruction' : 'Disabled (classic mode)'}
+                  {warMode ? t('lobby.warEnabled') : t('lobby.warDisabled')}
                 </button>
                 {warMode && (
                   <div className="mt-2 space-y-1">
                     {(['totalWar', 'fortress', 'reconstruction'] as const).map(v => (
                       <button key={v} onClick={() => setWarVariants(prev => ({ ...prev, [v]: !prev[v] }))}
                         className={cn('w-full text-left rounded px-2 py-1 text-xs border transition-colors', warVariants[v] ? 'border-orange-500 bg-orange-900/30 text-orange-300' : 'border-gray-700 text-gray-500 hover:border-gray-600')}>
-                        {warVariants[v] ? '✓' : '○'} {v === 'totalWar' ? 'Total War (no attack limit)' : v === 'fortress' ? 'Fortress (cities need 2 wins to degrade)' : 'Reconstruction (rebuild for 2 timber + 2 clay)'}
+                        {warVariants[v] ? '✓' : '○'} {v === 'totalWar' ? t('lobby.variantTotalWar') : v === 'fortress' ? t('lobby.variantFortress') : t('lobby.variantReconstruction')}
                       </button>
                     ))}
                     <button onClick={() => setWarVariants(prev => ({ ...prev, soldierFoodEnabled: !prev.soldierFoodEnabled }))}
                       className={cn('w-full text-left rounded px-2 py-1 text-xs border transition-colors', !warVariants.soldierFoodEnabled ? 'border-blue-500 bg-blue-900/30 text-blue-300' : 'border-gray-700 text-gray-500 hover:border-gray-600')}>
-                      {!warVariants.soldierFoodEnabled ? '✓' : '○'} No Food (soldiers don't consume grain or desert)
+                      {!warVariants.soldierFoodEnabled ? '✓' : '○'} {t('lobby.variantNoFood')}
                     </button>
                     <button onClick={() => setWarVariants(prev => ({ ...prev, coliseum: !prev.coliseum }))}
                       className={cn('w-full text-left rounded px-2 py-1 text-xs border transition-colors', warVariants.coliseum ? 'border-purple-500 bg-purple-900/30 text-purple-300' : 'border-gray-700 text-gray-500 hover:border-gray-600')}>
-                      {warVariants.coliseum ? '✓' : '○'} Coliseum (attacks become 1v1 sword battles, first to 3 wins)
+                      {warVariants.coliseum ? '✓' : '○'} {t('lobby.variantColiseum')}
                     </button>
                   </div>
                 )}
               </div>
 
               {!canStart && (
-                <p className="text-yellow-500 text-sm text-center">Need at least 2 players to start</p>
+                <p className="text-yellow-500 text-sm text-center">{t('lobby.needAtLeast2')}</p>
               )}
               {startError && (
                 <p className="text-red-400 text-sm text-center">{startError}</p>
@@ -563,28 +564,28 @@ export default function GamePage() {
 
           {!isHost && (
             <div className="space-y-3">
-              <p className="text-center text-gray-400 text-sm">Waiting for the host to start the game…</p>
+              <p className="text-center text-gray-400 text-sm">{t('lobby.waitingForHost')}</p>
               {/* Read-only settings from host */}
               {lobbySettings && (
                 <div className="card py-2 px-3 space-y-1.5">
-                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">Game settings</p>
+                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">{t('lobby.gameSettings')}</p>
                   <div className="flex flex-wrap gap-2 text-xs">
                     <span className="rounded-lg border border-gray-700 bg-gray-800 px-2 py-1 text-gray-300">
-                      ⏱ {lobbySettings.turnTimeLimit ? `${lobbySettings.turnTimeLimit}s` : 'No limit'}
+                      ⏱ {lobbySettings.turnTimeLimit ? `${lobbySettings.turnTimeLimit}s` : t('lobby.noLimit')}
                     </span>
                     <span className="rounded-lg border border-gray-700 bg-gray-800 px-2 py-1 text-gray-300">
-                      📯 Horn {lobbySettings.hornCooldownSecs}s
+                      📯 {lobbySettings.hornCooldownSecs}s
                     </span>
                     <span className={cn('rounded-lg border px-2 py-1', lobbySettings.warMode ? 'border-red-700 bg-red-900/30 text-red-300' : 'border-gray-700 bg-gray-800 text-gray-400')}>
-                      ⚔️ War {lobbySettings.warMode ? 'ON' : 'OFF'}
+                      ⚔️ {lobbySettings.warMode ? t('lobby.warON') : t('lobby.warOFF')}
                     </span>
                     {lobbySettings.warMode && Object.entries(lobbySettings.warVariants).filter(([, v]) => v).map(([k]) => (
                       <span key={k} className={cn('rounded-lg border px-2 py-1 text-xs', k === 'coliseum' ? 'border-purple-700 bg-purple-900/30 text-purple-300' : 'border-orange-700 bg-orange-900/30 text-orange-300')}>
-                        {k === 'totalWar' ? 'Total War' : k === 'fortress' ? 'Fortress' : k === 'reconstruction' ? 'Reconstruction' : k === 'coliseum' ? 'Coliseum' : k === 'soldierFoodEnabled' ? '' : k}
+                        {k === 'totalWar' ? t('lobby.totalWarShort') : k === 'fortress' ? t('lobby.fortressShort') : k === 'reconstruction' ? t('lobby.reconstructionShort') : k === 'coliseum' ? t('lobby.coliseumShort') : k === 'soldierFoodEnabled' ? '' : k}
                       </span>
                     ))}
                     {lobbySettings.warMode && lobbySettings.warVariants.soldierFoodEnabled === false && (
-                      <span className="rounded-lg border border-blue-700 bg-blue-900/30 px-2 py-1 text-blue-300 text-xs">No Food</span>
+                      <span className="rounded-lg border border-blue-700 bg-blue-900/30 px-2 py-1 text-blue-300 text-xs">{t('lobby.noFoodShort')}</span>
                     )}
                   </div>
                 </div>
@@ -594,10 +595,10 @@ export default function GamePage() {
 
           {/* Lobby chat */}
           <div className="card mt-4 py-2 px-3 flex flex-col gap-2">
-            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide">Chat</p>
+            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide">{t('lobby.chat')}</p>
             <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
               {chatMessages.length === 0 && (
-                <p className="text-xs text-gray-600 italic">No messages yet…</p>
+                <p className="text-xs text-gray-600 italic">{t('lobby.noMessages')}</p>
               )}
               {chatMessages.map((m, i) => {
                 const playerColor = lobbyInfo?.players.find(p => p.id === m.fromPlayerId)?.color;
@@ -623,7 +624,7 @@ export default function GamePage() {
               <input
                 value={lobbyChatInput}
                 onChange={e => setLobbyChatInput(e.target.value)}
-                placeholder="Write a message…"
+                placeholder={t('lobby.writeMessage')}
                 maxLength={200}
                 className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-600"
               />
@@ -632,7 +633,7 @@ export default function GamePage() {
           </div>
 
           <p className="text-center text-xs text-gray-600 mt-4">
-            Game ID: <code className="text-gray-500">{gameId}</code>
+            {t('lobby.gameId')} <code className="text-gray-500">{gameId}</code>
           </p>
         </div>
         {showProfile && <ProfilePanel onClose={() => setShowProfile(false)} />}
@@ -659,13 +660,13 @@ export default function GamePage() {
 
   // Board hint: contextual instruction shown as a floating pill over the board
   const boardHint =
-    _boardMode === 'place_settlement' ? 'Tap an intersection to place your Settlement' :
-    _boardMode === 'place_city'       ? 'Tap your settlement to upgrade to a City' :
-    _boardMode === 'place_road'       ? 'Tap an edge to place your Road' :
-    _boardMode === 'move_bandit'      ? 'Tap a tile to move the Bandit' :
-    _boardMode === 'recruit_soldier'  ? '🪖 Tap one of your buildings to recruit a soldier' :
-    _boardMode === 'attack'           ? '⚔️ Tap an enemy building to attack' :
-    _roadEdges  !== null              ? `Road Building — pick edge ${(_roadEdges?.length ?? 0) + 1}/2` :
+    _boardMode === 'place_settlement' ? t('ctx.tapSettlement') :
+    _boardMode === 'place_city'       ? t('ctx.tapCity') :
+    _boardMode === 'place_road'       ? t('ctx.tapRoad') :
+    _boardMode === 'move_bandit'      ? t('ctx.tapBandit') :
+    _boardMode === 'recruit_soldier'  ? t('ctx.tapRecruit') :
+    _boardMode === 'attack'           ? t('ctx.tapAttack') :
+    _roadEdges  !== null              ? t('ctx.roadBuildingPick', { count: (_roadEdges?.length ?? 0) + 1 }) :
     null;
   const cancelHint = () => {
     if (_roadEdges !== null) _cancelRoad();
@@ -747,12 +748,12 @@ export default function GamePage() {
             <button
               className="hidden lg:flex items-center gap-1 rounded px-2 py-1 text-xs text-red-400 hover:text-red-300 border border-red-800 hover:border-red-600 transition-colors"
               onClick={() => {
-                if (confirm('End the game now? The player with the most VP wins.')) {
+                if (confirm(t('game.endGameTitle'))) {
                   wsService.send({ type: 'END_GAME', payload: { gameId: gameId! } });
                 }
               }}
             >
-              🏁 End Game
+              🏁 {t('game.endGame')}
             </button>
           )}
 
@@ -764,7 +765,7 @@ export default function GamePage() {
             <button
               className="lg:hidden rounded-lg px-2 py-1.5 text-xs border border-red-800 text-red-400"
               onClick={() => {
-                if (confirm('End the game now?')) {
+                if (confirm(t('game.endGameConfirm'))) {
                   wsService.send({ type: 'END_GAME', payload: { gameId: gameId! } });
                 }
               }}
@@ -833,9 +834,9 @@ export default function GamePage() {
                 onClick={e => e.stopPropagation()}
                 className="bg-gray-900 rounded-3xl border border-gray-700 shadow-2xl px-8 py-6 text-center max-w-xs w-full mx-4"
               >
-                <p className="text-red-400 font-bold text-lg mb-1">Robbed!</p>
+                <p className="text-red-400 font-bold text-lg mb-1">{t('game.robbed')}</p>
                 <p className="text-gray-400 text-sm mb-4">
-                  <span className="text-white font-semibold">{stolenReveal.thiefName}</span> stole from you
+                  {t('game.stoleFromYou', { player: stolenReveal.thiefName })}
                 </p>
                 <div className="flex justify-center mb-4">
                   <motion.div
@@ -855,7 +856,7 @@ export default function GamePage() {
                   className="text-xs text-gray-500 hover:text-gray-300 underline"
                   onClick={clearStolenReveal}
                 >
-                  Dismiss
+                  {t('game.dismiss')}
                 </button>
               </motion.div>
             </motion.div>
@@ -910,7 +911,7 @@ export default function GamePage() {
               return (
                 <div
                   key={p.id}
-                  className="rounded-lg px-2 py-1 space-y-0.5 pointer-events-none"
+                  className="rounded-lg px-2 py-1 space-y-0.5"
                   style={{
                     background: isActive ? 'rgba(17,24,39,0.88)' : 'rgba(17,24,39,0.55)',
                     border: isActive ? `1px solid ${color}` : '1px solid rgba(75,85,99,0.3)',
@@ -955,7 +956,7 @@ export default function GamePage() {
                       <span className="text-[9px] bg-orange-900/80 text-orange-200 rounded px-0.5" title="Warlord (+2 VP)">🗡️</span>
                     )}
                   </div>
-                  {/* Row 2: stats */}
+                  {/* Row 2: stats + kick button */}
                   <div className="flex items-center gap-2">
                     <span className="text-[9px] tabular-nums text-gray-500 flex items-center gap-0.5" title="Knights played">
                       ⚔️ <span className="font-bold text-gray-300">{p.knightsPlayed}</span>
@@ -976,6 +977,16 @@ export default function GamePage() {
                         </span>
                       ) : null;
                     })()}
+                    {/* Vote-kick button — only for other players during active game */}
+                    {!isMe && gameState.phase !== 'GAME_OVER' && (
+                      <button
+                        onClick={() => wsService.send({ type: 'VOTE_KICK', payload: { gameId: gameId!, targetId: p.id } })}
+                        title={`Votar para expulsar a ${p.username}`}
+                        className="ml-auto text-[10px] text-gray-600 hover:text-red-400 transition-colors leading-none"
+                      >
+                        🚫
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -1204,6 +1215,9 @@ export default function GamePage() {
       {/* ── Monopoly overlay ── */}
       <MonopolyOverlay />
 
+      {/* ── Vote-kick modal ── */}
+      {gameState && <KickVoteModal gameId={gameId!}/>}
+
       {/* ── War rules modal ── */}
       {showWarRules && (
         <WarRulesModal
@@ -1228,23 +1242,23 @@ export default function GamePage() {
           <motion.div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <div className="bg-gray-900 border border-red-700 rounded-2xl p-6 max-w-sm w-full mx-4 space-y-4">
-              <h3 className="text-red-400 font-bold text-lg text-center">Destruction</h3>
+              <h3 className="text-red-400 font-bold text-lg text-center">{t('game.destruction')}</h3>
               <p className="text-gray-300 text-sm text-center">
-                {victim?.username}'s {tb?.type} is at your mercy. Choose:
+                {t('game.destChoose', { victim: victim?.username, type: tb?.type })}
               </p>
               <div className="space-y-2">
                 {tb?.type === 'settlement' && (
                   <button
                     className="w-full rounded-lg border border-red-600 bg-red-900/30 text-red-300 py-2 text-sm hover:bg-red-800/40 transition-colors"
                     onClick={() => wsService.send({ type: 'CHOOSE_DESTRUCTION', payload: { gameId: gameId!, destructionType: 'destroy' } })}>
-                    Destroy settlement (−1 VP for {victim?.username})
+                    {t('game.destroySettlement', { player: victim?.username })}
                   </button>
                 )}
                 {tb?.type === 'city' && (
                   <button
                     className="w-full rounded-lg border border-orange-600 bg-orange-900/30 text-orange-300 py-2 text-sm hover:bg-orange-800/40 transition-colors"
                     onClick={() => wsService.send({ type: 'CHOOSE_DESTRUCTION', payload: { gameId: gameId!, destructionType: 'downgrade' } })}>
-                    Downgrade city to settlement (−1 VP)
+                    {t('game.downgradeCity')}
                   </button>
                 )}
               </div>
@@ -1321,14 +1335,14 @@ export default function GamePage() {
                 />
               </div>
               <div className="text-center">
-                <p className="text-white font-semibold text-base">Reconnecting…</p>
-                <p className="text-gray-400 text-sm mt-1">Trying to restore connection</p>
+                <p className="text-white font-semibold text-base">{t('game.reconnecting')}</p>
+                <p className="text-gray-400 text-sm mt-1">{t('game.tryingRestore')}</p>
               </div>
               <button
                 className="text-xs text-gray-500 hover:text-gray-300 underline mt-1"
                 onClick={() => window.location.reload()}
               >
-                Refresh page
+                {t('game.refreshPage')}
               </button>
             </motion.div>
           </motion.div>
