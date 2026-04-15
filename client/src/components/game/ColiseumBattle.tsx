@@ -402,11 +402,12 @@ export function ColiseumBattle() {
     const isLocalDefender = localId === battle.defenderId;
     const isCombatant = isLocalAttacker || isLocalDefender;
 
-    const localColor  = isLocalAttacker ? atkColor : defColor;
-    const remoteColor = isLocalAttacker ? defColor : atkColor;
+    // For spectators: localMesh = attacker, remoteMesh = defender
+    const localColor  = isCombatant ? (isLocalAttacker ? atkColor : defColor) : atkColor;
+    const remoteColor = isCombatant ? (isLocalAttacker ? defColor : atkColor) : defColor;
 
-    const startX = isLocalAttacker ? -3.5 : 3.5;
-    const startYaw = isLocalAttacker ? Math.PI / 2 : -Math.PI / 2; // face opponent
+    const startX = (isCombatant ? isLocalAttacker : true) ? -3.5 : 3.5;
+    const startYaw = (isCombatant ? isLocalAttacker : true) ? Math.PI / 2 : -Math.PI / 2;
 
     localPosRef.current = { x: startX, z: 0 };
     yawRef.current = startYaw;
@@ -423,7 +424,10 @@ export function ColiseumBattle() {
 
     // Remote state (updated from WS without triggering re-renders)
     const remote = { x: -startX, z: 0, rotation: -startYaw, shielding: false, swinging: false };
+    // Spectator: also track attacker (localMesh) separately
+    const remoteLocal = { x: startX, z: 0, rotation: startYaw, shielding: false, swinging: false };
     let remotePrevSwinging = false;
+    let remoteLocalPrevSwinging = false;
 
     // Ready state — read from latest game store state each frame
     const getBothReady = () => {
@@ -474,14 +478,27 @@ export function ColiseumBattle() {
     let remoteStatesRef = useGameStore.getState().coliseumPlayerStates;
     const unsubWs = wsService.onMessage(msg => {
       if (msg.type === 'COLISEUM_PLAYER_STATES') {
-        const remoteId = isLocalAttacker ? battle.defenderId : battle.attackerId;
-        const rs = msg.payload.states[remoteId];
-        if (rs) { remote.x = rs.x; remote.z = rs.z; remote.rotation = rs.rotation; remote.shielding = rs.shielding; remote.swinging = rs.swinging; }
+        if (!isCombatant) {
+          // Spectator: update both meshes from server state
+          const atkState = msg.payload.states[battle.attackerId];
+          const defState = msg.payload.states[battle.defenderId];
+          if (atkState) { remoteLocal.x = atkState.x; remoteLocal.z = atkState.z; remoteLocal.rotation = atkState.rotation; remoteLocal.shielding = atkState.shielding; remoteLocal.swinging = atkState.swinging; }
+          if (defState) { remote.x = defState.x; remote.z = defState.z; remote.rotation = defState.rotation; remote.shielding = defState.shielding; remote.swinging = defState.swinging; }
+        } else {
+          const remoteId = isLocalAttacker ? battle.defenderId : battle.attackerId;
+          const rs = msg.payload.states[remoteId];
+          if (rs) { remote.x = rs.x; remote.z = rs.z; remote.rotation = rs.rotation; remote.shielding = rs.shielding; remote.swinging = rs.swinging; }
+        }
       }
       if (msg.type === 'COLISEUM_HIT') {
         // Flash the hit target mesh
-        const isLocalHit = msg.payload.defenderId === localId;
-        const flashMesh = isLocalHit ? localMesh : remoteMesh;
+        let flashMesh: THREE.Group;
+        if (!isCombatant) {
+          // localMesh=attacker, remoteMesh=defender; flash defender mesh when defender is hit
+          flashMesh = msg.payload.defenderId === battle.defenderId ? remoteMesh : localMesh;
+        } else {
+          flashMesh = msg.payload.defenderId === localId ? localMesh : remoteMesh;
+        }
         const fl = flashMesh.userData.flash as THREE.Mesh;
         (fl.material as THREE.MeshBasicMaterial).opacity = 0.65;
         setTimeout(() => { (fl.material as THREE.MeshBasicMaterial).opacity = 0; }, 300);
@@ -678,6 +695,36 @@ export function ColiseumBattle() {
         setTimeout(() => { rsw.rotation.x = 0; rsw.position.z = remoteMesh.userData.swordRestZ; }, ATTACK_ANIM_MS);
       }
       remotePrevSwinging = remote.swinging;
+
+      // ── Spectator: also update localMesh (attacker) from server state ──
+      if (!isCombatant) {
+        localMesh.position.set(remoteLocal.x, 0, remoteLocal.z);
+        localMesh.rotation.y = remoteLocal.rotation;
+        (localMesh.userData.shield as THREE.Group).visible = remoteLocal.shielding;
+        if (remoteLocal.swinging && !remoteLocalPrevSwinging) {
+          const lsw = localMesh.userData.sword as THREE.Group;
+          lsw.rotation.x = -1.1;
+          lsw.position.z = 0.55;
+          setTimeout(() => { lsw.rotation.x = 0; lsw.position.z = localMesh.userData.swordRestZ; }, ATTACK_ANIM_MS);
+        }
+        remoteLocalPrevSwinging = remoteLocal.swinging;
+      }
+
+      // ── Leg animation (spectator localMesh = attacker) ──
+      if (!isCombatant) {
+        const slL = localMesh.userData.legL as THREE.Group;
+        const slR = localMesh.userData.legR as THREE.Group;
+        const localMoving = Math.abs(remoteLocal.x - localMesh.position.x) > 0.005 || Math.abs(remoteLocal.z - localMesh.position.z) > 0.005;
+        if (remoteLocal.shielding) {
+          slL.rotation.x = 0.3; slR.rotation.x = 0.3;
+        } else if (localMoving) {
+          walkPhase += dt * 7;
+          slL.rotation.x =  Math.sin(walkPhase) * 0.55;
+          slR.rotation.x = -Math.sin(walkPhase) * 0.55;
+        } else {
+          slL.rotation.x *= 0.82; slR.rotation.x *= 0.82;
+        }
+      }
 
       // ── Leg animation (local) ──
       if (isCombatant) {
