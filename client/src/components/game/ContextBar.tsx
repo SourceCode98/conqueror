@@ -93,7 +93,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
     isMyTurn, myPlayer, canAfford, boardMode, setBoardMode,
     openTradePanel, roadBuildingEdges, startRoadBuilding, cancelRoadBuilding,
     pendingBanditCoord, setPendingBanditCoord, localPlayerId,
-    attackTargetVertex, setAttackTargetVertex,
+    attackFromVertex, setAttackFromVertex, attackTargetVertex, setAttackTargetVertex,
     transferFromVertex, setTransferFromVertex,
     setCombatDicePhase,
   } = useGameStore();
@@ -451,16 +451,28 @@ export default function ContextBar({ gameState, gameId }: Props) {
           )}
         </AnimatePresence>
 
+        {/* Attack source selected (mobile) */}
+        {boardMode === 'attack' && attackFromVertex && !attackTargetVertex && (() => {
+          const fb = (gameState.buildings as any)[attackFromVertex];
+          return (
+            <div className="mx-2 mb-1 rounded-xl border border-amber-700 bg-amber-950/30 px-3 py-2 flex items-center justify-between">
+              <span className="text-amber-300 text-xs">🪖 From your {fb?.type} ({fb?.soldiers ?? 0} soldiers) — tap enemy building</span>
+              <button className="text-gray-500 hover:text-gray-300 text-sm leading-none ml-2"
+                onClick={() => setAttackFromVertex(null)}>✕</button>
+            </div>
+          );
+        })()}
+
         {/* Attack confirmation panel (mobile) */}
-        {boardMode === 'attack' && attackTargetVertex && (() => {
-          const totalSoldiers = Object.values(gameState.buildings)
-            .filter((b: any) => b.playerId === myId)
-            .reduce((s: number, b: any) => s + (b.soldiers ?? 0), 0);
+        {boardMode === 'attack' && attackFromVertex && attackTargetVertex && (() => {
+          const fb = (gameState.buildings as any)[attackFromVertex];
           const tb = (gameState.buildings as any)[attackTargetVertex];
           const victim = gameState.players.find(p => p.id === tb?.playerId);
+          const sourceSoldiers = fb?.soldiers ?? 0;
           const minSoldiers = tb?.sieged ? 1 : 2;
-          const canSendEnough = totalSoldiers >= minSoldiers;
-          const clampedSoldiers = Math.max(minSoldiers, Math.min(attackSoldiers, totalSoldiers));
+          const maxSendable = Math.min(sourceSoldiers, MAX_SOLDIERS_CITY);
+          const canSendEnough = sourceSoldiers >= minSoldiers;
+          const clampedSoldiers = Math.max(minSoldiers, Math.min(attackSoldiers, maxSendable));
           return (
             <div className="mx-2 mb-1 rounded-xl border border-red-700 bg-red-950/40 p-3 space-y-2">
               <div className="flex items-center justify-between">
@@ -468,7 +480,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
                   ⚔️ {victim?.username}'s {tb?.type}{tb?.sieged ? ' (BESIEGED)' : ''}
                 </p>
                 <button className="text-gray-500 hover:text-gray-300 text-sm leading-none"
-                  onClick={() => setAttackTargetVertex(null)}>✕</button>
+                  onClick={() => { setAttackFromVertex(null); setAttackTargetVertex(null); }}>✕</button>
               </div>
               <p className="text-gray-400 text-xs">
                 Defenders: {tb?.soldiers ?? 0} soldiers{tb?.type === 'city' ? ' +1 city bonus' : ''}
@@ -478,7 +490,7 @@ export default function ContextBar({ gameState, gameId }: Props) {
                   <div className="flex flex-col gap-1">
                     <span className="text-xs text-gray-400">Send soldiers:</span>
                     <div className="flex gap-1 flex-wrap">
-                      {Array.from({ length: totalSoldiers }, (_, i) => i + 1).map(n => {
+                      {Array.from({ length: maxSendable }, (_, i) => i + 1).map(n => {
                         const selected = n <= clampedSoldiers;
                         const disabled = n < minSoldiers;
                         return (
@@ -494,22 +506,23 @@ export default function ContextBar({ gameState, gameId }: Props) {
                         );
                       })}
                     </div>
-                    <span className="text-xs text-gray-500">{clampedSoldiers} of {totalSoldiers} selected</span>
+                    <span className="text-xs text-gray-500">{clampedSoldiers} of {maxSendable} selected</span>
                   </div>
                   <button
                     className="w-full rounded-lg bg-red-700 hover:bg-red-600 active:bg-red-800 text-white text-xs py-2 font-semibold"
                     onClick={() => {
                       const victim2 = gameState.players.find(p => p.id === tb?.playerId);
                       setCombatDicePhase({ attackerId: myId!, defenderId: tb?.playerId, attackerName: me?.username ?? '?', defenderName: victim2?.username ?? '?', timeoutSecs: 12 });
-                      wsService.send({ type: 'ATTACK', payload: { gameId, targetVertexId: attackTargetVertex as any, soldiers: clampedSoldiers } });
+                      wsService.send({ type: 'ATTACK', payload: { gameId, fromVertexId: attackFromVertex as any, targetVertexId: attackTargetVertex as any, soldiers: clampedSoldiers } });
                       setBoardMode(null);
+                      setAttackFromVertex(null);
                       setAttackTargetVertex(null);
                     }}>
                     Attack with {clampedSoldiers} soldier{clampedSoldiers !== 1 ? 's' : ''}
                   </button>
                 </>
               ) : (
-                <p className="text-yellow-500 text-xs">Need at least {minSoldiers} soldiers to attack this building</p>
+                <p className="text-yellow-500 text-xs">Need at least {minSoldiers} soldiers in this building to attack</p>
               )}
             </div>
           );
