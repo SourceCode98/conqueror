@@ -151,6 +151,7 @@ export default function LobbyPage() {
   const [joiningGameId, setJoiningGameId] = useState<string | null>(null);
   const [joinColor, setJoinColor] = useState<string>(PLAYER_COLOR_OPTIONS[0]);
   const [joinTakenColors, setJoinTakenColors] = useState<string[]>([]);
+  const [joinPlayers, setJoinPlayers] = useState<Array<{ id: string; username: string; color: string; elo: number }>>([]);
 
   // Refresh profile when returning to lobby (e.g. after a game)
   useEffect(() => {
@@ -190,6 +191,7 @@ export default function LobbyPage() {
       const taken: string[] = (data.players ?? []).map((p: any) => p.color);
       setJoinTakenColors(taken);
       setJoinColor(PLAYER_COLOR_OPTIONS.find(c => !taken.includes(c)) ?? PLAYER_COLOR_OPTIONS[0]);
+      setJoinPlayers(data.players ?? []);
     }
     setJoiningGameId(gameId);
   }
@@ -315,6 +317,7 @@ export default function LobbyPage() {
                     joiningId={joiningGameId}
                     joinColor={joinColor}
                     joinTakenColors={joinTakenColors}
+                    joinPlayers={joiningGameId === game.id ? joinPlayers : []}
                     onJoin={() => joiningGameId === game.id ? setJoiningGameId(null) : openJoin(game.id)}
                     onColorChange={setJoinColor}
                     onConfirmJoin={confirmJoin}
@@ -350,11 +353,12 @@ export default function LobbyPage() {
 }
 
 // ─── Game row ─────────────────────────────────────────────────────────────────
-function GameRow({ game, joiningId, joinColor, joinTakenColors, onJoin, onColorChange, onConfirmJoin }: {
+function GameRow({ game, joiningId, joinColor, joinTakenColors, joinPlayers = [], onJoin, onColorChange, onConfirmJoin }: {
   game: GameListing;
   joiningId: string | null;
   joinColor: string;
   joinTakenColors: string[];
+  joinPlayers?: Array<{ id: string; username: string; color: string; elo: number }>;
   onJoin: () => void;
   onColorChange: (c: string) => void;
   onConfirmJoin: () => void;
@@ -406,6 +410,24 @@ function GameRow({ game, joiningId, joinColor, joinTakenColors, onJoin, onColorC
       {/* Inline join panel */}
       {isJoining && (
         <div className="mt-3 pt-3 border-t border-white/5 space-y-3">
+          {joinPlayers.length > 0 && (
+            <div>
+              <p className="text-xs text-gray-400 mb-2 font-bold">Players in room</p>
+              <div className="space-y-1.5">
+                {joinPlayers.map(p => {
+                  const tier = getTier(p.elo ?? 1000);
+                  return (
+                    <div key={p.id} className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
+                      <span className="text-sm text-gray-300 flex-1 truncate">{p.username}</span>
+                      <span className="text-sm">{tier.icon}</span>
+                      <span className="text-xs font-bold tabular-nums" style={{ color: tier.color }}>{p.elo ?? 1000}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div>
             <p className="text-xs text-gray-400 mb-2 font-bold">Pick your color</p>
             <ColorPicker value={joinColor} onChange={onColorChange} takenColors={joinTakenColors} />

@@ -193,7 +193,7 @@ interface LobbyInfo {
   status: string;
   max_players: number;
   created_by_username: string;
-  players: Array<{ id: string; username: string; color: string; seat_order: number }>;
+  players: Array<{ id: string; username: string; color: string; seat_order: number; elo: number }>;
 }
 
 
@@ -428,15 +428,29 @@ export default function GamePage() {
             </div>
 
             <div className="space-y-2">
-              {lobbyInfo?.players.map(p => (
-                <div key={p.id} className="flex items-center gap-3">
-                  <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: resolvePlayerColor(p.color) }}/>
-                  <span className="font-medium">{p.username}</span>
-                  {p.username === lobbyInfo.created_by_username && (
-                    <span className="text-xs text-amber-400">Host</span>
-                  )}
-                </div>
-              ))}
+              {lobbyInfo?.players.map(p => {
+                const tier = (() => {
+                  const TIERS = [
+                    { min: 0, max: 999, icon: '🥉', color: '#cd7f32' },
+                    { min: 1000, max: 1199, icon: '🥈', color: '#c0c0c0' },
+                    { min: 1200, max: 1399, icon: '🥇', color: '#ffd700' },
+                    { min: 1400, max: 1599, icon: '💎', color: '#a0ffe8' },
+                    { min: 1600, max: 99999, icon: '👑', color: '#a8d8ff' },
+                  ];
+                  return TIERS.find(t => (p.elo ?? 1000) >= t.min && (p.elo ?? 1000) <= t.max) ?? TIERS[1];
+                })();
+                return (
+                  <div key={p.id} className="flex items-center gap-3">
+                    <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: resolvePlayerColor(p.color) }}/>
+                    <span className="font-medium flex-1">{p.username}</span>
+                    {p.username === lobbyInfo.created_by_username && (
+                      <span className="text-xs text-amber-400">Host</span>
+                    )}
+                    <span className="text-sm">{tier.icon}</span>
+                    <span className="text-xs font-bold tabular-nums" style={{ color: tier.color }}>{p.elo ?? 1000}</span>
+                  </div>
+                );
+              })}
               {Array.from({ length: maxPlayers - playerCount }, (_, i) => (
                 <div key={`empty-${i}`} className="flex items-center gap-3 opacity-40">
                   <div className="w-4 h-4 rounded-full border border-gray-600" />

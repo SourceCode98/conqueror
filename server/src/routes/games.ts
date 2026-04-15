@@ -70,7 +70,7 @@ gamesRouter.get('/:id', (req, res) => {
   }
 
   const players = db.prepare(`
-    SELECT gp.user_id as id, u.username, gp.color, gp.seat_order
+    SELECT gp.user_id as id, u.username, u.elo, gp.color, gp.seat_order
     FROM game_players gp
     JOIN users u ON u.id = gp.user_id
     WHERE gp.game_id = ?
