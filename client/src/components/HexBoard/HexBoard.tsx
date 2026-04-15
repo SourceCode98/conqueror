@@ -886,14 +886,41 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
           }
           if (boardMode === 'attack') {
             const b = (state.buildings as any)[vid];
-            if (!b || b.playerId === localPlayerId) return null;
+            if (!b) return null;
+            const pos = vertexToPixel(vid as VertexId);
+            // Step 1: select own building as origin
+            if (!attackFromVertex) {
+              if (b.playerId !== localPlayerId) return null;
+              const hasSoldiers = (b.soldiers ?? 0) > 0;
+              const isSelected = vid === attackFromVertex;
+              return (
+                <circle key={vid} cx={pos.x} cy={pos.y} r={13}
+                  fill={hasSoldiers ? 'rgba(251,191,36,0.3)' : 'rgba(107,114,128,0.15)'}
+                  stroke={hasSoldiers ? '#fbbf24' : '#6b7280'}
+                  strokeWidth={2}
+                  style={{ cursor: hasSoldiers ? 'pointer' : 'not-allowed' }}
+                  onClick={() => hasSoldiers ? handleVertexClick(vid as VertexId) : undefined}/>
+              );
+            }
+            // Step 2: show origin highlight + enemy targets
+            if (b.playerId === localPlayerId) {
+              if ((b.soldiers ?? 0) === 0) return null;
+              const isSelected = vid === attackFromVertex;
+              return (
+                <circle key={vid} cx={pos.x} cy={pos.y} r={13}
+                  fill={isSelected ? 'rgba(251,191,36,0.5)' : 'rgba(251,191,36,0.2)'}
+                  stroke='#fbbf24'
+                  strokeWidth={isSelected ? 3 : 2}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => handleVertexClick(vid as VertexId)}/>
+              );
+            }
             const victim = state.players.find((p: any) => p.id === b.playerId);
             const victimVP = (victim?.victoryPoints ?? 0) + (victim?.victoryPointCards ?? 0);
             const dist = roadDistanceToVertex(state as any, localPlayerId!, vid as VertexId);
             const outOfRange = dist > 2;
             const vpProtected = victimVP <= 2;
             const canTarget = !outOfRange && !vpProtected;
-            const pos = vertexToPixel(vid as VertexId);
             const reason = outOfRange ? 'Out of range (>2 roads)' : vpProtected ? 'Protected (≤2 VP)' : null;
             return (
               <g key={vid}>

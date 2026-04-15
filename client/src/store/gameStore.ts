@@ -102,6 +102,10 @@ interface GameStore {
   warEvent: { effect: 'siege' | 'destruction_choice' | 'repelled'; attackerId: string; defenderId: string } | null;
   setWarEvent: (e: { effect: 'siege' | 'destruction_choice' | 'repelled'; attackerId: string; defenderId: string } | null) => void;
 
+  // Monopoly overlay
+  monopolyEvent: { playerId: string; username: string; resource: string; count: number } | null;
+  setMonopolyEvent: (e: { playerId: string; username: string; resource: string; count: number } | null) => void;
+
   // Stolen card reveal (shown to victim after being robbed)
   stolenReveal: { resource: ResourceType; thiefName: string } | null;
   clearStolenReveal: () => void;
@@ -207,6 +211,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   warEvent: null,
   setWarEvent: (e) => set({ warEvent: e }),
 
+  monopolyEvent: null,
+  setMonopolyEvent: (e) => set({ monopolyEvent: e }),
+
   clearStolenReveal: () => set({ stolenReveal: null }),
   setFinalScores: (scores, eloChanges) => set({ finalScores: scores, eloChanges: eloChanges ?? null }),
 
@@ -235,6 +242,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     toasts: [],
     dealClosed: null,
     warEvent: null,
+    monopolyEvent: null,
     stolenReveal: null,
     finalScores: null,
     eloChanges: null,

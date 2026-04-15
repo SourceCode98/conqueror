@@ -22,6 +22,7 @@ import { CombatResultModal } from '../components/game/CombatResultModal.js';
 import { ColiseumBattle } from '../components/game/ColiseumBattle.js';
 import DealClosedOverlay from '../components/game/DealClosedOverlay.js';
 import WarEventOverlay from '../components/game/WarEventOverlay.js';
+import MonopolyOverlay from '../components/game/MonopolyOverlay.js';
 import ActionToast from '../components/game/ActionToast.js';
 import TurnTimer from '../components/game/TurnTimer.js';
 import BuildCostTable from '../components/game/BuildCostTable.js';
@@ -1185,6 +1186,9 @@ export default function GamePage() {
 
       {/* ── War event overlay ── */}
       <WarEventOverlay />
+
+      {/* ── Monopoly overlay ── */}
+      <MonopolyOverlay />
 
       {/* ── War rules modal ── */}
       {showWarRules && (

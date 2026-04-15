@@ -193,6 +193,10 @@ class WSService {
             username: msg.payload.username,
             data: { action: msg.payload.action, extra: msg.payload.extra },
           });
+          if (msg.payload.action === 'played_monopoly' && msg.payload.extra) {
+            const [resource, count] = msg.payload.extra.split(':');
+            store.setMonopolyEvent({ playerId: msg.payload.playerId, username: msg.payload.username, resource, count: Number(count) });
+          }
         }
         break;
       }
