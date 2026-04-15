@@ -38,6 +38,7 @@ export interface PendingColiseum {
   defenderId: string;
   attackerName: string;
   defenderName: string;
+  fromVertexId: string;
   targetVertexId: string;
   attackSoldiers: number;
   playerStates: Record<string, ColiseumPlayerState>;
@@ -61,6 +62,7 @@ export interface PendingCombat {
   defenderForce: number;
   attackerWon: boolean;
   effect: 'siege' | 'destruction_choice' | 'repelled';
+  fromVertexId: string;
   targetVertexId: string;
   attackerRolled: boolean;
   defenderRolled: boolean;

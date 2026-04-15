@@ -43,7 +43,9 @@ interface GameStore {
   pendingBanditCoord: AxialCoord | null;
   setPendingBanditCoord: (coord: AxialCoord | null) => void;
 
-  // War mode: attack target vertex
+  // War mode: attack source + target vertex
+  attackFromVertex: VertexId | null;
+  setAttackFromVertex: (v: VertexId | null) => void;
   attackTargetVertex: VertexId | null;
   setAttackTargetVertex: (v: VertexId | null) => void;
 
@@ -85,6 +87,7 @@ interface GameStore {
     attackerForce: number; defenderForce: number;
     attackerWon: boolean; effect: 'siege' | 'destruction_choice' | 'repelled';
     attackerName: string; defenderName: string;
+    attackerSoldierLoss: number; defenderSoldierLoss: number;
   } | null;
   setCombatDicePhase: (data: { attackerId: string; defenderId: string; attackerName: string; defenderName: string; timeoutSecs: number }) => void;
   revealCombatDie: (side: 'attacker' | 'defender', value: number) => void;
@@ -179,6 +182,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   tradeSide: 'give',
   _tradeCardCb: null,
 
+  attackFromVertex: null,
+  setAttackFromVertex: (v) => set({ attackFromVertex: v }),
   attackTargetVertex: null,
   setAttackTargetVertex: (v) => set({ attackTargetVertex: v }),
 
@@ -236,6 +241,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     boardMode: null,
     roadBuildingEdges: null,
     pendingBanditCoord: null,
+    attackFromVertex: null,
     attackTargetVertex: null,
     combatModal: null,
     dragPiece: null,

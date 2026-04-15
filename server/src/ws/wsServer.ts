@@ -136,10 +136,10 @@ function launchRematch(gameId: string, session: PlayAgainSession): void {
     ? oldGame.created_by
     : acceptedIds[0];
 
-  // Create new game
+  // Create new game as lobby so host can re-configure settings
   const newGameId = randomUUID();
   db.prepare('INSERT INTO games (id, name, status, max_players, created_by) VALUES (?, ?, ?, ?, ?)')
-    .run(newGameId, oldGame.name, 'active', oldGame.max_players, newHostId);
+    .run(newGameId, oldGame.name, 'lobby', oldGame.max_players, newHostId);
 
   // Insert players with reassigned seat order
   players.forEach((p, i) => {
@@ -147,18 +147,7 @@ function launchRematch(gameId: string, session: PlayAgainSession): void {
       .run(newGameId, p.id, p.color, i);
   });
 
-  // Create and register the new orchestrator
-  const orch = new GameOrchestrator(
-    newGameId,
-    db,
-    players.map((p, i) => ({ id: p.id, username: p.username, color: p.color as any, seat_order: i })),
-    undefined,
-    session.turnTimeLimit,
-    session.hornCooldownSecs,
-  );
-  registerOrchestrator(newGameId, orch);
-
-  // Tell all clients in the old room to navigate to the new game
+  // Tell all clients in the old room to navigate to the new lobby
   broadcastToRoom(gameId, { type: 'PLAY_AGAIN_START', payload: { newGameId } });
 
   // Clean up old game

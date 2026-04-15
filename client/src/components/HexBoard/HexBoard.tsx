@@ -389,7 +389,7 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
     dragPiece, setDragPiece,
     cancelRoadBuilding,
     localPlayerId,
-    setAttackTargetVertex,
+    attackFromVertex, setAttackFromVertex, setAttackTargetVertex,
     transferFromVertex, setTransferFromVertex,
     addToast,
   } = useGameStore();
@@ -502,11 +502,23 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
       return;
     }
 
-    // War: select attack target (enemy building)
+    // War: select attack source (own building), then target (enemy building)
     if (boardMode === 'attack' && myTurn) {
       const building = (state.buildings as any)[vertexId];
-      if (building && building.playerId !== localPlayerId) {
-        setAttackTargetVertex(vertexId);
+      if (!attackFromVertex) {
+        // Step 1: pick own building with soldiers
+        if (building && building.playerId === localPlayerId && (building.soldiers ?? 0) > 0) {
+          setAttackFromVertex(vertexId);
+        }
+      } else {
+        // Step 2: pick enemy building
+        if (building && building.playerId !== localPlayerId) {
+          setAttackTargetVertex(vertexId);
+        } else if (building && building.playerId === localPlayerId) {
+          // Re-select own building
+          setAttackFromVertex(vertexId);
+          setAttackTargetVertex(null);
+        }
       }
       return;
     }
@@ -965,7 +977,8 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
               : t('actions.buildRoad'))}
             {boardMode === 'move_bandit'      && t('bandit.selectTile')}
             {boardMode === 'recruit_soldier'  && '🪖 Select a building to recruit'}
-            {boardMode === 'attack'           && '⚔️ Select an enemy building to attack'}
+            {boardMode === 'attack' && !attackFromVertex && '⚔️ Select one of your buildings to attack from'}
+            {boardMode === 'attack' && attackFromVertex  && '⚔️ Now select an enemy building to attack'}
             {boardMode === 'transfer_soldiers' && !transferFromVertex && '🪖 Tap a building to move soldiers from'}
             {boardMode === 'transfer_soldiers' && transferFromVertex  && '🪖 Now tap the destination building'}
           </span>

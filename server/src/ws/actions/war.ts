@@ -156,7 +156,7 @@ export function handleTransferSoldiers(
 
 export function handleAttack(
   ws: WebSocket,
-  payload: { gameId: string; targetVertexId: VertexId; soldiers: number },
+  payload: { gameId: string; fromVertexId: VertexId; targetVertexId: VertexId; soldiers: number },
   meta: ClientMeta,
   orch: GameOrchestrator,
   ctx: ActionContext,
@@ -174,6 +174,10 @@ export function handleAttack(
     err(ctx, ws, 'COMBAT_IN_PROGRESS', 'A combat is already in progress'); return;
   }
 
+  const fromBuilding = state.buildings[payload.fromVertexId];
+  if (!fromBuilding) { err(ctx, ws, 'NO_FROM_BUILDING', 'No building at source'); return; }
+  if (fromBuilding.playerId !== meta.userId) { err(ctx, ws, 'NOT_YOUR_BUILDING', 'Source building is not yours'); return; }
+
   const targetBuilding = state.buildings[payload.targetVertexId];
   if (!targetBuilding) { err(ctx, ws, 'NO_BUILDING', 'No building at target'); return; }
   if (targetBuilding.playerId === meta.userId) { err(ctx, ws, 'OWN_BUILDING', 'Cannot attack own building'); return; }
@@ -185,9 +189,10 @@ export function handleAttack(
   const dist = roadDistanceToVertex(state, meta.userId, payload.targetVertexId);
   if (dist > MAX_ATTACK_DISTANCE) { err(ctx, ws, 'OUT_OF_RANGE', 'Target is more than 2 roads away'); return; }
 
-  const totalAttackerSoldiers = countPlayerSoldiers(state.buildings, meta.userId);
+  const sourceSoldiers = fromBuilding.soldiers ?? 0;
   if (payload.soldiers < 1) { err(ctx, ws, 'NO_SOLDIERS', 'Need at least 1 soldier to attack'); return; }
-  if (payload.soldiers > totalAttackerSoldiers) { err(ctx, ws, 'NOT_ENOUGH_SOLDIERS', 'Not enough soldiers'); return; }
+  if (payload.soldiers > sourceSoldiers) { err(ctx, ws, 'NOT_ENOUGH_SOLDIERS', 'Not enough soldiers in source building'); return; }
+  if (payload.soldiers > MAX_SOLDIERS_CITY) { err(ctx, ws, 'EXCEEDS_BUILDING_MAX', `Cannot send more than ${MAX_SOLDIERS_CITY} soldiers per attack`); return; }
   if (!targetBuilding.sieged && payload.soldiers < 2) {
     err(ctx, ws, 'NEED_TWO_SOLDIERS', 'Need at least 2 soldiers to besiege a building'); return;
   }
@@ -215,6 +220,7 @@ export function handleAttack(
       defenderId: victim.id,
       attackerName: meta.username,
       defenderName: victim.username,
+      fromVertexId: payload.fromVertexId,
       targetVertexId: payload.targetVertexId,
       attackSoldiers: payload.soldiers,
       playerStates: {
@@ -256,6 +262,7 @@ export function handleAttack(
     attackSoldiers: payload.soldiers,
     defenderSoldiers, cityBonus, garrisonBonus,
     attackerForce, defenderForce, attackerWon, effect,
+    fromVertexId: payload.fromVertexId,
     targetVertexId: payload.targetVertexId,
     attackerRolled: false,
     defenderRolled: false,
@@ -328,48 +335,45 @@ function applyCombatResult(orch: GameOrchestrator, ctx: ActionContext): void {
   const state = orch.getState();
   const targetBuilding = state.buildings[pending.targetVertexId as VertexId];
 
-  const combatPayload = {
-    attackerForce: pending.attackerForce,
-    defenderForce: pending.defenderForce,
-    attackerWon: pending.attackerWon,
-    effect: pending.effect,
-    attackerName: pending.attackerName,
-    defenderName: pending.defenderName,
-    attackerDie: pending.attackerDie,
-    defenderDie: pending.defenderDie,
-    attackSoldiers: pending.attackSoldiers,
-    defenderSoldiers: pending.defenderSoldiers,
-    cityBonus: pending.cityBonus,
-    garrisonBonus: pending.garrisonBonus,
-  };
-
   if (!pending.attackerWon) {
     // Attacker loses soldiers on repel: all of them, except if attacked with 3 → loses only 1
     const lossCount = pending.attackSoldiers === 3 ? 1 : pending.attackSoldiers;
-    if (lossCount > 0) {
-      orch.updateState(s => {
-        const newBuildings = { ...s.buildings };
-        let toRemove = lossCount;
-        for (const vid of Object.keys(newBuildings)) {
-          if (toRemove <= 0) break;
-          const b = newBuildings[vid] as any;
-          if (b.playerId === pending.attackerId && (b.soldiers ?? 0) > 0) {
-            const remove = Math.min(b.soldiers, toRemove);
-            newBuildings[vid] = { ...b, soldiers: b.soldiers - remove };
-            toRemove -= remove;
-          }
-        }
-        return { ...s, buildings: newBuildings as any };
-      });
-    }
+    orch.updateState(s => {
+      const newBuildings = { ...s.buildings };
+      if (lossCount > 0 && newBuildings[pending.fromVertexId as VertexId]) {
+        const fb = newBuildings[pending.fromVertexId as VertexId] as any;
+        newBuildings[pending.fromVertexId as VertexId] = { ...fb, soldiers: Math.max(0, (fb.soldiers ?? 0) - lossCount) };
+      }
+      const tb = newBuildings[pending.targetVertexId as VertexId] as any;
+      if (tb?.sieged) {
+        newBuildings[pending.targetVertexId as VertexId] = { ...tb, sieged: false, siegedBy: undefined, siegedAtTurn: undefined };
+      }
+      return { ...s, buildings: newBuildings as any };
+    });
     orch.addLogEntry('log.attackRepelled', { attacker: pending.attackerName, defender: pending.defenderName }, pending.attackerId);
-    ctx.broadcastToRoom({ type: 'COMBAT_RESULT', payload: combatPayload });
+    ctx.broadcastToRoom({ type: 'COMBAT_RESULT', payload: {
+      attackerForce: pending.attackerForce, defenderForce: pending.defenderForce,
+      attackerWon: false, effect: pending.effect,
+      attackerName: pending.attackerName, defenderName: pending.defenderName,
+      attackerDie: pending.attackerDie, defenderDie: pending.defenderDie,
+      attackSoldiers: pending.attackSoldiers, defenderSoldiers: pending.defenderSoldiers,
+      cityBonus: pending.cityBonus, garrisonBonus: pending.garrisonBonus,
+      attackerSoldierLoss: lossCount, defenderSoldierLoss: 0,
+    }});
     ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
     return;
   }
 
   if (!targetBuilding) {
-    ctx.broadcastToRoom({ type: 'COMBAT_RESULT', payload: combatPayload });
+    ctx.broadcastToRoom({ type: 'COMBAT_RESULT', payload: {
+      attackerForce: pending.attackerForce, defenderForce: pending.defenderForce,
+      attackerWon: true, effect: pending.effect,
+      attackerName: pending.attackerName, defenderName: pending.defenderName,
+      attackerDie: pending.attackerDie, defenderDie: pending.defenderDie,
+      attackSoldiers: pending.attackSoldiers, defenderSoldiers: pending.defenderSoldiers,
+      cityBonus: pending.cityBonus, garrisonBonus: pending.garrisonBonus,
+      attackerSoldierLoss: 0, defenderSoldierLoss: 0,
+    }});
     ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
     return;
   }
@@ -378,33 +382,51 @@ function applyCombatResult(orch: GameOrchestrator, ctx: ActionContext): void {
   const canDestroy = victimBuildingCount > 1;
 
   if (!targetBuilding.sieged) {
+    // Defender loses 1 soldier when successfully sieged
+    const defenderLoss = Math.min(1, targetBuilding.soldiers ?? 0);
     orch.updateState(s => ({
       ...s,
-      buildings: { ...s.buildings, [pending.targetVertexId]: { ...targetBuilding, sieged: true, siegedBy: pending.attackerId, siegedAtTurn: s.turn } },
+      buildings: {
+        ...s.buildings,
+        [pending.targetVertexId]: { ...targetBuilding, sieged: true, siegedBy: pending.attackerId, siegedAtTurn: s.turn, soldiers: Math.max(0, (targetBuilding.soldiers ?? 0) - defenderLoss) },
+      },
     }));
+    const basePayload = {
+      attackerForce: pending.attackerForce, defenderForce: pending.defenderForce,
+      attackerWon: true,
+      attackerName: pending.attackerName, defenderName: pending.defenderName,
+      attackerDie: pending.attackerDie, defenderDie: pending.defenderDie,
+      attackSoldiers: pending.attackSoldiers, defenderSoldiers: pending.defenderSoldiers,
+      cityBonus: pending.cityBonus, garrisonBonus: pending.garrisonBonus,
+      attackerSoldierLoss: 0, defenderSoldierLoss: defenderLoss,
+    };
     orch.addLogEntry('log.siegeStarted', { attacker: pending.attackerName, defender: pending.defenderName }, pending.attackerId);
-    ctx.broadcastToRoom({ type: 'COMBAT_RESULT', payload: { ...combatPayload, effect: 'siege' } });
+    ctx.broadcastToRoom({ type: 'COMBAT_RESULT', payload: { ...basePayload, effect: 'siege' } });
     ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
   } else if (!canDestroy) {
     // Effectively repelled (last building) — attacker still loses soldiers
     const lossCount2 = pending.attackSoldiers === 3 ? 1 : pending.attackSoldiers;
-    if (lossCount2 > 0) {
-      orch.updateState(s => {
-        const newBuildings = { ...s.buildings };
-        let toRemove = lossCount2;
-        for (const vid of Object.keys(newBuildings)) {
-          if (toRemove <= 0) break;
-          const b = newBuildings[vid] as any;
-          if (b.playerId === pending.attackerId && (b.soldiers ?? 0) > 0) {
-            const remove = Math.min(b.soldiers, toRemove);
-            newBuildings[vid] = { ...b, soldiers: b.soldiers - remove };
-            toRemove -= remove;
-          }
-        }
-        return { ...s, buildings: newBuildings as any };
-      });
-    }
-    ctx.broadcastToRoom({ type: 'COMBAT_RESULT', payload: { ...combatPayload, effect: 'repelled' } });
+    orch.updateState(s => {
+      const newBuildings = { ...s.buildings };
+      if (lossCount2 > 0 && newBuildings[pending.fromVertexId as VertexId]) {
+        const fb = newBuildings[pending.fromVertexId as VertexId] as any;
+        newBuildings[pending.fromVertexId as VertexId] = { ...fb, soldiers: Math.max(0, (fb.soldiers ?? 0) - lossCount2) };
+      }
+      const tb2 = newBuildings[pending.targetVertexId as VertexId] as any;
+      if (tb2?.sieged) {
+        newBuildings[pending.targetVertexId as VertexId] = { ...tb2, sieged: false, siegedBy: undefined, siegedAtTurn: undefined };
+      }
+      return { ...s, buildings: newBuildings as any };
+    });
+    ctx.broadcastToRoom({ type: 'COMBAT_RESULT', payload: {
+      attackerForce: pending.attackerForce, defenderForce: pending.defenderForce,
+      attackerWon: true, effect: 'repelled' as const,
+      attackerName: pending.attackerName, defenderName: pending.defenderName,
+      attackerDie: pending.attackerDie, defenderDie: pending.defenderDie,
+      attackSoldiers: pending.attackSoldiers, defenderSoldiers: pending.defenderSoldiers,
+      cityBonus: pending.cityBonus, garrisonBonus: pending.garrisonBonus,
+      attackerSoldierLoss: lossCount2, defenderSoldierLoss: 0,
+    }});
     ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
   } else {
     orch.updateState(s => ({
@@ -412,7 +434,15 @@ function applyCombatResult(orch: GameOrchestrator, ctx: ActionContext): void {
       phase: 'WAR_DESTRUCTION',
       pendingDestruction: { targetVertex: pending.targetVertexId, attackerId: pending.attackerId },
     }));
-    ctx.broadcastToRoom({ type: 'COMBAT_RESULT', payload: { ...combatPayload, effect: 'destruction_choice' } });
+    ctx.broadcastToRoom({ type: 'COMBAT_RESULT', payload: {
+      attackerForce: pending.attackerForce, defenderForce: pending.defenderForce,
+      attackerWon: true, effect: 'destruction_choice' as const,
+      attackerName: pending.attackerName, defenderName: pending.defenderName,
+      attackerDie: pending.attackerDie, defenderDie: pending.defenderDie,
+      attackSoldiers: pending.attackSoldiers, defenderSoldiers: pending.defenderSoldiers,
+      cityBonus: pending.cityBonus, garrisonBonus: pending.garrisonBonus,
+      attackerSoldierLoss: 0, defenderSoldierLoss: 0,
+    }});
     ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
   }
 }
@@ -755,26 +785,20 @@ function applyColiseumResult(
   });
 
   if (!attackerWon) {
-    // Repelled: attacker loses soldiers
+    // Repelled: attacker loses soldiers from source building; siege is removed
     const lossCount = pending.attackSoldiers === 3 ? 1 : pending.attackSoldiers;
-    if (lossCount > 0) {
-      orch.updateState(s => {
-        const newBuildings = { ...s.buildings };
-        let toRemove = lossCount;
-        for (const vid of Object.keys(newBuildings)) {
-          if (toRemove <= 0) break;
-          const b = newBuildings[vid] as any;
-          if (b.playerId === pending.attackerId && (b.soldiers ?? 0) > 0) {
-            const remove = Math.min(b.soldiers, toRemove);
-            newBuildings[vid] = { ...b, soldiers: b.soldiers - remove };
-            toRemove -= remove;
-          }
-        }
-        return { ...s, buildings: newBuildings as any, phase: 'ACTION', coliseumBattle: null, turnStartTime: restoredTurnStartTime };
-      });
-    } else {
-      orch.updateState(s => ({ ...s, phase: 'ACTION', coliseumBattle: null, turnStartTime: restoredTurnStartTime }));
-    }
+    orch.updateState(s => {
+      const newBuildings = { ...s.buildings };
+      if (lossCount > 0 && newBuildings[pending.fromVertexId as VertexId]) {
+        const fb = newBuildings[pending.fromVertexId as VertexId] as any;
+        newBuildings[pending.fromVertexId as VertexId] = { ...fb, soldiers: Math.max(0, (fb.soldiers ?? 0) - lossCount) };
+      }
+      const tb = newBuildings[pending.targetVertexId as VertexId] as any;
+      if (tb?.sieged) {
+        newBuildings[pending.targetVertexId as VertexId] = { ...tb, sieged: false, siegedBy: undefined, siegedAtTurn: undefined };
+      }
+      return { ...s, buildings: newBuildings as any, phase: 'ACTION', coliseumBattle: null, turnStartTime: restoredTurnStartTime };
+    });
     orch.addLogEntry('log.attackRepelled', { attacker: pending.attackerName, defender: pending.defenderName }, pending.attackerId);
     ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
     return;
@@ -787,35 +811,30 @@ function applyColiseumResult(
   }
 
   if (!targetBuilding.sieged) {
+    const defenderLoss = Math.min(1, targetBuilding.soldiers ?? 0);
     orch.updateState(s => ({
       ...s,
       phase: 'ACTION',
       coliseumBattle: null,
       turnStartTime: restoredTurnStartTime,
-      buildings: { ...s.buildings, [pending.targetVertexId]: { ...targetBuilding, sieged: true, siegedBy: pending.attackerId, siegedAtTurn: s.turn } },
+      buildings: { ...s.buildings, [pending.targetVertexId]: { ...targetBuilding, sieged: true, siegedBy: pending.attackerId, siegedAtTurn: s.turn, soldiers: Math.max(0, (targetBuilding.soldiers ?? 0) - defenderLoss) } },
     }));
     orch.addLogEntry('log.siegeStarted', { attacker: pending.attackerName, defender: pending.defenderName }, pending.attackerId);
     ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
   } else if (!canDestroy) {
     const lossCount2 = pending.attackSoldiers === 3 ? 1 : pending.attackSoldiers;
-    if (lossCount2 > 0) {
-      orch.updateState(s => {
-        const newBuildings = { ...s.buildings };
-        let toRemove = lossCount2;
-        for (const vid of Object.keys(newBuildings)) {
-          if (toRemove <= 0) break;
-          const b = newBuildings[vid] as any;
-          if (b.playerId === pending.attackerId && (b.soldiers ?? 0) > 0) {
-            const remove = Math.min(b.soldiers, toRemove);
-            newBuildings[vid] = { ...b, soldiers: b.soldiers - remove };
-            toRemove -= remove;
-          }
-        }
-        return { ...s, buildings: newBuildings as any, phase: 'ACTION', coliseumBattle: null, turnStartTime: restoredTurnStartTime };
-      });
-    } else {
-      orch.updateState(s => ({ ...s, phase: 'ACTION', coliseumBattle: null, turnStartTime: restoredTurnStartTime }));
-    }
+    orch.updateState(s => {
+      const newBuildings = { ...s.buildings };
+      if (lossCount2 > 0 && newBuildings[pending.fromVertexId as VertexId]) {
+        const fb = newBuildings[pending.fromVertexId as VertexId] as any;
+        newBuildings[pending.fromVertexId as VertexId] = { ...fb, soldiers: Math.max(0, (fb.soldiers ?? 0) - lossCount2) };
+      }
+      const tb2 = newBuildings[pending.targetVertexId as VertexId] as any;
+      if (tb2?.sieged) {
+        newBuildings[pending.targetVertexId as VertexId] = { ...tb2, sieged: false, siegedBy: undefined, siegedAtTurn: undefined };
+      }
+      return { ...s, buildings: newBuildings as any, phase: 'ACTION', coliseumBattle: null, turnStartTime: restoredTurnStartTime };
+    });
     ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
   } else {
     orch.updateState(s => ({

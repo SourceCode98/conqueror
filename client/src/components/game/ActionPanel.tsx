@@ -25,6 +25,8 @@ const CARD_META: Record<string, { bg: string; border: string; textColor: string;
   yearOfPlenty: { bg: 'bg-green-950',  border: 'border-green-700',  textColor: 'text-green-200',  icon: <span className="text-2xl">🌟</span>,           desc: 'Take any 2 resources' },
   monopoly:     { bg: 'bg-purple-950', border: 'border-purple-700', textColor: 'text-purple-200', icon: <span className="text-2xl">💰</span>,           desc: 'Claim all of one resource' },
   victoryPoint: { bg: 'bg-yellow-900', border: 'border-yellow-600', textColor: 'text-yellow-200', icon: <span className="text-2xl">⭐</span>,           desc: '+1 Victory Point' },
+  troopSupply:  { bg: 'bg-red-950',    border: 'border-red-700',    textColor: 'text-red-200',    icon: <span className="text-2xl">🪖</span>,           desc: 'Recruit 2 soldiers for free' },
+  marchOrders:  { bg: 'bg-cyan-950',   border: 'border-cyan-700',   textColor: 'text-cyan-200',   icon: <span className="text-2xl">🚶</span>,           desc: 'Attack distance +1 this turn' },
 };
 
 // ── Build cost display ────────────────────────────────────────────────────────
@@ -58,7 +60,7 @@ export default function ActionPanel({ gameState, gameId }: Props) {
     roadBuildingEdges, startRoadBuilding, cancelRoadBuilding,
     pendingBanditCoord, setPendingBanditCoord,
     localPlayerId, openTradePanel,
-    attackTargetVertex, setAttackTargetVertex,
+    attackFromVertex, setAttackFromVertex, attackTargetVertex, setAttackTargetVertex,
     setCombatDicePhase,
   } = useGameStore();
 
@@ -632,6 +634,7 @@ export default function ActionPanel({ gameState, gameId }: Props) {
                       disabled={!canAttack}
                       onClick={() => {
                         if (!canAttack) return;
+                        setAttackFromVertex(null);
                         setAttackTargetVertex(null);
                         setBoardMode(boardMode === 'attack' ? null : 'attack');
                       }}
@@ -647,13 +650,27 @@ export default function ActionPanel({ gameState, gameId }: Props) {
                       {boardMode === 'attack' && <span className="text-red-400 text-[10px] shrink-0">SELECT</span>}
                     </button>
 
+                    {/* Attack source selected indicator */}
+                    {boardMode === 'attack' && attackFromVertex && !attackTargetVertex && (() => {
+                      const fb = (gameState.buildings as any)[attackFromVertex];
+                      return (
+                        <div className="rounded-lg border border-amber-700 bg-amber-950/30 p-2 text-xs text-amber-300 flex items-center justify-between">
+                          <span>🪖 From your {fb?.type} ({fb?.soldiers ?? 0} soldiers) — now select enemy</span>
+                          <button className="text-gray-500 hover:text-gray-300 ml-2" onClick={() => setAttackFromVertex(null)}>✕</button>
+                        </div>
+                      );
+                    })()}
+
                     {/* Attack confirmation panel */}
-                    {boardMode === 'attack' && attackTargetVertex && (() => {
+                    {boardMode === 'attack' && attackFromVertex && attackTargetVertex && (() => {
+                      const fb = (gameState.buildings as any)[attackFromVertex];
                       const tb = (gameState.buildings as any)[attackTargetVertex];
                       const victim = gameState.players.find(p => p.id === tb?.playerId);
+                      const sourceSoldiers = fb?.soldiers ?? 0;
                       const minSoldiers = tb?.sieged ? 1 : 2;
-                      const canSendEnough = totalSoldiers >= minSoldiers;
-                      const clampedSoldiers = Math.max(minSoldiers, Math.min(attackSoldiers, totalSoldiers));
+                      const maxSendable = Math.min(sourceSoldiers, MAX_SOLDIERS_CITY);
+                      const canSendEnough = sourceSoldiers >= minSoldiers;
+                      const clampedSoldiers = Math.max(minSoldiers, Math.min(attackSoldiers, maxSendable));
                       return (
                         <div className="rounded-lg border border-red-700 bg-red-950/30 p-3 space-y-2">
                           <p className="text-red-300 text-xs font-semibold">
@@ -667,7 +684,7 @@ export default function ActionPanel({ gameState, gameId }: Props) {
                               <div className="flex flex-col gap-1">
                                 <span className="text-xs text-gray-400">Send soldiers:</span>
                                 <div className="flex gap-1 flex-wrap">
-                                  {Array.from({ length: totalSoldiers }, (_, i) => i + 1).map(n => {
+                                  {Array.from({ length: maxSendable }, (_, i) => i + 1).map(n => {
                                     const selected = n <= clampedSoldiers;
                                     const disabled = n < minSoldiers;
                                     return (
@@ -683,7 +700,7 @@ export default function ActionPanel({ gameState, gameId }: Props) {
                                     );
                                   })}
                                 </div>
-                                <span className="text-xs text-gray-500">{clampedSoldiers} of {totalSoldiers} selected</span>
+                                <span className="text-xs text-gray-500">{clampedSoldiers} of {maxSendable} selected</span>
                               </div>
                               <button
                                 className="w-full rounded-lg bg-red-700 hover:bg-red-600 text-white text-xs py-1.5 font-semibold"
@@ -691,18 +708,19 @@ export default function ActionPanel({ gameState, gameId }: Props) {
                                   const me2 = gameState.players.find(p => p.id === localPlayerId);
                                   const victim2 = gameState.players.find(p => p.id === tb?.playerId);
                                   setCombatDicePhase({ attackerId: localPlayerId!, defenderId: tb?.playerId, attackerName: me2?.username ?? '?', defenderName: victim2?.username ?? '?', timeoutSecs: 12 });
-                                  wsService.send({ type: 'ATTACK', payload: { gameId, targetVertexId: attackTargetVertex as any, soldiers: clampedSoldiers } });
+                                  wsService.send({ type: 'ATTACK', payload: { gameId, fromVertexId: attackFromVertex as any, targetVertexId: attackTargetVertex as any, soldiers: clampedSoldiers } });
                                   setBoardMode(null);
+                                  setAttackFromVertex(null);
                                   setAttackTargetVertex(null);
                                 }}>
                                 Attack with {clampedSoldiers} soldier{clampedSoldiers !== 1 ? 's' : ''}
                               </button>
                             </>
                           ) : (
-                            <p className="text-yellow-500 text-xs">Need at least {minSoldiers} soldiers to attack this building</p>
+                            <p className="text-yellow-500 text-xs">Need at least {minSoldiers} soldiers in this building to attack</p>
                           )}
                           <button className="w-full text-xs text-gray-500 hover:text-gray-300"
-                            onClick={() => setAttackTargetVertex(null)}>Cancel</button>
+                            onClick={() => { setAttackFromVertex(null); setAttackTargetVertex(null); }}>Cancel</button>
                         </div>
                       );
                     })()}

@@ -215,10 +215,22 @@ export function CombatResultModal() {
           </div>
 
           {/* Result bar */}
-          <div className="rounded-lg py-2 px-3 text-center text-sm font-semibold mb-3"
+          <div className="rounded-lg py-2 px-3 text-center text-sm font-semibold mb-2"
             style={{ background: `${winnerColor}25`, color: winnerColor }}>
             {r.attackerForce} vs {r.defenderForce} — {r.attackerWon ? `${r.attackerName} wins` : `${r.defenderName} defends`}
           </div>
+
+          {/* Soldier losses */}
+          {(r.attackerSoldierLoss > 0 || r.defenderSoldierLoss > 0) && (
+            <div className="flex justify-around text-xs text-gray-400 mb-3">
+              {r.attackerSoldierLoss > 0 && (
+                <span className="text-red-400">⚔️ {r.attackerName} lost {r.attackerSoldierLoss} 🪖</span>
+              )}
+              {r.defenderSoldierLoss > 0 && (
+                <span className="text-orange-400">🛡️ {r.defenderName} lost {r.defenderSoldierLoss} 🪖</span>
+              )}
+            </div>
+          )}
 
           <button
             className="w-full rounded-xl bg-gray-700 hover:bg-gray-600 text-white text-sm font-semibold py-2 transition-colors"

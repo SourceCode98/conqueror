@@ -1,5 +1,7 @@
 import { WebSocket } from 'ws';
 import type { VertexId, BuildingType } from '@conqueror/shared';
+import db from '../../db/index.js';
+import { applyEloForGame } from '../../game/applyElo.js';
 import {
   canPlaceSettlement,
   canPlaceCity,
@@ -87,11 +89,13 @@ export function handlePlaceBuilding(
   const winner = checkWinCondition(orch.getState());
   if (winner) {
     orch.updateState(s => ({ ...s, phase: 'GAME_OVER', winner }));
+    db.prepare('UPDATE games SET status = ? WHERE id = ?').run('finished', payload.gameId);
     const finalScores: Record<string, number> = {};
     for (const p of orch.getState().players) {
       finalScores[p.id] = p.victoryPoints + p.victoryPointCards;
     }
-    ctx.broadcastToRoom({ type: 'GAME_OVER', payload: { winnerId: winner, finalScores } });
+    const eloChanges = Object.fromEntries(applyEloForGame(orch, winner).map(r => [r.userId, r.delta]));
+    ctx.broadcastToRoom({ type: 'GAME_OVER', payload: { winnerId: winner, finalScores, eloChanges } });
   }
 
   const actionLabel = type === 'settlement' ? 'builtSettlement' : 'builtCity';
