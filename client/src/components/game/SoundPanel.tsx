@@ -7,6 +7,7 @@ import { wsService } from '../../services/wsService.js';
 import { useGameStore } from '../../store/gameStore.js';
 import { useProfileStore } from '../../store/profileStore.js';
 import { cn } from '../../lib/cn.js';
+import VoiceChat from './VoiceChat.js';
 
 const DEFAULT_HORN_COOLDOWN_MS = 30_000;
 
@@ -275,6 +276,9 @@ export default function SoundPanel({ gameId, className }: Props) {
 
   return (
     <div className={cn('flex items-center gap-1', className)}>
+      {/* Voice chat */}
+      <VoiceChat gameId={gameId} />
+
       {/* Horn button */}
       <button
         onClick={blowHorn}

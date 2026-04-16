@@ -52,7 +52,13 @@ export type ClientMessage =
   | WSMessage<'COLISEUM_READY',         { gameId: string }>
   | WSMessage<'LOBBY_SETTINGS',         { gameId: string; turnTimeLimit: number | null; hornCooldownSecs: number; warMode: boolean; warVariants: Record<string, boolean> }>
   | WSMessage<'VOTE_KICK',              { gameId: string; targetId: string }>
-  | WSMessage<'KICK_VOTE',              { gameId: string; vote: boolean }>;
+  | WSMessage<'KICK_VOTE',              { gameId: string; vote: boolean }>
+  | WSMessage<'VOICE_JOIN',             { gameId: string }>
+  | WSMessage<'VOICE_LEAVE',            { gameId: string }>
+  | WSMessage<'VOICE_OFFER',            { gameId: string; targetId: string; offer: RTCSessionDescriptionInit }>
+  | WSMessage<'VOICE_ANSWER',           { gameId: string; targetId: string; answer: RTCSessionDescriptionInit }>
+  | WSMessage<'VOICE_ICE',              { gameId: string; targetId: string; candidate: RTCIceCandidateInit }>
+  | WSMessage<'VOICE_MUTE',             { gameId: string; muted: boolean }>;
 
 // ─── Server → Client ──────────────────────────────────────────────────────────
 
@@ -83,4 +89,11 @@ export type ServerMessage =
   | WSMessage<'COLISEUM_BATTLE_OVER',   { winnerId: string; winnerSide: 'attacker' | 'defender'; attackerScore: number; defenderScore: number; effect: 'siege' | 'destruction_choice' | 'repelled'; attackerName: string; defenderName: string }>
   | WSMessage<'KICK_VOTE_UPDATE',       { targetId: string; targetUsername: string; initiatorUsername: string; votes: Record<string, boolean | null>; secondsLeft: number; eligibleCount: number }>
   | WSMessage<'KICK_VOTE_ENDED',        { targetUsername: string; result: 'kicked' | 'failed' }>
-  | WSMessage<'PLAYER_KICKED',          { playerId: string; username: string }>;
+  | WSMessage<'PLAYER_KICKED',          { playerId: string; username: string }>
+  | WSMessage<'VOICE_PEERS',            { peers: Array<{ playerId: string; username: string; muted: boolean }> }>
+  | WSMessage<'VOICE_PEER_JOINED',      { playerId: string; username: string }>
+  | WSMessage<'VOICE_PEER_LEFT',        { playerId: string }>
+  | WSMessage<'VOICE_PEER_MUTED',       { playerId: string; muted: boolean }>
+  | WSMessage<'VOICE_OFFER',            { fromId: string; offer: RTCSessionDescriptionInit }>
+  | WSMessage<'VOICE_ANSWER',           { fromId: string; answer: RTCSessionDescriptionInit }>
+  | WSMessage<'VOICE_ICE',              { fromId: string; candidate: RTCIceCandidateInit }>;

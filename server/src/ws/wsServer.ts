@@ -54,6 +54,10 @@ interface KickVoteSession {
 const kickVoteSessions = new Map<string, KickVoteSession>();
 const KICK_VOTE_TIMEOUT_MS = 30_000;
 
+// ─── Voice rooms ──────────────────────────────────────────────────────────────
+// gameId → Map<playerId, { ws, username, muted }>
+const voiceRooms = new Map<string, Map<string, { ws: WebSocket; username: string; muted: boolean }>>();
+
 function startPlayAgainSession(gameId: string, playerIds: string[], turnTimeLimit: number | null, hornCooldownSecs: number): void {
   const existing = playAgainSessions.get(gameId);
   if (existing) { clearTimeout(existing.timer); playAgainSessions.delete(gameId); }
@@ -320,6 +324,13 @@ function handleMessage(ws: WebSocket, data: RawData): void {
     handleKickVote(ws, msg.payload as { gameId: string; vote: boolean });
     return;
   }
+
+  if (msg.type === 'VOICE_JOIN') { handleVoiceJoin(ws); return; }
+  if (msg.type === 'VOICE_LEAVE') { handleVoiceLeave(ws); return; }
+  if (msg.type === 'VOICE_MUTE') { handleVoiceMute(ws, (msg.payload as any).muted); return; }
+  if (msg.type === 'VOICE_OFFER') { handleVoiceRelay(ws, 'offer', msg.payload as any); return; }
+  if (msg.type === 'VOICE_ANSWER') { handleVoiceRelay(ws, 'answer', msg.payload as any); return; }
+  if (msg.type === 'VOICE_ICE') { handleVoiceRelay(ws, 'ice', msg.payload as any); return; }
 
   const orch = getOrLoadOrchestrator(meta.gameId);
   if (!orch) {
@@ -665,6 +676,82 @@ function handleKickVote(ws: WebSocket, payload: { gameId: string; vote: boolean 
   else if (noCount > session.eligibleIds.length - threshold) resolveKickVote(meta.gameId, false);
 }
 
+// ─── Voice handlers ───────────────────────────────────────────────────────────
+
+function handleVoiceJoin(ws: WebSocket): void {
+  const meta = clientMeta.get(ws);
+  if (!meta) return;
+  const { gameId, userId, username } = meta;
+
+  if (!voiceRooms.has(gameId)) voiceRooms.set(gameId, new Map());
+  const vRoom = voiceRooms.get(gameId)!;
+  if (vRoom.has(userId)) return; // already in
+
+  vRoom.set(userId, { ws, username, muted: false });
+
+  // Send current peers to the joiner
+  sendTo(ws, {
+    type: 'VOICE_PEERS',
+    payload: {
+      peers: [...vRoom.entries()]
+        .filter(([id]) => id !== userId)
+        .map(([id, p]) => ({ playerId: id, username: p.username, muted: p.muted })),
+    },
+  });
+
+  // Notify everyone else
+  for (const [id, peer] of vRoom) {
+    if (id !== userId && peer.ws.readyState === WebSocket.OPEN) {
+      peer.ws.send(JSON.stringify({ type: 'VOICE_PEER_JOINED', payload: { playerId: userId, username } }));
+    }
+  }
+}
+
+function handleVoiceLeave(ws: WebSocket): void {
+  const meta = clientMeta.get(ws);
+  if (!meta) return;
+  const vRoom = voiceRooms.get(meta.gameId);
+  if (!vRoom) return;
+  vRoom.delete(meta.userId);
+  if (vRoom.size === 0) voiceRooms.delete(meta.gameId);
+  for (const peer of vRoom.values()) {
+    if (peer.ws.readyState === WebSocket.OPEN) {
+      peer.ws.send(JSON.stringify({ type: 'VOICE_PEER_LEFT', payload: { playerId: meta.userId } }));
+    }
+  }
+}
+
+function handleVoiceMute(ws: WebSocket, muted: boolean): void {
+  const meta = clientMeta.get(ws);
+  if (!meta) return;
+  const vRoom = voiceRooms.get(meta.gameId);
+  if (!vRoom) return;
+  const entry = vRoom.get(meta.userId);
+  if (entry) entry.muted = muted;
+  for (const [id, peer] of vRoom) {
+    if (id !== meta.userId && peer.ws.readyState === WebSocket.OPEN) {
+      peer.ws.send(JSON.stringify({ type: 'VOICE_PEER_MUTED', payload: { playerId: meta.userId, muted } }));
+    }
+  }
+}
+
+function handleVoiceRelay(ws: WebSocket, kind: 'offer' | 'answer' | 'ice', payload: { targetId: string; offer?: RTCSessionDescriptionInit; answer?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit }): void {
+  const meta = clientMeta.get(ws);
+  if (!meta) return;
+  const vRoom = voiceRooms.get(meta.gameId);
+  if (!vRoom) return;
+  const target = vRoom.get(payload.targetId);
+  if (!target || target.ws.readyState !== WebSocket.OPEN) return;
+
+  if (kind === 'offer') {
+    target.ws.send(JSON.stringify({ type: 'VOICE_OFFER', payload: { fromId: meta.userId, offer: payload.offer } }));
+  } else if (kind === 'answer') {
+    target.ws.send(JSON.stringify({ type: 'VOICE_ANSWER', payload: { fromId: meta.userId, answer: payload.answer } }));
+  } else {
+    target.ws.send(JSON.stringify({ type: 'VOICE_ICE', payload: { fromId: meta.userId, candidate: payload.candidate } }));
+  }
+}
+
 function handleDisconnect(ws: WebSocket): void {
   const meta = clientMeta.get(ws);
   if (!meta) return;
@@ -674,6 +761,9 @@ function handleDisconnect(ws: WebSocket): void {
     room.delete(ws);
     if (room.size === 0) rooms.delete(meta.gameId);
   }
+
+  // Auto-leave voice chat on disconnect
+  handleVoiceLeave(ws);
 
   const orch = getOrLoadOrchestrator(meta.gameId);
   if (orch) {
