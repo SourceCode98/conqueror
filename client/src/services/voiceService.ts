@@ -151,10 +151,8 @@ class VoiceService {
       }
     };
 
-    // Remote audio track → attach to hidden <audio> element
-    pc.ontrack = ({ streams }) => {
-      const stream = streams[0];
-      if (!stream) return;
+    // Build (or reuse) the hidden audio element for this peer
+    const getAudioEl = () => {
       let audio = document.getElementById(`voice-${peerId}`) as HTMLAudioElement | null;
       if (!audio) {
         audio = document.createElement('audio');
@@ -164,13 +162,28 @@ class VoiceService {
         audio.style.display = 'none';
         document.body.appendChild(audio);
       }
-      audio.srcObject = stream;
+      return audio;
+    };
+
+    // Accumulate tracks into a single MediaStream — streams[] can be empty on some browsers
+    const remoteStream = new MediaStream();
+    const audio = getAudioEl();
+    audio.srcObject = remoteStream;
+
+    pc.ontrack = (event) => {
+      // Add the track to our remote stream regardless of event.streams
+      if (!remoteStream.getTracks().includes(event.track)) {
+        remoteStream.addTrack(event.track);
+      }
       audio.play().catch(() => {});
-      this.trackSpeaking(peerId, stream);
+      this.trackSpeaking(peerId, remoteStream);
     };
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+      if (pc.connectionState === 'failed') {
+        // Try ICE restart before giving up
+        if (this.gameId) pc.restartIce();
+      } else if (pc.connectionState === 'closed') {
         this.closePeer(peerId);
         this.notify();
       }
@@ -233,23 +246,28 @@ class VoiceService {
   // ── Speaking detection ──────────────────────────────────────────────────────
 
   private trackSpeaking(peerId: string, stream: MediaStream) {
-    clearInterval(this.speakingTimers.get(peerId));
-    if (!this.analyserCtx) this.analyserCtx = new AudioContext();
-    const source = this.analyserCtx.createMediaStreamSource(stream);
-    const analyser = this.analyserCtx.createAnalyser();
-    analyser.fftSize = 512;
-    source.connect(analyser);
-    const buf = new Uint8Array(analyser.frequencyBinCount);
-    const timer = setInterval(() => {
-      analyser.getByteFrequencyData(buf);
-      const avg = buf.reduce((a, b) => a + b, 0) / buf.length;
-      const meta = this.peerMeta.get(peerId);
-      if (meta && meta.speaking !== avg > 10) {
-        meta.speaking = avg > 10;
-        this.notify();
-      }
-    }, 150);
-    this.speakingTimers.set(peerId, timer);
+    // Don't re-create if already tracking this peer
+    if (this.speakingTimers.has(peerId)) return;
+    try {
+      if (!this.analyserCtx) this.analyserCtx = new AudioContext();
+      const source = this.analyserCtx.createMediaStreamSource(stream);
+      const analyser = this.analyserCtx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      const buf = new Uint8Array(analyser.frequencyBinCount);
+      const timer = setInterval(() => {
+        analyser.getByteFrequencyData(buf);
+        const avg = buf.reduce((a, b) => a + b, 0) / buf.length;
+        const meta = this.peerMeta.get(peerId);
+        if (meta && meta.speaking !== avg > 10) {
+          meta.speaking = avg > 10;
+          this.notify();
+        }
+      }, 150);
+      this.speakingTimers.set(peerId, timer);
+    } catch {
+      // Speaking detection is optional — don't let it break audio
+    }
   }
 
   // ── State ───────────────────────────────────────────────────────────────────
