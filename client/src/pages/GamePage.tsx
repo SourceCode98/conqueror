@@ -6,6 +6,7 @@ import { useAuthStore } from '../store/authStore.js';
 import { useGameStore } from '../store/gameStore.js';
 import { wsService } from '../services/wsService.js';
 import HexBoard from '../components/HexBoard/HexBoard.js';
+import BoardZoom from '../components/game/BoardZoom.js';
 import ActionPanel from '../components/game/ActionPanel.js';
 import DiceRoller from '../components/game/DiceRoller.js';
 import { Die, useDiceAnimation } from '../components/game/DiceRoller.js';
@@ -890,10 +891,13 @@ export default function GamePage() {
         {/* Center — hex board (full width, players overlay on top) */}
         <div
           ref={costTableBoardRef}
+          data-board-root
           className="relative flex-1 flex items-center justify-center bg-[#060e1c] overflow-hidden"
           style={{ paddingTop: handAnchor.startsWith('top') ? HAND_PEEK : 0, paddingBottom: handAnchor.startsWith('bottom') ? MOBILE_BOARD_PB + HAND_PEEK : MOBILE_BOARD_PB }}
         >
-          <HexBoard state={gameState} playerCosmetics={playerCosmetics} />
+          <BoardZoom>
+            <HexBoard state={gameState} playerCosmetics={playerCosmetics} />
+          </BoardZoom>
 
           {/* Floating player list — top-left overlay */}
           <div className="absolute top-2 left-2 flex flex-col gap-1">
