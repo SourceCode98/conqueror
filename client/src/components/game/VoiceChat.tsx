@@ -41,27 +41,31 @@ export default function VoiceChat({ gameId }: Props) {
         🎙️
       </button>
 
-      {/* PTT button — only shown when in voice */}
+      {/* PTT button — tap once to start, tap again to send */}
       {inVoice && (
         <button
-          onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); voiceService.startPTT(); }}
-          onPointerUp={() => voiceService.stopPTT()}
-          onPointerCancel={() => voiceService.stopPTT()}
+          onClick={() => pttActive ? voiceService.stopPTT() : voiceService.startPTT()}
           disabled={!pttActive && talkingPeerId !== null}
           title={
-            pttActive ? 'Release to send'
+            pttActive ? 'Tap to send'
             : talkingPeerId ? `${talkingPeer?.username ?? '?'} is talking…`
-            : 'Hold to talk'
+            : 'Tap to talk'
           }
-          className={`select-none rounded-lg px-2.5 py-1.5 text-xs font-semibold border transition-all ${
-            pttActive
-              ? 'border-red-500 bg-red-600/60 text-white scale-95 shadow-[0_0_8px_rgba(239,68,68,0.6)]'
+          className={`select-none rounded-xl font-bold border transition-all
+            px-4 py-2.5 text-sm min-w-[90px]
+            lg:px-3 lg:py-1.5 lg:text-xs lg:min-w-0
+            ${pttActive
+              ? 'border-red-500 bg-red-600/70 text-white shadow-[0_0_12px_rgba(239,68,68,0.7)] animate-pulse'
               : talkingPeerId !== null
-                ? 'border-gray-700 bg-gray-800/60 text-gray-600 cursor-not-allowed'
-                : 'border-amber-700 bg-amber-900/30 text-amber-300 hover:bg-amber-800/50 active:scale-95'
-          }`}
+                ? 'border-gray-700 bg-gray-800/60 text-gray-500 cursor-not-allowed'
+                : 'border-amber-600 bg-amber-900/40 text-amber-300 hover:bg-amber-800/60 active:scale-95'
+            }`}
         >
-          {pttActive ? '🔴 talking…' : talkingPeerId ? `🔴 ${talkingPeer?.username ?? '?'}` : '🎤 PTT'}
+          {pttActive
+            ? '🔴 Talking…'
+            : talkingPeerId
+              ? `🔴 ${talkingPeer?.username ?? '?'}`
+              : '🎤 Talk'}
         </button>
       )}
 
