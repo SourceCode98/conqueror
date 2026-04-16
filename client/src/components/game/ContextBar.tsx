@@ -4,6 +4,7 @@
  * Every action is reachable in a single tap.
  */
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'motion/react';
 import type { PublicGameState, ResourceType, EdgeId } from '@conqueror/shared';
@@ -107,21 +108,30 @@ export default function ContextBar({ gameState, gameId }: Props) {
   const [monoPicking, setMonoPicking] = useState(false);
   const [showCards, setShowCards]     = useState(false);
   const [showSoldierMenu, setShowSoldierMenu] = useState(false);
-  const soldierMenuRef = useRef<HTMLDivElement>(null);
+  const [soldierMenuPos, setSoldierMenuPos] = useState({ x: 0, y: 0 });
+  const soldierBtnRef = useRef<HTMLDivElement>(null);
   const [mobileStealVictim, setMobileStealVictim] = useState<{ id: string; cardCount: number; coord: NonNullable<typeof pendingBanditCoord> } | null>(null);
   const savedCoordRef                 = useRef<typeof pendingBanditCoord>(null);
 
   // Close soldier menu on outside click
   useEffect(() => {
     if (!showSoldierMenu) return;
-    const handler = (e: MouseEvent) => {
-      if (soldierMenuRef.current && !soldierMenuRef.current.contains(e.target as Node)) {
+    const handler = (e: PointerEvent) => {
+      if (soldierBtnRef.current && !soldierBtnRef.current.contains(e.target as Node)) {
         setShowSoldierMenu(false);
       }
     };
     document.addEventListener('pointerdown', handler);
     return () => document.removeEventListener('pointerdown', handler);
   }, [showSoldierMenu]);
+
+  function openSoldierMenu() {
+    if (soldierBtnRef.current) {
+      const r = soldierBtnRef.current.getBoundingClientRect();
+      setSoldierMenuPos({ x: r.left + r.width / 2, y: r.top });
+    }
+    setShowSoldierMenu(s => !s);
+  }
 
   const myTurn = isMyTurn();
   const me     = myPlayer();
@@ -613,54 +623,66 @@ export default function ContextBar({ gameState, gameId }: Props) {
             return (
               <>
                 <div className="w-px h-6 bg-gray-700 mx-0.5 shrink-0"/>
-                <div className="relative" ref={soldierMenuRef}>
+                <div ref={soldierBtnRef}>
                   <ActionBtn
                     label={t('ctx.army')}
                     active={anyActive || showSoldierMenu}
                     badge={totalSoldiers > 0 ? totalSoldiers : undefined}
-                    onClick={() => setShowSoldierMenu(s => !s)}
+                    onClick={openSoldierMenu}
                   >
                     <span className="text-lg leading-none">⚔️</span>
                   </ActionBtn>
-                  <AnimatePresence>
-                    {showSoldierMenu && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 6 }}
-                        transition={{ duration: 0.12 }}
-                        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 flex flex-col items-center gap-1 z-50"
-                      >
-                        <ActionBtn label={t('ctx.transfer')} disabled={!canTransfer} active={mode === 'transfer_soldiers'}
-                          badge={transfersLeft < 2 ? transfersLeft : undefined}
-                          onClick={() => {
-                            if (!canTransfer) return;
-                            setTransferFromVertex(null);
-                            setBoardMode(mode === 'transfer_soldiers' ? null : 'transfer_soldiers');
-                            setShowSoldierMenu(false);
-                          }}>
-                          <span className={cn('text-lg leading-none', !canTransfer && 'opacity-40')}>↔️</span>
-                        </ActionBtn>
-                        <ActionBtn label={t('ctx.attack')} disabled={!canAttack} active={mode === 'attack'}
-                          onClick={() => {
-                            if (!canAttack) return;
-                            setAttackTargetVertex(null);
-                            setBoardMode(mode === 'attack' ? null : 'attack');
-                            setShowSoldierMenu(false);
-                          }}>
-                          <span className={cn('text-lg leading-none', !canAttack && 'opacity-40')}>⚔️</span>
-                        </ActionBtn>
-                        <ActionBtn label={t('ctx.recruit')} active={mode === 'recruit_soldier'} disabled={!canRecruit}
-                          onClick={() => {
-                            if (canRecruit) setBoardMode(mode === 'recruit_soldier' ? null : 'recruit_soldier');
-                            setShowSoldierMenu(false);
-                          }}>
-                          <span className={cn('text-lg leading-none', !canRecruit && 'opacity-40')}>🪖</span>
-                        </ActionBtn>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
                 </div>
+                {showSoldierMenu && createPortal(
+                  <AnimatePresence>
+                    <motion.div
+                      key="soldier-menu"
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 6 }}
+                      transition={{ duration: 0.12 }}
+                      style={{
+                        position: 'fixed',
+                        left: soldierMenuPos.x,
+                        top: soldierMenuPos.y - 8,
+                        transform: 'translate(-50%, -100%)',
+                        zIndex: 9999,
+                        background: 'rgba(17,24,39,0.97)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        backdropFilter: 'blur(8px)',
+                      }}
+                      className="flex flex-col items-center gap-1 rounded-2xl p-2"
+                    >
+                      <ActionBtn label={t('ctx.transfer')} disabled={!canTransfer} active={mode === 'transfer_soldiers'}
+                        badge={transfersLeft < 2 ? transfersLeft : undefined}
+                        onClick={() => {
+                          if (!canTransfer) return;
+                          setTransferFromVertex(null);
+                          setBoardMode(mode === 'transfer_soldiers' ? null : 'transfer_soldiers');
+                          setShowSoldierMenu(false);
+                        }}>
+                        <span className={cn('text-lg leading-none', !canTransfer && 'opacity-40')}>↔️</span>
+                      </ActionBtn>
+                      <ActionBtn label={t('ctx.attack')} disabled={!canAttack} active={mode === 'attack'}
+                        onClick={() => {
+                          if (!canAttack) return;
+                          setAttackTargetVertex(null);
+                          setBoardMode(mode === 'attack' ? null : 'attack');
+                          setShowSoldierMenu(false);
+                        }}>
+                        <span className={cn('text-lg leading-none', !canAttack && 'opacity-40')}>⚔️</span>
+                      </ActionBtn>
+                      <ActionBtn label={t('ctx.recruit')} active={mode === 'recruit_soldier'} disabled={!canRecruit}
+                        onClick={() => {
+                          if (canRecruit) setBoardMode(mode === 'recruit_soldier' ? null : 'recruit_soldier');
+                          setShowSoldierMenu(false);
+                        }}>
+                        <span className={cn('text-lg leading-none', !canRecruit && 'opacity-40')}>🪖</span>
+                      </ActionBtn>
+                    </motion.div>
+                  </AnimatePresence>,
+                  document.body,
+                )}
               </>
             );
           })()}
