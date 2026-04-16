@@ -28,6 +28,7 @@ class VoiceService {
   // Speaking detection
   private analyserCtx: AudioContext | null = null;
   private speakingTimers = new Map<string, ReturnType<typeof setInterval>>();
+  private pendingCandidates = new Map<string, RTCIceCandidateInit[]>();
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -113,11 +114,23 @@ class VoiceService {
         break;
       }
       case 'VOICE_ANSWER': {
-        this.peers.get(msg.payload.fromId)?.setRemoteDescription(msg.payload.answer).catch(() => {});
+        const { fromId, answer } = msg.payload;
+        const pc = this.peers.get(fromId);
+        if (pc) {
+          pc.setRemoteDescription(answer).then(() => this.flushCandidates(fromId, pc)).catch(() => {});
+        }
         break;
       }
       case 'VOICE_ICE': {
-        this.peers.get(msg.payload.fromId)?.addIceCandidate(msg.payload.candidate).catch(() => {});
+        const { fromId, candidate } = msg.payload;
+        const pc = this.peers.get(fromId);
+        if (pc && pc.remoteDescription) {
+          pc.addIceCandidate(candidate).catch(() => {});
+        } else {
+          // Queue until remote description is set
+          if (!this.pendingCandidates.has(fromId)) this.pendingCandidates.set(fromId, []);
+          this.pendingCandidates.get(fromId)!.push(candidate);
+        }
         break;
       }
     }
@@ -147,10 +160,12 @@ class VoiceService {
         audio = document.createElement('audio');
         audio.id = `voice-${peerId}`;
         audio.autoplay = true;
+        (audio as any).playsInline = true;
         audio.style.display = 'none';
         document.body.appendChild(audio);
       }
       audio.srcObject = stream;
+      audio.play().catch(() => {});
       this.trackSpeaking(peerId, stream);
     };
 
@@ -177,15 +192,26 @@ class VoiceService {
     if (!this.gameId) return;
     const pc = this.buildPeerConnection(peerId);
     await pc.setRemoteDescription(offer);
+    // Flush any ICE candidates that arrived before remote description
+    const queued = this.pendingCandidates.get(peerId) ?? [];
+    for (const c of queued) pc.addIceCandidate(c).catch(() => {});
+    this.pendingCandidates.delete(peerId);
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     wsService.send({ type: 'VOICE_ANSWER', payload: { gameId: this.gameId, targetId: peerId, answer } });
+  }
+
+  private async flushCandidates(peerId: string, pc: RTCPeerConnection) {
+    const queued = this.pendingCandidates.get(peerId) ?? [];
+    for (const c of queued) pc.addIceCandidate(c).catch(() => {});
+    this.pendingCandidates.delete(peerId);
   }
 
   private closePeer(peerId: string) {
     this.peers.get(peerId)?.close();
     this.peers.delete(peerId);
     this.peerMeta.delete(peerId);
+    this.pendingCandidates.delete(peerId);
     clearInterval(this.speakingTimers.get(peerId));
     this.speakingTimers.delete(peerId);
     const el = document.getElementById(`voice-${peerId}`);

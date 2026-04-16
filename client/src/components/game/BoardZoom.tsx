@@ -1,6 +1,6 @@
 /**
- * Wraps the hex board with pinch-to-zoom, mouse-wheel zoom, and pointer drag pan.
- * Also provides a fullscreen toggle button.
+ * Wraps the hex board with pinch-to-zoom, mouse-wheel zoom, and single/multi-finger drag pan.
+ * Fullscreen targets the nearest [data-game-root] ancestor (whole game view).
  */
 import { useRef, useState, useEffect, useCallback, type ReactNode } from 'react';
 
@@ -22,11 +22,14 @@ export default function BoardZoom({ children }: Props) {
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Refs for imperative pointer/touch state (avoids stale closures)
+  // Imperative refs — no stale closures
   const stateRef = useRef({ scale: 1, offset: { x: 0, y: 0 } });
-  const dragRef = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null);
-  const pinchRef = useRef<{ dist: number; cx: number; cy: number } | null>(null);
+  // Single-finger drag (only activates after moving > threshold)
+  const dragRef = useRef<{ startX: number; startY: number; ox: number; oy: number; active: boolean } | null>(null);
+  // Pinch
+  const pinchRef = useRef<{ dist: number; midX: number; midY: number } | null>(null);
   const activePointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const DRAG_THRESHOLD = 8; // px — below this a touch is still a tap
 
   const applyState = useCallback((s: number, o: { x: number; y: number }) => {
     stateRef.current = { scale: s, offset: o };
@@ -40,84 +43,105 @@ export default function BoardZoom({ children }: Props) {
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const { scale: s, offset: o } = stateRef.current;
       const rect = el.getBoundingClientRect();
-      // Zoom toward cursor position
       const cx = e.clientX - rect.left;
       const cy = e.clientY - rect.top;
       const delta = -e.deltaY * ZOOM_SENSITIVITY;
       const newScale = clamp(s * (1 + delta), MIN_SCALE, MAX_SCALE);
       const ratio = newScale / s;
-      const nx = cx - (cx - o.x) * ratio;
-      const ny = cy - (cy - o.y) * ratio;
-      applyState(newScale, { x: nx, y: ny });
+      applyState(newScale, { x: cx - (cx - o.x) * ratio, y: cy - (cy - o.y) * ratio });
     };
-
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, [applyState]);
 
-  // ── Pointer events (drag pan + pinch zoom) ────────────────────────────────
-  const onPointerDown = useCallback((e: React.PointerEvent) => {
-    // Only handle middle-click or two-finger for pan — let board SVG handle primary click
-    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  // ── Pointer events — registered imperatively so we can use setPointerCapture ──
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
 
-    if (activePointers.current.size === 2) {
-      // Start pinch
-      const pts = [...activePointers.current.values()];
-      const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
-      const cx = (pts[0].x + pts[1].x) / 2;
-      const cy = (pts[0].y + pts[1].y) / 2;
-      pinchRef.current = { dist, cx, cy };
-      dragRef.current = null;
-    } else if (e.button === 1 || e.button === 2) {
-      // Middle or right click drag
-      e.preventDefault();
-      dragRef.current = { startX: e.clientX, startY: e.clientY, ox: stateRef.current.offset.x, oy: stateRef.current.offset.y };
-    }
-  }, []);
+    const onDown = (e: PointerEvent) => {
+      activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-  const onPointerMove = useCallback((e: React.PointerEvent) => {
-    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (activePointers.current.size === 2) {
+        // Start pinch — cancel any drag
+        dragRef.current = null;
+        const pts = [...activePointers.current.values()];
+        const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        const midX = (pts[0].x + pts[1].x) / 2;
+        const midY = (pts[0].y + pts[1].y) / 2;
+        pinchRef.current = { dist, midX, midY };
+      } else if (activePointers.current.size === 1) {
+        // Single finger / primary click — arm drag, activate only after threshold
+        pinchRef.current = null;
+        dragRef.current = {
+          startX: e.clientX,
+          startY: e.clientY,
+          ox: stateRef.current.offset.x,
+          oy: stateRef.current.offset.y,
+          active: false,
+        };
+      }
+    };
 
-    if (activePointers.current.size === 2 && pinchRef.current) {
-      const el = containerRef.current;
-      if (!el) return;
-      const pts = [...activePointers.current.values()];
-      const newDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
-      const { scale: s, offset: o } = stateRef.current;
-      const rect = el.getBoundingClientRect();
-      const ratio = newDist / pinchRef.current.dist;
-      const newScale = clamp(s * ratio, MIN_SCALE, MAX_SCALE);
-      const realRatio = newScale / s;
-      const cx = pinchRef.current.cx - rect.left;
-      const cy = pinchRef.current.cy - rect.top;
-      const nx = cx - (cx - o.x) * realRatio;
-      const ny = cy - (cy - o.y) * realRatio;
-      pinchRef.current = { dist: newDist, cx: pinchRef.current.cx, cy: pinchRef.current.cy };
-      applyState(newScale, { x: nx, y: ny });
-      return;
-    }
+    const onMove = (e: PointerEvent) => {
+      activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const container = containerRef.current;
+      if (!container) return;
 
-    if (dragRef.current) {
-      const dx = e.clientX - dragRef.current.startX;
-      const dy = e.clientY - dragRef.current.startY;
-      applyState(stateRef.current.scale, { x: dragRef.current.ox + dx, y: dragRef.current.oy + dy });
-    }
+      if (activePointers.current.size >= 2 && pinchRef.current) {
+        const pts = [...activePointers.current.values()];
+        const newDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        const { scale: s, offset: o } = stateRef.current;
+        const rect = container.getBoundingClientRect();
+        const ratio = newDist / pinchRef.current.dist;
+        const newScale = clamp(s * ratio, MIN_SCALE, MAX_SCALE);
+        const realRatio = newScale / s;
+        const cx = pinchRef.current.midX - rect.left;
+        const cy = pinchRef.current.midY - rect.top;
+        pinchRef.current = { dist: newDist, midX: pinchRef.current.midX, midY: pinchRef.current.midY };
+        applyState(newScale, { x: cx - (cx - o.x) * realRatio, y: cy - (cy - o.y) * realRatio });
+        return;
+      }
+
+      if (dragRef.current && activePointers.current.size === 1) {
+        const dx = e.clientX - dragRef.current.startX;
+        const dy = e.clientY - dragRef.current.startY;
+        if (!dragRef.current.active) {
+          if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+          dragRef.current.active = true;
+          el.setPointerCapture(e.pointerId);
+        }
+        applyState(stateRef.current.scale, { x: dragRef.current.ox + dx, y: dragRef.current.oy + dy });
+      }
+    };
+
+    const onUp = (e: PointerEvent) => {
+      activePointers.current.delete(e.pointerId);
+      if (activePointers.current.size < 2) pinchRef.current = null;
+      if (activePointers.current.size === 0) dragRef.current = null;
+    };
+
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
+
+    return () => {
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
+    };
   }, [applyState]);
 
-  const onPointerUp = useCallback((e: React.PointerEvent) => {
-    activePointers.current.delete(e.pointerId);
-    if (activePointers.current.size < 2) pinchRef.current = null;
-    if (activePointers.current.size === 0) dragRef.current = null;
-  }, []);
-
-  // ── Fullscreen ─────────────────────────────────────────────────────────────
+  // ── Fullscreen (targets entire game root, so controls remain visible) ───────
   const toggleFullscreen = useCallback(() => {
-    const el = containerRef.current?.closest('[data-board-root]') as HTMLElement | null;
+    const el = containerRef.current?.closest('[data-game-root]') as HTMLElement | null
+            ?? containerRef.current?.closest('[data-board-root]') as HTMLElement | null;
     if (!el) return;
     if (!document.fullscreenElement) {
       el.requestFullscreen().catch(() => {});
@@ -138,10 +162,7 @@ export default function BoardZoom({ children }: Props) {
     <div
       ref={containerRef}
       className="relative w-full h-full overflow-hidden"
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
+      style={{ touchAction: 'none' }}
       onContextMenu={e => e.preventDefault()}
     >
       {/* Transformed board */}
@@ -152,9 +173,13 @@ export default function BoardZoom({ children }: Props) {
           width: '100%',
           height: '100%',
           willChange: 'transform',
+          pointerEvents: 'none',
         }}
       >
-        {children}
+        {/* Re-enable pointer events for board children */}
+        <div style={{ pointerEvents: 'auto', width: '100%', height: '100%' }}>
+          {children}
+        </div>
       </div>
 
       {/* Controls — bottom-right corner */}
@@ -199,7 +224,7 @@ export default function BoardZoom({ children }: Props) {
         >{isFullscreen ? '⛶' : '⛶'}</button>
       </div>
 
-      {/* Scale indicator — fades after idle */}
+      {/* Scale indicator */}
       {scale !== 1 && (
         <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-black/50 text-gray-400 text-[10px] pointer-events-none select-none">
           {Math.round(scale * 100)}%

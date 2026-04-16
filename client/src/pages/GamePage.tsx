@@ -678,7 +678,7 @@ export default function GamePage() {
   };
 
   return (
-    <div className="h-dvh bg-gray-900 flex flex-col overflow-hidden">
+    <div data-game-root className="h-dvh bg-gray-900 flex flex-col overflow-hidden">
 
       {/* ── Header ── */}
       <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700">
@@ -1168,8 +1168,8 @@ export default function GamePage() {
             );
           })()}
 
-          {/* ── Action panel — fills remaining space, no scroll ── */}
-          <div className="flex-1 min-h-0 overflow-hidden p-3">
+          {/* ── Action panel — fills remaining space ── */}
+          <div className="flex-1 min-h-0 overflow-y-auto p-3">
             <ActionPanel gameState={gameState} gameId={gameId!} />
           </div>
 
