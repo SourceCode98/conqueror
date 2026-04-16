@@ -55,10 +55,8 @@ export type ClientMessage =
   | WSMessage<'KICK_VOTE',              { gameId: string; vote: boolean }>
   | WSMessage<'VOICE_JOIN',             { gameId: string }>
   | WSMessage<'VOICE_LEAVE',            { gameId: string }>
-  | WSMessage<'VOICE_OFFER',            { gameId: string; targetId: string; offer: RTCSessionDescriptionInit }>
-  | WSMessage<'VOICE_ANSWER',           { gameId: string; targetId: string; answer: RTCSessionDescriptionInit }>
-  | WSMessage<'VOICE_ICE',              { gameId: string; targetId: string; candidate: RTCIceCandidateInit }>
-  | WSMessage<'VOICE_MUTE',             { gameId: string; muted: boolean }>;
+  | WSMessage<'VOICE_MUTE',             { gameId: string; muted: boolean }>
+  | WSMessage<'VOICE_AUDIO',            { gameId: string; data: string }>;
 
 // ─── Server → Client ──────────────────────────────────────────────────────────
 
@@ -94,6 +92,4 @@ export type ServerMessage =
   | WSMessage<'VOICE_PEER_JOINED',      { playerId: string; username: string }>
   | WSMessage<'VOICE_PEER_LEFT',        { playerId: string }>
   | WSMessage<'VOICE_PEER_MUTED',       { playerId: string; muted: boolean }>
-  | WSMessage<'VOICE_OFFER',            { fromId: string; offer: RTCSessionDescriptionInit }>
-  | WSMessage<'VOICE_ANSWER',           { fromId: string; answer: RTCSessionDescriptionInit }>
-  | WSMessage<'VOICE_ICE',              { fromId: string; candidate: RTCIceCandidateInit }>;
+  | WSMessage<'VOICE_AUDIO',            { fromId: string; data: string }>;

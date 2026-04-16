@@ -328,9 +328,7 @@ function handleMessage(ws: WebSocket, data: RawData): void {
   if (msg.type === 'VOICE_JOIN') { handleVoiceJoin(ws); return; }
   if (msg.type === 'VOICE_LEAVE') { handleVoiceLeave(ws); return; }
   if (msg.type === 'VOICE_MUTE') { handleVoiceMute(ws, (msg.payload as any).muted); return; }
-  if (msg.type === 'VOICE_OFFER') { handleVoiceRelay(ws, 'offer', msg.payload as any); return; }
-  if (msg.type === 'VOICE_ANSWER') { handleVoiceRelay(ws, 'answer', msg.payload as any); return; }
-  if (msg.type === 'VOICE_ICE') { handleVoiceRelay(ws, 'ice', msg.payload as any); return; }
+  if (msg.type === 'VOICE_AUDIO') { handleVoiceAudio(ws, (msg.payload as any).data); return; }
 
   const orch = getOrLoadOrchestrator(meta.gameId);
   if (!orch) {
@@ -735,20 +733,16 @@ function handleVoiceMute(ws: WebSocket, muted: boolean): void {
   }
 }
 
-function handleVoiceRelay(ws: WebSocket, kind: 'offer' | 'answer' | 'ice', payload: { targetId: string; offer?: RTCSessionDescriptionInit; answer?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit }): void {
+function handleVoiceAudio(ws: WebSocket, data: string): void {
   const meta = clientMeta.get(ws);
   if (!meta) return;
   const vRoom = voiceRooms.get(meta.gameId);
   if (!vRoom) return;
-  const target = vRoom.get(payload.targetId);
-  if (!target || target.ws.readyState !== WebSocket.OPEN) return;
-
-  if (kind === 'offer') {
-    target.ws.send(JSON.stringify({ type: 'VOICE_OFFER', payload: { fromId: meta.userId, offer: payload.offer } }));
-  } else if (kind === 'answer') {
-    target.ws.send(JSON.stringify({ type: 'VOICE_ANSWER', payload: { fromId: meta.userId, answer: payload.answer } }));
-  } else {
-    target.ws.send(JSON.stringify({ type: 'VOICE_ICE', payload: { fromId: meta.userId, candidate: payload.candidate } }));
+  const msg = JSON.stringify({ type: 'VOICE_AUDIO', payload: { fromId: meta.userId, data } });
+  for (const [id, peer] of vRoom) {
+    if (id !== meta.userId && peer.ws.readyState === WebSocket.OPEN) {
+      peer.ws.send(msg);
+    }
   }
 }
 

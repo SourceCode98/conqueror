@@ -1,10 +1,10 @@
 /**
- * WebRTC voice chat service — mesh P2P, one RTCPeerConnection per peer.
- * Signaling is done through the existing WebSocket (wsService).
+ * Voice chat via WebSocket relay.
+ * Audio is captured with MediaRecorder (webm/opus, 200ms chunks),
+ * sent as base64 through the game's WebSocket server, and played
+ * back with Web Audio API scheduled buffering — no WebRTC needed.
  */
 import { wsService } from './wsService.js';
-
-const STUN = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
 export interface VoicePeer {
   playerId: string;
@@ -15,22 +15,44 @@ export interface VoicePeer {
 
 type StateListener = (peers: VoicePeer[], inVoice: boolean, muted: boolean) => void;
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function toBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+function fromBase64(b64: string): ArrayBuffer {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+// ── Service ───────────────────────────────────────────────────────────────────
+
 class VoiceService {
   private gameId: string | null = null;
   private localStream: MediaStream | null = null;
-  private peers = new Map<string, RTCPeerConnection>();
-  private peerMeta = new Map<string, { username: string; muted: boolean; speaking: boolean }>();
+  private recorder: MediaRecorder | null = null;
+  private headerBlob: Blob | null = null;   // webm init segment — prepended to every chunk
+  private mimeType = 'audio/webm;codecs=opus';
+
   private inVoice = false;
   private muted = false;
   private listeners: StateListener[] = [];
   private wsUnsub: (() => void) | null = null;
 
-  // Speaking detection
-  private analyserCtx: AudioContext | null = null;
-  private speakingTimers = new Map<string, ReturnType<typeof setInterval>>();
-  private pendingCandidates = new Map<string, RTCIceCandidateInit[]>();
+  // Peer display metadata
+  private peerMeta = new Map<string, { username: string; muted: boolean; speaking: boolean }>();
 
-  // ── Public API ──────────────────────────────────────────────────────────────
+  // Playback: one AudioContext, per-peer scheduling cursor
+  private audioCtx: AudioContext | null = null;
+  private nextPlayTime = new Map<string, number>();
+
+  // ── Lifecycle ───────────────────────────────────────────────────────────────
 
   init(gameId: string) {
     this.gameId = gameId;
@@ -50,6 +72,8 @@ class VoiceService {
     return () => { this.listeners = this.listeners.filter(l => l !== fn); };
   }
 
+  // ── Public API ──────────────────────────────────────────────────────────────
+
   async join() {
     if (this.inVoice || !this.gameId) return;
     try {
@@ -60,6 +84,7 @@ class VoiceService {
     }
     this.inVoice = true;
     this.muted = false;
+    this.startRecording();
     wsService.send({ type: 'VOICE_JOIN', payload: { gameId: this.gameId } });
     this.notify();
   }
@@ -78,15 +103,57 @@ class VoiceService {
     this.notify();
   }
 
-  // ── Server message handler ──────────────────────────────────────────────────
+  getState() {
+    const peers: VoicePeer[] = [...this.peerMeta.entries()].map(([id, m]) => ({
+      playerId: id, username: m.username, muted: m.muted, speaking: m.speaking,
+    }));
+    return { peers, inVoice: this.inVoice, muted: this.muted };
+  }
+
+  // ── Recording ───────────────────────────────────────────────────────────────
+
+  private startRecording() {
+    if (!this.localStream) return;
+
+    this.mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : 'audio/webm';
+
+    this.recorder = new MediaRecorder(this.localStream, {
+      mimeType: this.mimeType,
+      audioBitsPerSecond: 32000,
+    });
+    this.headerBlob = null;
+
+    this.recorder.ondataavailable = async (e) => {
+      if (e.data.size === 0 || !this.inVoice || !this.gameId) return;
+
+      if (!this.headerBlob) {
+        // First chunk is the webm init segment (container header).
+        // We keep it and prepend it to every subsequent chunk so each
+        // packet is a self-contained decodable webm blob.
+        this.headerBlob = e.data;
+        return;
+      }
+
+      if (this.muted) return;
+
+      // Combine header + audio chunk → decodable webm
+      const combined = new Blob([this.headerBlob, e.data], { type: this.mimeType });
+      const data = toBase64(await combined.arrayBuffer());
+      wsService.send({ type: 'VOICE_AUDIO', payload: { gameId: this.gameId, data } });
+    };
+
+    this.recorder.start(200); // 200 ms slices → ~160ms latency after network
+  }
+
+  // ── Server messages ─────────────────────────────────────────────────────────
 
   private handleServerMsg(msg: { type: string; payload: any }) {
     switch (msg.type) {
       case 'VOICE_PEERS': {
-        // We just joined — create offers for all existing peers
         for (const peer of msg.payload.peers as Array<{ playerId: string; username: string; muted: boolean }>) {
           this.peerMeta.set(peer.playerId, { username: peer.username, muted: peer.muted, speaking: false });
-          this.createOffer(peer.playerId);
         }
         this.notify();
         break;
@@ -94,12 +161,12 @@ class VoiceService {
       case 'VOICE_PEER_JOINED': {
         const { playerId, username } = msg.payload;
         this.peerMeta.set(playerId, { username, muted: false, speaking: false });
-        // Don't create offer here — the joiner will send us one via VOICE_PEERS
         this.notify();
         break;
       }
       case 'VOICE_PEER_LEFT': {
-        this.closePeer(msg.payload.playerId);
+        this.peerMeta.delete(msg.payload.playerId);
+        this.nextPlayTime.delete(msg.payload.playerId);
         this.notify();
         break;
       }
@@ -109,184 +176,79 @@ class VoiceService {
         this.notify();
         break;
       }
-      case 'VOICE_OFFER': {
-        this.handleOffer(msg.payload.fromId, msg.payload.offer);
-        break;
-      }
-      case 'VOICE_ANSWER': {
-        const { fromId, answer } = msg.payload;
-        const pc = this.peers.get(fromId);
-        if (pc) {
-          pc.setRemoteDescription(answer).then(() => this.flushCandidates(fromId, pc)).catch(() => {});
-        }
-        break;
-      }
-      case 'VOICE_ICE': {
-        const { fromId, candidate } = msg.payload;
-        const pc = this.peers.get(fromId);
-        if (pc && pc.remoteDescription) {
-          pc.addIceCandidate(candidate).catch(() => {});
-        } else {
-          // Queue until remote description is set
-          if (!this.pendingCandidates.has(fromId)) this.pendingCandidates.set(fromId, []);
-          this.pendingCandidates.get(fromId)!.push(candidate);
-        }
+      case 'VOICE_AUDIO': {
+        if (this.inVoice) this.playChunk(msg.payload.fromId, msg.payload.data);
         break;
       }
     }
   }
 
-  // ── WebRTC helpers ──────────────────────────────────────────────────────────
+  // ── Playback ────────────────────────────────────────────────────────────────
 
-  private buildPeerConnection(peerId: string): RTCPeerConnection {
-    const pc = new RTCPeerConnection(STUN);
+  private getAudioCtx(): AudioContext {
+    if (!this.audioCtx || this.audioCtx.state === 'closed') {
+      this.audioCtx = new AudioContext({ sampleRate: 48000 });
+    }
+    return this.audioCtx;
+  }
 
-    // Add local tracks
-    this.localStream?.getTracks().forEach(t => pc.addTrack(t, this.localStream!));
+  private async playChunk(peerId: string, base64: string) {
+    try {
+      const ctx = this.getAudioCtx();
+      if (ctx.state === 'suspended') await ctx.resume();
 
-    // ICE candidate → forward to peer via WS
-    pc.onicecandidate = ({ candidate }) => {
-      if (candidate && this.gameId) {
-        wsService.send({ type: 'VOICE_ICE', payload: { gameId: this.gameId, targetId: peerId, candidate: candidate.toJSON() } });
-      }
-    };
+      const audioBuffer = await ctx.decodeAudioData(fromBase64(base64));
 
-    // Build (or reuse) the hidden audio element for this peer
-    const getAudioEl = () => {
-      let audio = document.getElementById(`voice-${peerId}`) as HTMLAudioElement | null;
-      if (!audio) {
-        audio = document.createElement('audio');
-        audio.id = `voice-${peerId}`;
-        audio.autoplay = true;
-        (audio as any).playsInline = true;
-        audio.style.display = 'none';
-        document.body.appendChild(audio);
-      }
-      return audio;
-    };
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
 
-    // Accumulate tracks into a single MediaStream — streams[] can be empty on some browsers
-    const remoteStream = new MediaStream();
-    const audio = getAudioEl();
-    audio.srcObject = remoteStream;
+      // Schedule back-to-back so chunks play gaplessly
+      const now = ctx.currentTime;
+      const cursor = this.nextPlayTime.get(peerId) ?? now;
+      // If cursor is more than 500ms behind now the peer fell silent; reset
+      const startAt = cursor < now - 0.5 ? now + 0.05 : Math.max(now + 0.01, cursor);
+      source.start(startAt);
+      this.nextPlayTime.set(peerId, startAt + audioBuffer.duration);
 
-    pc.ontrack = (event) => {
-      // Add the track to our remote stream regardless of event.streams
-      if (!remoteStream.getTracks().includes(event.track)) {
-        remoteStream.addTrack(event.track);
-      }
-      audio.play().catch(() => {});
-      this.trackSpeaking(peerId, remoteStream);
-    };
-
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed') {
-        // Try ICE restart before giving up
-        if (this.gameId) pc.restartIce();
-      } else if (pc.connectionState === 'closed') {
-        this.closePeer(peerId);
+      // Speaking indicator: mark active, clear after chunk plays out
+      const meta = this.peerMeta.get(peerId);
+      if (meta && !meta.speaking) {
+        meta.speaking = true;
         this.notify();
       }
-    };
+      setTimeout(() => {
+        const m = this.peerMeta.get(peerId);
+        if (m?.speaking) { m.speaking = false; this.notify(); }
+      }, (startAt - now + audioBuffer.duration + 0.15) * 1000);
 
-    this.peers.set(peerId, pc);
-    return pc;
+    } catch {
+      // Chunk failed to decode — skip silently
+    }
   }
 
-  private async createOffer(peerId: string) {
-    if (!this.gameId) return;
-    const pc = this.buildPeerConnection(peerId);
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    wsService.send({ type: 'VOICE_OFFER', payload: { gameId: this.gameId, targetId: peerId, offer } });
-  }
-
-  private async handleOffer(peerId: string, offer: RTCSessionDescriptionInit) {
-    if (!this.gameId) return;
-    const pc = this.buildPeerConnection(peerId);
-    await pc.setRemoteDescription(offer);
-    // Flush any ICE candidates that arrived before remote description
-    const queued = this.pendingCandidates.get(peerId) ?? [];
-    for (const c of queued) pc.addIceCandidate(c).catch(() => {});
-    this.pendingCandidates.delete(peerId);
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    wsService.send({ type: 'VOICE_ANSWER', payload: { gameId: this.gameId, targetId: peerId, answer } });
-  }
-
-  private async flushCandidates(peerId: string, pc: RTCPeerConnection) {
-    const queued = this.pendingCandidates.get(peerId) ?? [];
-    for (const c of queued) pc.addIceCandidate(c).catch(() => {});
-    this.pendingCandidates.delete(peerId);
-  }
-
-  private closePeer(peerId: string) {
-    this.peers.get(peerId)?.close();
-    this.peers.delete(peerId);
-    this.peerMeta.delete(peerId);
-    this.pendingCandidates.delete(peerId);
-    clearInterval(this.speakingTimers.get(peerId));
-    this.speakingTimers.delete(peerId);
-    const el = document.getElementById(`voice-${peerId}`);
-    el?.remove();
-  }
+  // ── Cleanup ─────────────────────────────────────────────────────────────────
 
   private cleanup() {
-    for (const peerId of [...this.peers.keys()]) this.closePeer(peerId);
+    this.recorder?.stop();
+    this.recorder = null;
+    this.headerBlob = null;
     this.localStream?.getTracks().forEach(t => t.stop());
     this.localStream = null;
     this.inVoice = false;
     this.muted = false;
     this.peerMeta.clear();
-    this.analyserCtx?.close();
-    this.analyserCtx = null;
+    this.nextPlayTime.clear();
+    this.audioCtx?.close();
+    this.audioCtx = null;
     this.notify();
   }
 
-  // ── Speaking detection ──────────────────────────────────────────────────────
-
-  private trackSpeaking(peerId: string, stream: MediaStream) {
-    // Don't re-create if already tracking this peer
-    if (this.speakingTimers.has(peerId)) return;
-    try {
-      if (!this.analyserCtx) this.analyserCtx = new AudioContext();
-      const source = this.analyserCtx.createMediaStreamSource(stream);
-      const analyser = this.analyserCtx.createAnalyser();
-      analyser.fftSize = 512;
-      source.connect(analyser);
-      const buf = new Uint8Array(analyser.frequencyBinCount);
-      const timer = setInterval(() => {
-        analyser.getByteFrequencyData(buf);
-        const avg = buf.reduce((a, b) => a + b, 0) / buf.length;
-        const meta = this.peerMeta.get(peerId);
-        if (meta && meta.speaking !== avg > 10) {
-          meta.speaking = avg > 10;
-          this.notify();
-        }
-      }, 150);
-      this.speakingTimers.set(peerId, timer);
-    } catch {
-      // Speaking detection is optional — don't let it break audio
-    }
-  }
-
-  // ── State ───────────────────────────────────────────────────────────────────
-
   private notify() {
-    const peers: VoicePeer[] = [...this.peerMeta.entries()].map(([id, m]) => ({
-      playerId: id,
-      username: m.username,
-      muted: m.muted,
-      speaking: m.speaking,
-    }));
-    for (const l of this.listeners) l(peers, this.inVoice, this.muted);
-  }
-
-  getState() {
     const peers: VoicePeer[] = [...this.peerMeta.entries()].map(([id, m]) => ({
       playerId: id, username: m.username, muted: m.muted, speaking: m.speaking,
     }));
-    return { peers, inVoice: this.inVoice, muted: this.muted };
+    for (const l of this.listeners) l(peers, this.inVoice, this.muted);
   }
 }
 
