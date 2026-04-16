@@ -98,6 +98,8 @@ class VoiceService {
       ? 'audio/webm;codecs=opus'
       : 'audio/webm';
     this.inVoice = true;
+    // Create and unlock AudioContext now, while we're inside a user gesture
+    this.getAudioCtx().resume().catch(() => {});
     wsService.send({ type: 'VOICE_JOIN', payload: { gameId: this.gameId } });
     this.notify();
   }
@@ -197,10 +199,9 @@ class VoiceService {
     return this.audioCtx;
   }
 
-  private async playAudio(peerId: string, base64: string) {
+  private async playAudio(_peerId: string, base64: string) {
     try {
       const ctx = this.getAudioCtx();
-      if (ctx.state === 'suspended') await ctx.resume();
 
       const audioBuffer = await ctx.decodeAudioData(fromBase64(base64));
       const source = ctx.createBufferSource();
