@@ -50,6 +50,7 @@ export type ClientMessage =
   | WSMessage<'COLISEUM_PLAYER_UPDATE', { gameId: string; x: number; z: number; rotation: number; shielding: boolean; swinging: boolean }>
   | WSMessage<'COLISEUM_ATTACK',        { gameId: string }>
   | WSMessage<'COLISEUM_READY',         { gameId: string }>
+  | WSMessage<'COLISEUM_THROW',         { gameId: string; targetId: string }>
   | WSMessage<'LOBBY_SETTINGS',         { gameId: string; turnTimeLimit: number | null; hornCooldownSecs: number; warMode: boolean; warVariants: Record<string, boolean> }>
   | WSMessage<'VOTE_KICK',              { gameId: string; targetId: string }>
   | WSMessage<'KICK_VOTE',              { gameId: string; vote: boolean }>
@@ -84,7 +85,8 @@ export type ServerMessage =
   | WSMessage<'COMBAT_RESULT',       { attackerForce: number; defenderForce: number; attackerWon: boolean; effect: 'siege' | 'destruction_choice' | 'repelled'; attackerName: string; defenderName: string; attackerDie: number; defenderDie: number; attackSoldiers: number; defenderSoldiers: number; cityBonus: number; garrisonBonus: number; attackerSoldierLoss: number; defenderSoldierLoss: number }>
   | WSMessage<'LOBBY_SETTINGS',         { turnTimeLimit: number | null; hornCooldownSecs: number; warMode: boolean; warVariants: Record<string, boolean> }>
   | WSMessage<'COLISEUM_PLAYER_STATES', { states: Record<string, { x: number; z: number; rotation: number; shielding: boolean; swinging: boolean }> }>
-  | WSMessage<'COLISEUM_HIT',           { attackerId: string; defenderId: string; attackerScore: number; defenderScore: number; attackerHp: number; defenderHp: number; blocked: boolean }>
+  | WSMessage<'COLISEUM_HIT',           { attackerId: string; defenderId: string; attackerScore: number; defenderScore: number; attackerHp: number; defenderHp: number; blocked: boolean; roundWon?: boolean }>
+  | WSMessage<'COLISEUM_THROW',         { fromId: string; targetId: string }>
   | WSMessage<'COLISEUM_BATTLE_OVER',   { winnerId: string; winnerSide: 'attacker' | 'defender'; attackerScore: number; defenderScore: number; effect: 'siege' | 'destruction_choice' | 'repelled'; attackerName: string; defenderName: string }>
   | WSMessage<'KICK_VOTE_UPDATE',       { targetId: string; targetUsername: string; initiatorUsername: string; votes: Record<string, boolean | null>; secondsLeft: number; eligibleCount: number }>
   | WSMessage<'KICK_VOTE_ENDED',        { targetUsername: string; result: 'kicked' | 'failed' }>

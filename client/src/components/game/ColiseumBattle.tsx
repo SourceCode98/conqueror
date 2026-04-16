@@ -228,6 +228,7 @@ export function ColiseumBattle() {
 
   const [scores, setScores] = useState({ attacker: 0, defender: 0, attackerHp: MAX_HP, defenderHp: MAX_HP, defenderMaxHp: MAX_HP });
   const [hitNotice, setHitNotice] = useState<{ label: string; color: string } | null>(null);
+  const [roundOverNotice, setRoundOverNotice] = useState<{ label: string; color: string } | null>(null);
   const isPortrait = () => {
     if (typeof screen !== 'undefined' && screen.orientation?.type) {
       return screen.orientation.type.includes('portrait');
@@ -246,6 +247,12 @@ export function ColiseumBattle() {
 
   const battle = gameState?.coliseumBattle;
   const isActive = gameState?.phase === 'COLISEUM_BATTLE' && !!battle;
+
+  // Computed early so effects can reference them
+  const attackerPlayer = gameState?.players.find(p => p.id === battle?.attackerId);
+  const defenderPlayer = gameState?.players.find(p => p.id === battle?.defenderId);
+  const atkColor = attackerPlayer ? resolvePlayerColor(attackerPlayer.color) : '#ef4444';
+  const defColor = defenderPlayer ? resolvePlayerColor(defenderPlayer.color) : '#3b82f6';
 
   // Set defenderMaxHp once when battle starts (first time we see the battle state)
   useEffect(() => {
@@ -269,6 +276,7 @@ export function ColiseumBattle() {
   const shielding = useRef(false);
   const localPosRef = useRef({ x: 0, z: 0 });
   const yawRef = useRef(0);
+  const resetPosRef = useRef(false); // signal Three.js loop to reset positions
   // Re-render joystick every frame on mobile
   const [, forceJoy] = useState(0);
 
@@ -312,7 +320,7 @@ export function ColiseumBattle() {
     return () => clearTimeout(t);
   }, [isActive]);
 
-  // Hit event → score + HP update + notice
+  // Hit event → score + HP update + notice + round-over flash
   useEffect(() => {
     if (!hitEventStore || !battle) return;
     setScores(prev => ({ ...prev, attacker: hitEventStore.attackerScore, defender: hitEventStore.defenderScore, attackerHp: hitEventStore.attackerHp, defenderHp: hitEventStore.defenderHp }));
@@ -320,9 +328,16 @@ export function ColiseumBattle() {
     if (hitEventStore.blocked) {
       setHitNotice({ label: '🛡️ BLOCKED!', color: '#60a5fa' });
     } else {
-      setHitNotice({ label: isLocalHit ? '💥 HIT!  —' : '⚔️ HIT!', color: isLocalHit ? '#f87171' : '#fbbf24' });
+      setHitNotice({ label: isLocalHit ? '💥 HIT!' : '⚔️ HIT!', color: isLocalHit ? '#f87171' : '#fbbf24' });
     }
     const t = setTimeout(() => setHitNotice(null), 1100);
+
+    if (hitEventStore.roundWon) {
+      const roundWinner = hitEventStore.attackerScore > (scores.attacker) ? attackerPlayer?.username : defenderPlayer?.username;
+      const winColor = hitEventStore.attackerScore > scores.attacker ? atkColor : defColor;
+      setRoundOverNotice({ label: `🏅 ${roundWinner ?? '?'} wins the round!`, color: winColor });
+      setTimeout(() => setRoundOverNotice(null), 2200);
+    }
     return () => clearTimeout(t);
   }, [hitEventStore]);
 
@@ -334,6 +349,16 @@ export function ColiseumBattle() {
       const t = setTimeout(() => setFightFlash(false), 1200);
       return () => clearTimeout(t);
     }
+  }, [readyCount]);
+
+  // Reset positions when a new round starts (readyCount drops to 0 between rounds)
+  const prevReadyCountRef = useRef(0);
+  useEffect(() => {
+    if (readyCount === 0 && prevReadyCountRef.current >= 2) {
+      // Signal Three.js loop to snap fighters back to start
+      resetPosRef.current = true;
+    }
+    prevReadyCountRef.current = readyCount;
   }, [readyCount]);
 
   // Auto-dismiss battle result; on mobile+landscape hand off to portrait-return gate
@@ -469,10 +494,36 @@ export function ColiseumBattle() {
       wsService.send({ type: 'COLISEUM_ATTACK', payload: { gameId: gameState!.gameId } });
     }
 
+    // ── Projectiles (spectator throws) ──
+    interface Projectile { mesh: THREE.Mesh; vx: number; vy: number; vz: number; life: number }
+    const projectiles: Projectile[] = [];
+
+    function spawnProjectile(targetX: number, targetZ: number) {
+      const geo = new THREE.SphereGeometry(0.18, 6, 6);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xff2200 });
+      const mesh = new THREE.Mesh(geo, mat);
+      // Spawn from random spectator position at edge
+      const spawnAngle = Math.random() * Math.PI * 2;
+      const spawnR = ARENA_RADIUS + 1.5;
+      const sx = Math.sin(spawnAngle) * spawnR;
+      const sz = Math.cos(spawnAngle) * spawnR;
+      mesh.position.set(sx, 2.5, sz);
+      scene.add(mesh);
+      const dx = targetX - sx, dz = targetZ - sz;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      const speed = 14;
+      projectiles.push({ mesh, vx: (dx / dist) * speed, vy: 2, vz: (dz / dist) * speed, life: 1.5 });
+    }
+
     // Attach to DOM node so React buttons can call them
     (container as any).__attack = doAttack;
     (container as any).__shieldOn = () => { shielding.current = true; };
     (container as any).__shieldOff = () => { shielding.current = false; };
+    (container as any).__throwAt = (targetId: string) => {
+      const tx = targetId === battle.attackerId ? localMesh.position.x : remoteMesh.position.x;
+      const tz = targetId === battle.attackerId ? localMesh.position.z : remoteMesh.position.z;
+      spawnProjectile(tx, tz);
+    };
 
     // ── WS subscription ──
     let remoteStatesRef = useGameStore.getState().coliseumPlayerStates;
@@ -494,7 +545,6 @@ export function ColiseumBattle() {
         // Flash the hit target mesh
         let flashMesh: THREE.Group;
         if (!isCombatant) {
-          // localMesh=attacker, remoteMesh=defender; flash defender mesh when defender is hit
           flashMesh = msg.payload.defenderId === battle.defenderId ? remoteMesh : localMesh;
         } else {
           flashMesh = msg.payload.defenderId === localId ? localMesh : remoteMesh;
@@ -503,6 +553,11 @@ export function ColiseumBattle() {
         (fl.material as THREE.MeshBasicMaterial).opacity = 0.65;
         setTimeout(() => { (fl.material as THREE.MeshBasicMaterial).opacity = 0; }, 300);
         if (!msg.payload.blocked) shakeAmt = 0.22;
+      }
+      if (msg.type === 'COLISEUM_THROW') {
+        // Spawn projectile aimed at target fighter position
+        const targetMesh = msg.payload.targetId === battle.attackerId ? localMesh : remoteMesh;
+        spawnProjectile(targetMesh.position.x, targetMesh.position.z);
       }
     });
 
@@ -597,6 +652,32 @@ export function ColiseumBattle() {
       const now = performance.now();
       const dt = Math.min((now - lastT) / 1000, 0.05);
       lastT = now;
+
+      // ── Position reset (new round) ──
+      if (resetPosRef.current) {
+        resetPosRef.current = false;
+        localPosRef.current = { x: startX, z: 0 };
+        yawRef.current = startYaw;
+        localMesh.position.set(startX, 0, 0);
+        localMesh.rotation.y = startYaw;
+        remote.x = -startX; remote.z = 0; remote.rotation = -startYaw;
+        remoteMesh.position.set(-startX, 0, 0);
+        remoteMesh.rotation.y = -startYaw;
+      }
+
+      // ── Projectile physics ──
+      for (let i = projectiles.length - 1; i >= 0; i--) {
+        const p = projectiles[i];
+        p.life -= dt;
+        p.vy -= 9 * dt; // gravity
+        p.mesh.position.x += p.vx * dt;
+        p.mesh.position.y += p.vy * dt;
+        p.mesh.position.z += p.vz * dt;
+        if (p.life <= 0 || p.mesh.position.y < -1) {
+          scene.remove(p.mesh);
+          projectiles.splice(i, 1);
+        }
+      }
 
       let mx = 0, mz = 0; // movement input (used for leg anim outside combatant block)
 
@@ -852,12 +933,16 @@ export function ColiseumBattle() {
 
   if (!isActive && !battleOver) return null;
 
-  const attackerPlayer = gameState?.players.find(p => p.id === battle?.attackerId);
-  const defenderPlayer = gameState?.players.find(p => p.id === battle?.defenderId);
-  const atkColor = attackerPlayer ? resolvePlayerColor(attackerPlayer.color) : '#ef4444';
-  const defColor = defenderPlayer ? resolvePlayerColor(defenderPlayer.color) : '#3b82f6';
+  function throwAt(targetId: string) {
+    if (!battle || !gameState) return;
+    wsService.send({ type: 'COLISEUM_THROW', payload: { gameId: gameState.gameId, targetId } });
+    // Also spawn locally for immediate feedback
+    (mountRef.current as any)?.__throwAt?.(targetId);
+  }
+
   const localIsAttacker = localId === battle?.attackerId;
   const isCombatant = localId === battle?.attackerId || localId === battle?.defenderId;
+  const currentRound = scores.attacker + scores.defender + 1;
 
   return (
     <div className="fixed inset-0 z-[60] bg-black" style={{ touchAction: 'none' }}>
@@ -910,6 +995,9 @@ export function ColiseumBattle() {
               style={{ background: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(6px)' }}
             >
               <p className="text-amber-400 text-2xl font-black tracking-widest">⚔️ COLISEUM</p>
+              <p className="text-white text-lg font-black tracking-widest opacity-70">
+                ROUND {currentRound} of {WIN_SCORE}
+              </p>
 
               {/* Player readiness cards */}
               <div className="flex gap-4">
@@ -974,8 +1062,8 @@ export function ColiseumBattle() {
           )}
         </AnimatePresence>
 
-        {/* Centre: hit notice */}
-        <div className="flex-1 flex items-start justify-center pt-16">
+        {/* Centre: hit notice + round over */}
+        <div className="flex-1 flex flex-col items-center justify-start pt-16 gap-3">
           <AnimatePresence>
             {hitNotice && (
               <motion.div
@@ -988,6 +1076,21 @@ export function ColiseumBattle() {
                 style={{ background: `${hitNotice.color}22`, color: hitNotice.color, border: `1px solid ${hitNotice.color}60`, backdropFilter: 'blur(4px)' }}
               >
                 {hitNotice.label}
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <AnimatePresence>
+            {roundOverNotice && (
+              <motion.div
+                key="round-over"
+                initial={{ opacity: 0, scale: 0.7 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 1.2 }}
+                transition={{ duration: 0.25 }}
+                className="rounded-2xl px-8 py-4 text-2xl font-black text-center"
+                style={{ background: `${roundOverNotice.color}22`, color: roundOverNotice.color, border: `2px solid ${roundOverNotice.color}80`, backdropFilter: 'blur(6px)', textShadow: `0 0 20px ${roundOverNotice.color}` }}
+              >
+                {roundOverNotice.label}
               </motion.div>
             )}
           </AnimatePresence>
@@ -1065,10 +1168,32 @@ export function ColiseumBattle() {
           )}
         </AnimatePresence>
 
-        {/* Spectator label */}
+        {/* Spectator label + throw buttons */}
         {!isCombatant && (
-          <div className="absolute top-12 left-1/2 -translate-x-1/2 text-xs text-gray-500 pointer-events-none select-none">
-            👁️ Spectating
+          <div className="absolute top-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
+            <div className="text-xs text-gray-500 pointer-events-none select-none">👁️ Spectating</div>
+            {isActive && (
+              <div className="flex gap-2 pointer-events-auto">
+                <button
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold select-none active:scale-90 transition-transform"
+                  style={{ background: `${atkColor}22`, border: `1px solid ${atkColor}60`, color: atkColor }}
+                  onTouchStart={e => { e.preventDefault(); throwAt(battle!.attackerId); }}
+                  onClick={() => throwAt(battle!.attackerId)}
+                  title={`Throw at ${attackerPlayer?.username ?? '?'}`}
+                >
+                  🍅 {attackerPlayer?.username ?? '?'}
+                </button>
+                <button
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold select-none active:scale-90 transition-transform"
+                  style={{ background: `${defColor}22`, border: `1px solid ${defColor}60`, color: defColor }}
+                  onTouchStart={e => { e.preventDefault(); throwAt(battle!.defenderId); }}
+                  onClick={() => throwAt(battle!.defenderId)}
+                  title={`Throw at ${defenderPlayer?.username ?? '?'}`}
+                >
+                  🍅 {defenderPlayer?.username ?? '?'}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -729,14 +729,27 @@ export function handleColiseumAttack(
     }));
   }
 
+  const battleOver = !blocked && roundWon && (newAttackerScore >= COLISEUM_WIN_SCORE || newDefenderScore >= COLISEUM_WIN_SCORE);
+
   ctx.broadcastToRoom({
     type: 'COLISEUM_HIT',
-    payload: { attackerId: meta.userId, defenderId: opponentId, attackerScore: newAttackerScore, defenderScore: newDefenderScore, attackerHp: newAttackerHp, defenderHp: newDefenderHp, blocked },
+    payload: { attackerId: meta.userId, defenderId: opponentId, attackerScore: newAttackerScore, defenderScore: newDefenderScore, attackerHp: newAttackerHp, defenderHp: newDefenderHp, blocked, roundWon: roundWon && !battleOver },
   });
 
-  if (!blocked && roundWon && (newAttackerScore >= COLISEUM_WIN_SCORE || newDefenderScore >= COLISEUM_WIN_SCORE)) {
+  if (battleOver) {
     orch.clearPendingColiseum();
     applyColiseumResult(orch, ctx, pending, newAttackerScore, newDefenderScore, newAttackerScore >= COLISEUM_WIN_SCORE);
+  } else if (roundWon) {
+    // Mid-battle round won: after 2s, clear readyPlayerIds so players return to start
+    setTimeout(() => {
+      const s = orch.getState();
+      if (s.phase !== 'COLISEUM_BATTLE' || !s.coliseumBattle) return;
+      orch.updateState(cur => ({
+        ...cur,
+        coliseumBattle: cur.coliseumBattle ? { ...cur.coliseumBattle, readyPlayerIds: [] } : null,
+      }));
+      ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
+    }, 2000);
   }
 }
 
@@ -918,4 +931,18 @@ export function handleColiseumReady(
     coliseumBattle: { ...s.coliseumBattle!, readyPlayerIds: [...s.coliseumBattle!.readyPlayerIds, meta.userId] },
   }));
   ctx.broadcastToRoom({ type: 'GAME_STATE', payload: { state: orch.getPublicState() } });
+}
+
+export function handleColiseumThrow(
+  _ws: WebSocket,
+  payload: { gameId: string; targetId: string },
+  meta: ClientMeta,
+  _orch: GameOrchestrator,
+  ctx: ActionContext,
+): void {
+  // Relay throw to all room members (spectators and fighters)
+  ctx.broadcastToRoom({
+    type: 'COLISEUM_THROW',
+    payload: { fromId: meta.userId, targetId: payload.targetId },
+  });
 }

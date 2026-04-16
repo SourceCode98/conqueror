@@ -118,7 +118,7 @@ interface GameStore {
   // Coliseum battle real-time state
   coliseumPlayerStates: Record<string, { x: number; z: number; rotation: number; shielding: boolean; swinging: boolean }> | null;
   setColiseumPlayerStates: (s: GameStore['coliseumPlayerStates']) => void;
-  coliseumHitEvent: { attackerId: string; defenderId: string; attackerScore: number; defenderScore: number; attackerHp: number; defenderHp: number; blocked: boolean } | null;
+  coliseumHitEvent: { attackerId: string; defenderId: string; attackerScore: number; defenderScore: number; attackerHp: number; defenderHp: number; blocked: boolean; roundWon?: boolean } | null;
   setColiseumHitEvent: (e: GameStore['coliseumHitEvent']) => void;
   coliseumBattleOver: { winnerId: string; winnerSide: 'attacker' | 'defender'; attackerScore: number; defenderScore: number; effect: string; attackerName: string; defenderName: string } | null;
   setColiseumBattleOver: (e: GameStore['coliseumBattleOver']) => void;

@@ -1211,7 +1211,7 @@ export default function GamePage() {
       {combatModal && <CombatResultModal />}
 
       {/* ── Coliseum battle overlay ── */}
-      {gameState?.coliseumBattle && <ColiseumBattle />}
+      {(gameState?.coliseumBattle || coliseumBattleOver) && <ColiseumBattle />}
 
       {/* ── Deal closed overlay ── */}
       {dealClosed && <DealClosedOverlay />}
