@@ -7,76 +7,83 @@ interface Props {
 
 export default function VoiceChat({ gameId }: Props) {
   const [inVoice, setInVoice] = useState(false);
-  const [muted, setMuted] = useState(false);
+  const [pttActive, setPttActive] = useState(false);
+  const [talkingPeerId, setTalkingPeerId] = useState<string | null>(null);
   const [peers, setPeers] = useState<VoicePeer[]>([]);
 
   useEffect(() => {
     voiceService.init(gameId);
-    const unsub = voiceService.subscribe((p, iv, m) => {
+    const unsub = voiceService.subscribe((p, iv, ptt, talking) => {
       setPeers(p);
       setInVoice(iv);
-      setMuted(m);
+      setPttActive(ptt);
+      setTalkingPeerId(talking);
     });
-    return () => {
-      unsub();
-      voiceService.destroy();
-    };
+    return () => { unsub(); voiceService.destroy(); };
   }, [gameId]);
+
+  const someoneTalking = pttActive || talkingPeerId !== null;
+  const talkingPeer = peers.find(p => p.playerId === talkingPeerId);
 
   return (
     <div className="flex items-center gap-1">
+
       {/* Join / Leave */}
       <button
         onClick={() => inVoice ? voiceService.leave() : voiceService.join()}
         title={inVoice ? 'Leave voice chat' : 'Join voice chat'}
         className={`rounded-lg px-2 py-1.5 text-xs border transition-colors ${
           inVoice
-            ? 'border-green-600 bg-green-900/40 text-green-300 hover:bg-red-900/40 hover:border-red-600 hover:text-red-300'
+            ? 'border-green-700 bg-green-900/40 text-green-300 hover:bg-red-900/30 hover:border-red-700 hover:text-red-300'
             : 'border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'
         }`}
       >
-        {inVoice ? '🎙️' : '🎙️'}
-        <span className="ml-1">{inVoice ? 'VC' : 'VC'}</span>
+        🎙️
       </button>
 
-      {/* Mute toggle — only when in voice */}
+      {/* PTT button — only shown when in voice */}
       {inVoice && (
         <button
-          onClick={() => voiceService.toggleMute()}
-          title={muted ? 'Unmute' : 'Mute'}
-          className={`rounded-lg px-2 py-1.5 text-xs border transition-colors ${
-            muted
-              ? 'border-red-600 bg-red-900/40 text-red-300'
-              : 'border-gray-600 text-gray-300 hover:border-gray-400'
+          onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); voiceService.startPTT(); }}
+          onPointerUp={() => voiceService.stopPTT()}
+          onPointerCancel={() => voiceService.stopPTT()}
+          disabled={!pttActive && talkingPeerId !== null}
+          title={
+            pttActive ? 'Release to send'
+            : talkingPeerId ? `${talkingPeer?.username ?? '?'} is talking…`
+            : 'Hold to talk'
+          }
+          className={`select-none rounded-lg px-2.5 py-1.5 text-xs font-semibold border transition-all ${
+            pttActive
+              ? 'border-red-500 bg-red-600/60 text-white scale-95 shadow-[0_0_8px_rgba(239,68,68,0.6)]'
+              : talkingPeerId !== null
+                ? 'border-gray-700 bg-gray-800/60 text-gray-600 cursor-not-allowed'
+                : 'border-amber-700 bg-amber-900/30 text-amber-300 hover:bg-amber-800/50 active:scale-95'
           }`}
         >
-          {muted ? '🔇' : '🎤'}
+          {pttActive ? '🔴 talking…' : talkingPeerId ? `🔴 ${talkingPeer?.username ?? '?'}` : '🎤 PTT'}
         </button>
       )}
 
-      {/* Peer avatars — only when in voice and there are peers */}
+      {/* Peer avatars */}
       {inVoice && peers.length > 0 && (
         <div className="flex items-center gap-0.5">
           {peers.map(peer => (
             <div
               key={peer.playerId}
-              title={`${peer.username}${peer.muted ? ' (muted)' : ''}`}
+              title={peer.username}
               className={`flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold border transition-all ${
-                peer.speaking
-                  ? 'border-green-400 bg-green-900/60 shadow-[0_0_6px_rgba(74,222,128,0.6)]'
-                  : peer.muted
-                    ? 'border-red-700 bg-gray-800 text-gray-500'
-                    : 'border-gray-600 bg-gray-800 text-gray-300'
+                peer.talking
+                  ? 'border-green-400 bg-green-900/60 shadow-[0_0_6px_rgba(74,222,128,0.7)] animate-pulse'
+                  : 'border-gray-600 bg-gray-800 text-gray-300'
               }`}
             >
               {peer.username.charAt(0).toUpperCase()}
-              {peer.muted && (
-                <span className="absolute -bottom-0.5 -right-0.5 text-[8px]">🔇</span>
-              )}
             </div>
           ))}
         </div>
       )}
+
     </div>
   );
 }

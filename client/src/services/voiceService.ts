@@ -1,19 +1,23 @@
 /**
- * Voice chat via WebSocket relay.
- * Audio is captured with MediaRecorder (webm/opus, 200ms chunks),
- * sent as base64 through the game's WebSocket server, and played
- * back with Web Audio API scheduled buffering — no WebRTC needed.
+ * Push-to-talk voice chat via WebSocket relay.
+ * Hold PTT → MediaRecorder captures the full press duration as one blob →
+ * release PTT → complete self-contained webm sent → receiver decodes once.
+ * Only one person can talk at a time (server enforced).
  */
 import { wsService } from './wsService.js';
 
 export interface VoicePeer {
   playerId: string;
   username: string;
-  muted: boolean;
-  speaking: boolean;
+  talking: boolean;
 }
 
-type StateListener = (peers: VoicePeer[], inVoice: boolean, muted: boolean) => void;
+type StateListener = (
+  peers: VoicePeer[],
+  inVoice: boolean,
+  pttActive: boolean,
+  talkingPeerId: string | null,
+) => void;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -37,19 +41,17 @@ class VoiceService {
   private gameId: string | null = null;
   private localStream: MediaStream | null = null;
   private recorder: MediaRecorder | null = null;
-  private headerBlob: Blob | null = null;   // webm init segment — prepended to every chunk
-  private chunkInterval: ReturnType<typeof setInterval> | null = null;
   private mimeType = 'audio/webm;codecs=opus';
 
   private inVoice = false;
-  private muted = false;
+  private pttActive = false;
+  private talkingPeerId: string | null = null;   // peer currently holding PTT
+
   private listeners: StateListener[] = [];
   private wsUnsub: (() => void) | null = null;
+  private peerMeta = new Map<string, { username: string; talking: boolean }>();
 
-  // Peer display metadata
-  private peerMeta = new Map<string, { username: string; muted: boolean; speaking: boolean }>();
-
-  // Playback: one AudioContext, per-peer scheduling cursor
+  // Playback
   private audioCtx: AudioContext | null = null;
   private nextPlayTime = new Map<string, number>();
 
@@ -73,6 +75,15 @@ class VoiceService {
     return () => { this.listeners = this.listeners.filter(l => l !== fn); };
   }
 
+  getState() {
+    return {
+      peers: this.buildPeerList(),
+      inVoice: this.inVoice,
+      pttActive: this.pttActive,
+      talkingPeerId: this.talkingPeerId,
+    };
+  }
+
   // ── Public API ──────────────────────────────────────────────────────────────
 
   async join() {
@@ -83,77 +94,53 @@ class VoiceService {
       alert('Could not access microphone.');
       return;
     }
+    this.mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : 'audio/webm';
     this.inVoice = true;
-    this.muted = false;
-    this.startRecording();
     wsService.send({ type: 'VOICE_JOIN', payload: { gameId: this.gameId } });
     this.notify();
   }
 
   leave() {
     if (!this.inVoice || !this.gameId) return;
+    this.stopPTT();
     wsService.send({ type: 'VOICE_LEAVE', payload: { gameId: this.gameId } });
     this.cleanup();
   }
 
-  toggleMute() {
-    if (!this.inVoice || !this.gameId) return;
-    this.muted = !this.muted;
-    this.localStream?.getAudioTracks().forEach(t => { t.enabled = !this.muted; });
-    wsService.send({ type: 'VOICE_MUTE', payload: { gameId: this.gameId, muted: this.muted } });
-    this.notify();
-  }
-
-  getState() {
-    const peers: VoicePeer[] = [...this.peerMeta.entries()].map(([id, m]) => ({
-      playerId: id, username: m.username, muted: m.muted, speaking: m.speaking,
-    }));
-    return { peers, inVoice: this.inVoice, muted: this.muted };
-  }
-
-  // ── Recording ───────────────────────────────────────────────────────────────
-
-  private startRecording() {
+  /** Called on pointerdown of PTT button */
+  startPTT() {
+    if (!this.inVoice || !this.gameId || this.pttActive || this.talkingPeerId !== null) return;
     if (!this.localStream) return;
 
-    this.mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-      ? 'audio/webm;codecs=opus'
-      : 'audio/webm';
+    this.pttActive = true;
 
     this.recorder = new MediaRecorder(this.localStream, {
       mimeType: this.mimeType,
       audioBitsPerSecond: 32000,
     });
-    this.headerBlob = null;
 
     this.recorder.ondataavailable = async (e) => {
-      if (e.data.size === 0 || !this.inVoice || !this.gameId) return;
-
-      if (!this.headerBlob) {
-        // requestData() was called immediately after start() before any
-        // audio was encoded, so this first blob is pure webm container
-        // headers (EBML + track info) with no audio frames.
-        this.headerBlob = e.data;
-        return;
-      }
-
-      if (this.muted) return;
-
-      // Combine pure header + audio-only chunk → self-contained decodable webm
-      const combined = new Blob([this.headerBlob, e.data], { type: this.mimeType });
-      const data = toBase64(await combined.arrayBuffer());
+      if (e.data.size === 0 || !this.gameId) return;
+      // Complete self-contained webm blob — no header tricks needed
+      const data = toBase64(await e.data.arrayBuffer());
       wsService.send({ type: 'VOICE_AUDIO', payload: { gameId: this.gameId, data } });
     };
 
-    // Start without a timeslice, then immediately request data to capture
-    // the pure webm header before any audio frames are encoded.
     this.recorder.start();
-    this.recorder.requestData(); // → ondataavailable fires with header-only blob
+    wsService.send({ type: 'VOICE_PTT_START', payload: { gameId: this.gameId } });
+    this.notify();
+  }
 
-    // Poll for audio chunks every 100ms
-    this.chunkInterval = setInterval(() => {
-      if (this.recorder?.state === 'recording') this.recorder.requestData();
-    }, 100);
+  /** Called on pointerup / pointercancel of PTT button */
+  stopPTT() {
+    if (!this.pttActive || !this.gameId) return;
+    this.pttActive = false;
+    this.recorder?.stop();   // triggers ondataavailable with the full blob
+    this.recorder = null;
+    wsService.send({ type: 'VOICE_PTT_END', payload: { gameId: this.gameId } });
+    this.notify();
   }
 
   // ── Server messages ─────────────────────────────────────────────────────────
@@ -161,32 +148,41 @@ class VoiceService {
   private handleServerMsg(msg: { type: string; payload: any }) {
     switch (msg.type) {
       case 'VOICE_PEERS': {
-        for (const peer of msg.payload.peers as Array<{ playerId: string; username: string; muted: boolean }>) {
-          this.peerMeta.set(peer.playerId, { username: peer.username, muted: peer.muted, speaking: false });
+        this.peerMeta.clear();
+        for (const p of msg.payload.peers as Array<{ playerId: string; username: string }>) {
+          this.peerMeta.set(p.playerId, { username: p.username, talking: false });
         }
         this.notify();
         break;
       }
       case 'VOICE_PEER_JOINED': {
-        const { playerId, username } = msg.payload;
-        this.peerMeta.set(playerId, { username, muted: false, speaking: false });
+        this.peerMeta.set(msg.payload.playerId, { username: msg.payload.username, talking: false });
         this.notify();
         break;
       }
       case 'VOICE_PEER_LEFT': {
         this.peerMeta.delete(msg.payload.playerId);
+        if (this.talkingPeerId === msg.payload.playerId) this.talkingPeerId = null;
         this.nextPlayTime.delete(msg.payload.playerId);
         this.notify();
         break;
       }
-      case 'VOICE_PEER_MUTED': {
+      case 'VOICE_PEER_TALKING': {
         const meta = this.peerMeta.get(msg.payload.playerId);
-        if (meta) meta.muted = msg.payload.muted;
+        if (meta) meta.talking = true;
+        this.talkingPeerId = msg.payload.playerId;
+        this.notify();
+        break;
+      }
+      case 'VOICE_PEER_STOPPED': {
+        const meta = this.peerMeta.get(msg.payload.playerId);
+        if (meta) meta.talking = false;
+        if (this.talkingPeerId === msg.payload.playerId) this.talkingPeerId = null;
         this.notify();
         break;
       }
       case 'VOICE_AUDIO': {
-        if (this.inVoice) this.playChunk(msg.payload.fromId, msg.payload.data);
+        if (this.inVoice) this.playAudio(msg.payload.fromId, msg.payload.data);
         break;
       }
     }
@@ -201,52 +197,31 @@ class VoiceService {
     return this.audioCtx;
   }
 
-  private async playChunk(peerId: string, base64: string) {
+  private async playAudio(peerId: string, base64: string) {
     try {
       const ctx = this.getAudioCtx();
       if (ctx.state === 'suspended') await ctx.resume();
 
       const audioBuffer = await ctx.decodeAudioData(fromBase64(base64));
-
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(ctx.destination);
-
-      // Schedule back-to-back so chunks play gaplessly
-      const now = ctx.currentTime;
-      const cursor = this.nextPlayTime.get(peerId) ?? now;
-      // If cursor fell more than 200ms behind (silence gap), reset to now
-      const startAt = cursor < now - 0.2 ? now : Math.max(now, cursor);
-      source.start(startAt);
-      this.nextPlayTime.set(peerId, startAt + audioBuffer.duration);
-
-      // Speaking indicator: mark active, clear after chunk plays out
-      const meta = this.peerMeta.get(peerId);
-      if (meta && !meta.speaking) {
-        meta.speaking = true;
-        this.notify();
-      }
-      setTimeout(() => {
-        const m = this.peerMeta.get(peerId);
-        if (m?.speaking) { m.speaking = false; this.notify(); }
-      }, (startAt - now + audioBuffer.duration + 0.15) * 1000);
-
+      source.start();   // play immediately — it's a complete utterance
     } catch {
-      // Chunk failed to decode — skip silently
+      // Decode failed — skip
     }
   }
 
   // ── Cleanup ─────────────────────────────────────────────────────────────────
 
   private cleanup() {
-    if (this.chunkInterval) { clearInterval(this.chunkInterval); this.chunkInterval = null; }
     this.recorder?.stop();
     this.recorder = null;
-    this.headerBlob = null;
     this.localStream?.getTracks().forEach(t => t.stop());
     this.localStream = null;
     this.inVoice = false;
-    this.muted = false;
+    this.pttActive = false;
+    this.talkingPeerId = null;
     this.peerMeta.clear();
     this.nextPlayTime.clear();
     this.audioCtx?.close();
@@ -254,11 +229,18 @@ class VoiceService {
     this.notify();
   }
 
-  private notify() {
-    const peers: VoicePeer[] = [...this.peerMeta.entries()].map(([id, m]) => ({
-      playerId: id, username: m.username, muted: m.muted, speaking: m.speaking,
+  private buildPeerList(): VoicePeer[] {
+    return [...this.peerMeta.entries()].map(([id, m]) => ({
+      playerId: id,
+      username: m.username,
+      talking: m.talking,
     }));
-    for (const l of this.listeners) l(peers, this.inVoice, this.muted);
+  }
+
+  private notify() {
+    for (const l of this.listeners) {
+      l(this.buildPeerList(), this.inVoice, this.pttActive, this.talkingPeerId);
+    }
   }
 }
 

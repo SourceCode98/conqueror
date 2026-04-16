@@ -55,7 +55,8 @@ export type ClientMessage =
   | WSMessage<'KICK_VOTE',              { gameId: string; vote: boolean }>
   | WSMessage<'VOICE_JOIN',             { gameId: string }>
   | WSMessage<'VOICE_LEAVE',            { gameId: string }>
-  | WSMessage<'VOICE_MUTE',             { gameId: string; muted: boolean }>
+  | WSMessage<'VOICE_PTT_START',        { gameId: string }>
+  | WSMessage<'VOICE_PTT_END',          { gameId: string }>
   | WSMessage<'VOICE_AUDIO',            { gameId: string; data: string }>;
 
 // ─── Server → Client ──────────────────────────────────────────────────────────
@@ -88,8 +89,9 @@ export type ServerMessage =
   | WSMessage<'KICK_VOTE_UPDATE',       { targetId: string; targetUsername: string; initiatorUsername: string; votes: Record<string, boolean | null>; secondsLeft: number; eligibleCount: number }>
   | WSMessage<'KICK_VOTE_ENDED',        { targetUsername: string; result: 'kicked' | 'failed' }>
   | WSMessage<'PLAYER_KICKED',          { playerId: string; username: string }>
-  | WSMessage<'VOICE_PEERS',            { peers: Array<{ playerId: string; username: string; muted: boolean }> }>
+  | WSMessage<'VOICE_PEERS',            { peers: Array<{ playerId: string; username: string }> }>
   | WSMessage<'VOICE_PEER_JOINED',      { playerId: string; username: string }>
   | WSMessage<'VOICE_PEER_LEFT',        { playerId: string }>
-  | WSMessage<'VOICE_PEER_MUTED',       { playerId: string; muted: boolean }>
+  | WSMessage<'VOICE_PEER_TALKING',     { playerId: string; username: string }>
+  | WSMessage<'VOICE_PEER_STOPPED',     { playerId: string }>
   | WSMessage<'VOICE_AUDIO',            { fromId: string; data: string }>;

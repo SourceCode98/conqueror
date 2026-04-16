@@ -56,7 +56,8 @@ const KICK_VOTE_TIMEOUT_MS = 30_000;
 
 // ─── Voice rooms ──────────────────────────────────────────────────────────────
 // gameId → Map<playerId, { ws, username, muted }>
-const voiceRooms = new Map<string, Map<string, { ws: WebSocket; username: string; muted: boolean }>>();
+const voiceRooms = new Map<string, Map<string, { ws: WebSocket; username: string }>>();
+const voiceTalking = new Map<string, string>(); // gameId → talkingUserId
 
 function startPlayAgainSession(gameId: string, playerIds: string[], turnTimeLimit: number | null, hornCooldownSecs: number): void {
   const existing = playAgainSessions.get(gameId);
@@ -325,10 +326,11 @@ function handleMessage(ws: WebSocket, data: RawData): void {
     return;
   }
 
-  if (msg.type === 'VOICE_JOIN') { handleVoiceJoin(ws); return; }
-  if (msg.type === 'VOICE_LEAVE') { handleVoiceLeave(ws); return; }
-  if (msg.type === 'VOICE_MUTE') { handleVoiceMute(ws, (msg.payload as any).muted); return; }
-  if (msg.type === 'VOICE_AUDIO') { handleVoiceAudio(ws, (msg.payload as any).data); return; }
+  if (msg.type === 'VOICE_JOIN')      { handleVoiceJoin(ws); return; }
+  if (msg.type === 'VOICE_LEAVE')     { handleVoiceLeave(ws); return; }
+  if (msg.type === 'VOICE_PTT_START') { handleVoicePTTStart(ws); return; }
+  if (msg.type === 'VOICE_PTT_END')   { handleVoicePTTEnd(ws); return; }
+  if (msg.type === 'VOICE_AUDIO')     { handleVoiceAudio(ws, (msg.payload as any).data); return; }
 
   const orch = getOrLoadOrchestrator(meta.gameId);
   if (!orch) {
@@ -683,21 +685,19 @@ function handleVoiceJoin(ws: WebSocket): void {
 
   if (!voiceRooms.has(gameId)) voiceRooms.set(gameId, new Map());
   const vRoom = voiceRooms.get(gameId)!;
-  if (vRoom.has(userId)) return; // already in
+  if (vRoom.has(userId)) return;
 
-  vRoom.set(userId, { ws, username, muted: false });
+  vRoom.set(userId, { ws, username });
 
-  // Send current peers to the joiner
   sendTo(ws, {
     type: 'VOICE_PEERS',
     payload: {
       peers: [...vRoom.entries()]
         .filter(([id]) => id !== userId)
-        .map(([id, p]) => ({ playerId: id, username: p.username, muted: p.muted })),
+        .map(([id, p]) => ({ playerId: id, username: p.username })),
     },
   });
 
-  // Notify everyone else
   for (const [id, peer] of vRoom) {
     if (id !== userId && peer.ws.readyState === WebSocket.OPEN) {
       peer.ws.send(JSON.stringify({ type: 'VOICE_PEER_JOINED', payload: { playerId: userId, username } }));
@@ -711,7 +711,9 @@ function handleVoiceLeave(ws: WebSocket): void {
   const vRoom = voiceRooms.get(meta.gameId);
   if (!vRoom) return;
   vRoom.delete(meta.userId);
-  if (vRoom.size === 0) voiceRooms.delete(meta.gameId);
+  if (vRoom.size === 0) { voiceRooms.delete(meta.gameId); voiceTalking.delete(meta.gameId); }
+  // Release PTT lock if this player held it
+  if (voiceTalking.get(meta.gameId) === meta.userId) voiceTalking.delete(meta.gameId);
   for (const peer of vRoom.values()) {
     if (peer.ws.readyState === WebSocket.OPEN) {
       peer.ws.send(JSON.stringify({ type: 'VOICE_PEER_LEFT', payload: { playerId: meta.userId } }));
@@ -719,16 +721,32 @@ function handleVoiceLeave(ws: WebSocket): void {
   }
 }
 
-function handleVoiceMute(ws: WebSocket, muted: boolean): void {
+function handleVoicePTTStart(ws: WebSocket): void {
   const meta = clientMeta.get(ws);
   if (!meta) return;
   const vRoom = voiceRooms.get(meta.gameId);
   if (!vRoom) return;
-  const entry = vRoom.get(meta.userId);
-  if (entry) entry.muted = muted;
+  // Only one talker at a time
+  if (voiceTalking.has(meta.gameId)) return;
+  voiceTalking.set(meta.gameId, meta.userId);
+  const username = vRoom.get(meta.userId)?.username ?? '';
   for (const [id, peer] of vRoom) {
     if (id !== meta.userId && peer.ws.readyState === WebSocket.OPEN) {
-      peer.ws.send(JSON.stringify({ type: 'VOICE_PEER_MUTED', payload: { playerId: meta.userId, muted } }));
+      peer.ws.send(JSON.stringify({ type: 'VOICE_PEER_TALKING', payload: { playerId: meta.userId, username } }));
+    }
+  }
+}
+
+function handleVoicePTTEnd(ws: WebSocket): void {
+  const meta = clientMeta.get(ws);
+  if (!meta) return;
+  if (voiceTalking.get(meta.gameId) !== meta.userId) return;
+  voiceTalking.delete(meta.gameId);
+  const vRoom = voiceRooms.get(meta.gameId);
+  if (!vRoom) return;
+  for (const [id, peer] of vRoom) {
+    if (id !== meta.userId && peer.ws.readyState === WebSocket.OPEN) {
+      peer.ws.send(JSON.stringify({ type: 'VOICE_PEER_STOPPED', payload: { playerId: meta.userId } }));
     }
   }
 }
@@ -756,7 +774,7 @@ function handleDisconnect(ws: WebSocket): void {
     if (room.size === 0) rooms.delete(meta.gameId);
   }
 
-  // Auto-leave voice chat on disconnect
+  // Auto-leave voice chat on disconnect (also releases PTT lock)
   handleVoiceLeave(ws);
 
   const orch = getOrLoadOrchestrator(meta.gameId);
