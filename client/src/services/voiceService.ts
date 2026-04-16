@@ -38,6 +38,7 @@ class VoiceService {
   private localStream: MediaStream | null = null;
   private recorder: MediaRecorder | null = null;
   private headerBlob: Blob | null = null;   // webm init segment — prepended to every chunk
+  private chunkInterval: ReturnType<typeof setInterval> | null = null;
   private mimeType = 'audio/webm;codecs=opus';
 
   private inVoice = false;
@@ -129,21 +130,30 @@ class VoiceService {
       if (e.data.size === 0 || !this.inVoice || !this.gameId) return;
 
       if (!this.headerBlob) {
-        // First chunk = webm init segment. Save it and combine with the
-        // next chunk so we don't lose the first 60ms of audio.
+        // requestData() was called immediately after start() before any
+        // audio was encoded, so this first blob is pure webm container
+        // headers (EBML + track info) with no audio frames.
         this.headerBlob = e.data;
         return;
       }
 
       if (this.muted) return;
 
-      // Combine header + audio chunk → self-contained decodable webm
+      // Combine pure header + audio-only chunk → self-contained decodable webm
       const combined = new Blob([this.headerBlob, e.data], { type: this.mimeType });
       const data = toBase64(await combined.arrayBuffer());
       wsService.send({ type: 'VOICE_AUDIO', payload: { gameId: this.gameId, data } });
     };
 
-    this.recorder.start(60); // 60ms slices → minimal recording latency
+    // Start without a timeslice, then immediately request data to capture
+    // the pure webm header before any audio frames are encoded.
+    this.recorder.start();
+    this.recorder.requestData(); // → ondataavailable fires with header-only blob
+
+    // Poll for audio chunks every 100ms
+    this.chunkInterval = setInterval(() => {
+      if (this.recorder?.state === 'recording') this.recorder.requestData();
+    }, 100);
   }
 
   // ── Server messages ─────────────────────────────────────────────────────────
@@ -229,6 +239,7 @@ class VoiceService {
   // ── Cleanup ─────────────────────────────────────────────────────────────────
 
   private cleanup() {
+    if (this.chunkInterval) { clearInterval(this.chunkInterval); this.chunkInterval = null; }
     this.recorder?.stop();
     this.recorder = null;
     this.headerBlob = null;
