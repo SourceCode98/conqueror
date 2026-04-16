@@ -129,22 +129,21 @@ class VoiceService {
       if (e.data.size === 0 || !this.inVoice || !this.gameId) return;
 
       if (!this.headerBlob) {
-        // First chunk is the webm init segment (container header).
-        // We keep it and prepend it to every subsequent chunk so each
-        // packet is a self-contained decodable webm blob.
+        // First chunk = webm init segment. Save it and combine with the
+        // next chunk so we don't lose the first 60ms of audio.
         this.headerBlob = e.data;
         return;
       }
 
       if (this.muted) return;
 
-      // Combine header + audio chunk → decodable webm
+      // Combine header + audio chunk → self-contained decodable webm
       const combined = new Blob([this.headerBlob, e.data], { type: this.mimeType });
       const data = toBase64(await combined.arrayBuffer());
       wsService.send({ type: 'VOICE_AUDIO', payload: { gameId: this.gameId, data } });
     };
 
-    this.recorder.start(200); // 200 ms slices → ~160ms latency after network
+    this.recorder.start(60); // 60ms slices → minimal recording latency
   }
 
   // ── Server messages ─────────────────────────────────────────────────────────
@@ -206,8 +205,8 @@ class VoiceService {
       // Schedule back-to-back so chunks play gaplessly
       const now = ctx.currentTime;
       const cursor = this.nextPlayTime.get(peerId) ?? now;
-      // If cursor is more than 500ms behind now the peer fell silent; reset
-      const startAt = cursor < now - 0.5 ? now + 0.05 : Math.max(now + 0.01, cursor);
+      // If cursor fell more than 200ms behind (silence gap), reset to now
+      const startAt = cursor < now - 0.2 ? now : Math.max(now, cursor);
       source.start(startAt);
       this.nextPlayTime.set(peerId, startAt + audioBuffer.duration);
 
