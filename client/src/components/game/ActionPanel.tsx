@@ -83,17 +83,20 @@ export default function ActionPanel({ gameState, gameId }: Props) {
   const dragCardRef = useRef<DragCard | null>(null);
   dragCardRef.current = dragCard;
 
+  const rafPending = useRef(false);
   const onCardMove = useCallback((e: PointerEvent) => {
-    setDragCard(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null);
-    // Check if over drop zone
-    const zone = dropZoneRef.current;
-    if (zone) {
-      const r = zone.getBoundingClientRect();
-      setDropZoneHover(
-        e.clientX >= r.left && e.clientX <= r.right &&
-        e.clientY >= r.top  && e.clientY <= r.bottom
-      );
-    }
+    if (rafPending.current) return;
+    rafPending.current = true;
+    const cx = e.clientX, cy = e.clientY;
+    requestAnimationFrame(() => {
+      rafPending.current = false;
+      setDragCard(prev => prev ? { ...prev, x: cx, y: cy } : null);
+      const zone = dropZoneRef.current;
+      if (zone) {
+        const r = zone.getBoundingClientRect();
+        setDropZoneHover(cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom);
+      }
+    });
   }, []);
 
   const onCardUp = useCallback((e: PointerEvent) => {

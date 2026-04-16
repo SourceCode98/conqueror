@@ -268,7 +268,9 @@ export default function ResourceHand({ resources, devCards }: Props) {
   const [tab, setTab]           = useState<'resources' | 'devcards'>('resources');
   const [isDragging, setIsDragging] = useState(false);
   const [ghostAnchor, setGhostAnchor] = useState<HandAnchor | null>(null);
-  const { tradePanel, tradeSide, _tradeCardCb } = useGameStore();
+  const tradePanel = useGameStore(s => s.tradePanel);
+  const tradeSide = useGameStore(s => s.tradeSide);
+  const _tradeCardCb = useGameStore(s => s._tradeCardCb);
 
   const isDraggingRef   = useRef(false);
   const ghostAnchorRef  = useRef<HandAnchor | null>(null);

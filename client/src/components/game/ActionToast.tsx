@@ -5,7 +5,7 @@
  * - Player actions (build road, settlement, city)
  * - Horn
  */
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'motion/react';
 import type { PublicGameState, ResourceType } from '@conqueror/shared';
@@ -22,6 +22,17 @@ const CARD_THEME: Record<ResourceType, { bg: string; border: string }> = {
   wool:   { bg: '#092b1b', border: '#86efac' },
 };
 
+const ResourceChip = memo(function ResourceChip({ r, count }: { r: ResourceType; count: number }) {
+  if (count <= 0) return null;
+  return (
+    <div className="flex items-center gap-0.5 rounded-lg px-1.5 py-1 border"
+      style={{ backgroundColor: CARD_THEME[r].bg, borderColor: CARD_THEME[r].border }}>
+      {RESOURCE_ICON_MAP[r]?.({ size: 16 })}
+      {count > 1 && <span className="text-[10px] font-bold" style={{ color: CARD_THEME[r].border }}>×{count}</span>}
+    </div>
+  );
+});
+
 const TOAST_DURATION: Record<string, number> = {
   dice_resources: 5000,
   bank_trade: 4000,
@@ -37,7 +48,8 @@ interface Props {
 
 export default function ActionToast({ gameState }: Props) {
   const { t } = useTranslation('game');
-  const { toasts, removeToast } = useGameStore();
+  const toasts = useGameStore(s => s.toasts);
+  const removeToast = useGameStore(s => s.removeToast);
   const timerRefs = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // Auto-dismiss toasts
@@ -57,17 +69,6 @@ export default function ActionToast({ gameState }: Props) {
 
   function playerColor(playerId: string): string {
     return resolvePlayerColor(gameState.players.find(p => p.id === playerId)?.color ?? '#888888');
-  }
-
-  function ResourceChip({ r, count }: { r: ResourceType; count: number }) {
-    if (count <= 0) return null;
-    return (
-      <div className="flex items-center gap-0.5 rounded-lg px-1.5 py-1 border"
-        style={{ backgroundColor: CARD_THEME[r].bg, borderColor: CARD_THEME[r].border }}>
-        {RESOURCE_ICON_MAP[r]?.({ size: 16 })}
-        {count > 1 && <span className="text-[10px] font-bold" style={{ color: CARD_THEME[r].border }}>×{count}</span>}
-      </div>
-    );
   }
 
   return (

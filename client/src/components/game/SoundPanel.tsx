@@ -2,13 +2,11 @@
  * Sound panel: horn button (anti-spam) + mute toggle + music toggle.
  * Uses Web Audio API to generate simple sounds — no external audio files needed.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { wsService } from '../../services/wsService.js';
 import { useGameStore } from '../../store/gameStore.js';
 import { useProfileStore } from '../../store/profileStore.js';
 import { cn } from '../../lib/cn.js';
-import { musicEngine } from './musicEngine.js';
-import { VICTORY_POINTS_TO_WIN } from '@conqueror/shared';
 
 const DEFAULT_HORN_COOLDOWN_MS = 30_000;
 
@@ -180,23 +178,6 @@ export function safePlay(fn: () => void) {
   if (!globalMuted) fn();
 }
 
-// ── Music track + tempo based on leading VP ───────────────────────────────────
-// Tracks ordered by ascending BPM: VILLAGE(100) → TAVERN(118) → CONQUEST(132) → BATTLE(152)
-// DUNGEON(96) excluded from auto-selection — its low BPM breaks the tension curve.
-
-function vpToTrackIdx(ratio: number): number {
-  if (ratio >= 0.75) return 3; // BATTLE   152 BPM — final sprint
-  if (ratio >= 0.50) return 0; // CONQUEST 132 BPM — energetic mid
-  if (ratio >= 0.25) return 4; // TAVERN   118 BPM — building up
-  return 1;                    // VILLAGE  100 BPM — peaceful opening
-}
-
-/** Extra tempo multiplier: ramps from 1.0 at 75% VP to 1.18 at 100% VP */
-function vpToTempoMult(ratio: number): number {
-  if (ratio < 0.75) return 1.0;
-  return 1.0 + (ratio - 0.75) / 0.25 * 0.18; // linear 1.0 → 1.18
-}
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -206,17 +187,37 @@ interface Props {
 
 export default function SoundPanel({ gameId, className }: Props) {
   const [muted, setMuted] = useState(false);
-  const [musicOn, setMusicOn] = useState(true);   // engine running
-  const [panelOpen, setPanelOpen] = useState(false); // volume slider visible
+  const [musicOn, setMusicOn] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [musicVol, setMusicVol] = useState(0.45);
   const [hornDisabled, setHornDisabled] = useState(false);
   const [hornCooldown, setHornCooldown] = useState(0);
-  const [trackIdx, setTrackIdx] = useState(0);
-  const { toasts, gameState } = useGameStore();
+  const toasts = useGameStore(s => s.toasts);
+  const gameState = useGameStore(s => s.gameState);
   const { profile } = useProfileStore();
   const selectedHorn = profile?.selectedHorn ?? 'horn_default';
   const hornCooldownMs = ((gameState?.hornCooldownSecs) ?? 30) * 1000;
-  const musicAutoStarted = useRef(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Create audio element once
+  useEffect(() => {
+    const audio = new Audio('/aoest.mp3');
+    audio.loop = true;
+    audio.volume = musicVol;
+    audioRef.current = audio;
+    const tryStart = () => { audio.play().catch(() => {}); };
+    document.addEventListener('pointerdown', tryStart, { once: true });
+    return () => {
+      document.removeEventListener('pointerdown', tryStart);
+      audio.pause();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync volume
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = musicVol;
+  }, [musicVol]);
 
   // Play SFX sounds when new toasts arrive
   const prevToastLen = useRef(toasts.length);
@@ -236,60 +237,14 @@ export default function SoundPanel({ gameId, className }: Props) {
     prevToastLen.current = toasts.length;
   }, [toasts]);
 
-  // Auto-start music on first user interaction (browsers block audio before a gesture)
-  useEffect(() => {
-    if (!musicOn) return;
-    const tryStart = async () => {
-      if (musicAutoStarted.current || musicEngine.isRunning) return;
-      musicAutoStarted.current = true;
-      await musicEngine.start();
-      musicEngine.setVolume(musicVol);
-    };
-    document.addEventListener('pointerdown', tryStart, { once: true });
-    return () => document.removeEventListener('pointerdown', tryStart);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  function togglePanel() { setPanelOpen(o => !o); }
 
-  // Sync music engine volume when slider changes
-  useEffect(() => {
-    musicEngine.setVolume(musicVol);
-  }, [musicVol]);
-
-  // Auto-select track + tempo based on leading player's VP ratio
-  const leadingVPRatio = useMemo(() => {
-    if (!gameState || gameState.phase === 'GAME_OVER') return 0;
-    const maxVP = Math.max(...gameState.players.map(p => p.victoryPoints));
-    return maxVP / VICTORY_POINTS_TO_WIN;
-  }, [gameState]);
-
-  useEffect(() => {
-    if (!musicEngine.isRunning) return;
-    const idx  = vpToTrackIdx(leadingVPRatio);
-    const mult = vpToTempoMult(leadingVPRatio);
-    if (idx !== trackIdx) {
-      setTrackIdx(idx);
-      musicEngine.setTrack(idx);
-    }
-    musicEngine.setTempoMultiplier(mult);
-  // trackIdx intentionally excluded — we only want to react to VP changes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leadingVPRatio]);
-
-  // 🎵 = toggle panel visibility only (never stops music)
-  function togglePanel() {
-    setPanelOpen(o => !o);
-  }
-
-  // 🔊/🔇 = toggle music engine on/off
-  async function toggleMusic() {
+  function toggleMusic() {
     if (musicOn) {
-      musicEngine.stop();
+      audioRef.current?.pause();
       setMusicOn(false);
     } else {
-      await musicEngine.start();
-      musicEngine.setVolume(musicVol);
-      musicEngine.setTempoMultiplier(vpToTempoMult(leadingVPRatio));
-      musicEngine.setTrack(vpToTrackIdx(leadingVPRatio));
+      audioRef.current?.play().catch(() => {});
       setMusicOn(true);
     }
   }

@@ -35,7 +35,7 @@ export default function TurnTimer({ turnStartTime, turnTimeLimit, isMyTurn, game
       }
     };
 
-    const id = setInterval(tick, 500);
+    const id = setInterval(tick, 1000);
     tick();
     return () => clearInterval(id);
   }, [turnStartTime, turnTimeLimit, isMyTurn, gameId]);

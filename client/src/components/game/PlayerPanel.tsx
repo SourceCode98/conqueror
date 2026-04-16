@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PublicPlayerState } from '@conqueror/shared';
 import { ALL_RESOURCES } from '@conqueror/shared';
@@ -10,9 +11,9 @@ interface Props {
   isActive: boolean;
 }
 
-export default function PlayerPanel({ player, isActive }: Props) {
+export default memo(function PlayerPanel({ player, isActive }: Props) {
   const { t } = useTranslation('game');
-  const { localPlayerId } = useGameStore();
+  const localPlayerId = useGameStore(s => s.localPlayerId);
   const isMe = player.id === localPlayerId;
   const color = PLAYER_COLOR_HEX[player.color] ?? '#888';
   const totalCards = ALL_RESOURCES.reduce((s, r) => s + player.resources[r], 0);
@@ -108,4 +109,4 @@ export default function PlayerPanel({ player, isActive }: Props) {
       </div>
     </div>
   );
-}
+});

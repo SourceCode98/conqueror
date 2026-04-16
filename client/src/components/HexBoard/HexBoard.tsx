@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { memo, useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PublicGameState, VertexId, EdgeId, AxialCoord, HexTile, ResourceType } from '@conqueror/shared';
 import { edgeVertices, adjacentVertices, roadDistanceToVertex, vertexToVertexDistance, MAX_SOLDIERS_CITY, MAX_SOLDIERS_SETTLEMENT } from '@conqueror/shared';
@@ -379,6 +379,107 @@ function PortLabel({
 
 const MIN_DRAG_PX = 12; // minimum screen pixels to move before a drag becomes a placement
 
+interface TileLayerProps {
+  tiles: HexTile[];
+  ports: PublicGameState['board']['ports'];
+  banditLocation: AxialCoord;
+  glowCoords: Set<string>;
+  boardMode: string | null;
+  myTurn: boolean;
+  showDragBandit: boolean;
+  validSnapTile: AxialCoord | null;
+  onTileClick: (coord: AxialCoord) => void;
+  onBanditPointerDown: (e: React.PointerEvent<SVGGElement>) => void;
+}
+
+const TileLayer = memo(function TileLayer({
+  tiles, ports, banditLocation, glowCoords, boardMode, myTurn,
+  showDragBandit, validSnapTile, onTileClick, onBanditPointerDown,
+}: TileLayerProps) {
+  const isRobberClickable = boardMode === 'move_bandit' && myTurn;
+  return (
+    <>
+      {ports.map((port, i) => (
+        <PortLabel key={i} vertices={port.vertices} resource={port.resource as ResourceType | null} ratio={port.ratio} />
+      ))}
+      {tiles.map(tile => {
+        const center = axialToPixel(tile.coord);
+        const corners = hexCornerPoints(center);
+        const pts = cornerPointsToString(corners);
+        const innerPts = innerHexPoints(center, 0.87);
+        const fillColor = TERRAIN_COLORS[tile.terrain] ?? '#1a2a1a';
+        const hlColor = TERRAIN_HIGHLIGHT[tile.terrain] ?? '#2a3a2a';
+        const pips = tile.numberToken ? TOKEN_PIPS[tile.numberToken] : 0;
+        const isHot = tile.numberToken === 6 || tile.numberToken === 8;
+        const isBandit = banditLocation.q === tile.coord.q && banditLocation.r === tile.coord.r;
+        const isSnapTarget = showDragBandit && !isBandit &&
+          validSnapTile?.q === tile.coord.q && validSnapTile?.r === tile.coord.r;
+        const clickable = isRobberClickable;
+        const isGlowing = glowCoords.has(`${tile.coord.q}:${tile.coord.r}`);
+        const visuallyClickable = clickable && !isBandit;
+
+        return (
+          <g key={`${tile.coord.q}:${tile.coord.r}`}
+            onClick={() => clickable && onTileClick(tile.coord)}
+            style={{ cursor: visuallyClickable ? 'pointer' : 'default' }}>
+            <polygon points={pts} fill={fillColor}
+              stroke={isSnapTarget ? '#ffcc00' : visuallyClickable ? '#ffcc00' : isGlowing ? '#fbbf24' : 'rgba(0,0,0,0.6)'}
+              strokeWidth={isSnapTarget ? 3 : visuallyClickable ? 2.5 : isGlowing ? 2 : 1.5} />
+            <polygon points={innerPts} fill="none"
+              stroke={hlColor} strokeWidth={1} opacity={0.5} />
+            <TerrainIcon terrain={tile.terrain} cx={center.x} cy={center.y - (tile.numberToken ? 14 : 0)} />
+            {showDragBandit && !isBandit && (
+              <polygon points={pts} fill="rgba(255,200,0,0.1)" stroke="rgba(255,200,0,0.3)" strokeWidth={2}
+                style={{ pointerEvents: 'none' }} />
+            )}
+            {isGlowing && (
+              <g style={{ pointerEvents: 'none' }}>
+                <polygon points={pts} fill="rgba(251,191,36,0.10)" stroke="none">
+                  <animate attributeName="fill-opacity" values="0.10;0.22;0.10" dur="0.9s" repeatCount="indefinite" />
+                </polygon>
+                <polygon points={pts} fill="none" stroke="#fbbf24" filter="url(#diceGlow)">
+                  <animate attributeName="stroke-width" values="2;5;2" dur="0.9s" repeatCount="indefinite" />
+                  <animate attributeName="stroke-opacity" values="1;0.35;1" dur="0.9s" repeatCount="indefinite" />
+                </polygon>
+              </g>
+            )}
+            {tile.numberToken && (
+              <g filter={isGlowing ? 'url(#diceGlow)' : isHot ? 'url(#hotGlow)' : undefined}>
+                {isGlowing && (
+                  <circle cx={center.x} cy={center.y} r={18} fill="none" stroke="#fbbf24" strokeWidth={2} style={{ pointerEvents: 'none' }}>
+                    <animate attributeName="r" values="18;32;18" dur="0.9s" repeatCount="indefinite" />
+                    <animate attributeName="stroke-opacity" values="0.9;0;0.9" dur="0.9s" repeatCount="indefinite" />
+                  </circle>
+                )}
+                {/* Token disc */}
+                <circle cx={center.x} cy={center.y} r={18}
+                  fill="#0a0a0a" stroke={isHot ? '#ff4444' : '#2a2a2a'} strokeWidth={2} />
+                <circle cx={center.x} cy={center.y} r={15}
+                  fill="none" stroke={isHot ? '#ff444440' : '#ffffff18'} strokeWidth={1} />
+                <text x={center.x} y={center.y + 5}
+                  textAnchor="middle" fontSize={13} fontWeight="bold"
+                  fill={tokenColor(tile.numberToken)}>
+                  {tile.numberToken}
+                </text>
+                {Array.from({ length: pips }, (_, i) => (
+                  <circle key={i}
+                    cx={center.x - ((pips - 1) * 3.5) + i * 7} cy={center.y + 15}
+                    r={2} fill={tokenColor(tile.numberToken!)} />
+                ))}
+              </g>
+            )}
+            {isBandit && !showDragBandit && (
+              <BanditSvg cx={center.x} cy={center.y - 14}
+                draggable={myTurn && boardMode === 'move_bandit'}
+                onPointerDown={onBanditPointerDown} />
+            )}
+          </g>
+        );
+      })}
+    </>
+  );
+});
+
 export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps) {
   const { t } = useTranslation('game');
   const svgRef = useRef<SVGSVGElement>(null);
@@ -401,21 +502,25 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
 
   // Pre-compute valid placement positions (must be before snapVertex uses them)
   const myId = localPlayerId ?? '';
-  let validSettVerts: Set<VertexId> | null = null;
-  let validCityVerts_: Set<VertexId> | null = null;
-  let validEdges: Set<EdgeId> | null = null;
-  try {
-    if (boardMode === 'place_settlement' && myTurn) validSettVerts = validSettlementVerts(state, myId);
-    if (boardMode === 'place_city' && myTurn) validCityVerts_ = validCityVerts(state, myId);
-    if (boardMode === 'place_road' && myTurn) {
-      // When using Road Building card, simulate already-selected edges so the second
-      // road can be highlighted even if it only connects through the first.
+  const validSettVerts = useMemo<Set<VertexId> | null>(() => {
+    if (boardMode !== 'place_settlement' || !myTurn) return null;
+    try { return validSettlementVerts(state, myId); } catch { return null; }
+  }, [boardMode, myTurn, state.buildings, state.roads, myId]);
+
+  const validCityVerts_ = useMemo<Set<VertexId> | null>(() => {
+    if (boardMode !== 'place_city' || !myTurn) return null;
+    try { return validCityVerts(state, myId); } catch { return null; }
+  }, [boardMode, myTurn, state.buildings, myId]);
+
+  const validEdges = useMemo<Set<EdgeId> | null>(() => {
+    if (boardMode !== 'place_road' || !myTurn) return null;
+    try {
       const simState = roadBuildingEdges?.length
         ? { ...state, roads: { ...state.roads, ...Object.fromEntries(roadBuildingEdges.map(e => [e, { playerId: myId }])) } }
         : state;
-      validEdges = validRoadEdges(simState, myId);
-    }
-  } catch { /* fall back to showing all positions */ }
+      return validRoadEdges(simState, myId);
+    } catch { return null; }
+  }, [boardMode, myTurn, state.roads, state.buildings, roadBuildingEdges, myId]);
 
   const snapVertex: VertexId | null =
     dragPiece && (dragPiece.type === 'settlement' || dragPiece.type === 'city')
@@ -672,105 +777,19 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
             stroke="rgba(255,255,255,0.02)" strokeWidth={1} />
         ))}
 
-        {/* ── Ports — rendered before tiles so badges float in the ocean ── */}
-        {state.board.ports.map((port, i) => (
-          <PortLabel key={i} vertices={port.vertices} resource={port.resource as ResourceType | null} ratio={port.ratio} />
-        ))}
-
-        {/* ── Hex tiles ── */}
-        {state.board.tiles.map(tile => {
-          const center = axialToPixel(tile.coord);
-          const corners = hexCornerPoints(center);
-          const pts = cornerPointsToString(corners);
-          const innerPts = innerHexPoints(center, 0.87);
-          const fillColor = TERRAIN_COLORS[tile.terrain] ?? '#1a2a1a';
-          const hlColor = TERRAIN_HIGHLIGHT[tile.terrain] ?? '#2a3a2a';
-          const pips = tile.numberToken ? TOKEN_PIPS[tile.numberToken] : 0;
-          const isHot = tile.numberToken === 6 || tile.numberToken === 8;
-          const isBandit = state.banditLocation.q === tile.coord.q && state.banditLocation.r === tile.coord.r;
-          const isSnapTarget = showDragBandit && !isBandit &&
-            validSnapTile?.q === tile.coord.q && validSnapTile?.r === tile.coord.r;
-          // All tiles (including bandit's tile) receive click events in ROBBER mode
-          // so that a tap on the bandit icon can fall through. handleTileClick guards same-tile.
-          const clickable = isRobberClickable;
-
-          const isGlowing = glowCoords.has(`${tile.coord.q}:${tile.coord.r}`);
-          // Visual clickable (amber border + pointer cursor): non-bandit tiles only
-          const visuallyClickable = clickable && !isBandit;
-
-          return (
-            <g key={`${tile.coord.q}:${tile.coord.r}`}
-              onClick={() => clickable && handleTileClick(tile.coord)}
-              style={{ cursor: visuallyClickable ? 'pointer' : 'default' }}>
-              {/* Outer hex — dark border */}
-              <polygon points={pts} fill={fillColor}
-                stroke={isSnapTarget ? '#ffcc00' : visuallyClickable ? '#ffcc00' : isGlowing ? '#fbbf24' : 'rgba(0,0,0,0.6)'}
-                strokeWidth={isSnapTarget ? 3 : visuallyClickable ? 2.5 : isGlowing ? 2 : 1.5} />
-
-              {/* Inner highlight edge — simulates 3D bevel */}
-              <polygon points={innerPts} fill="none"
-                stroke={hlColor} strokeWidth={1} opacity={0.5} />
-
-              {/* Terrain icon */}
-              <TerrainIcon terrain={tile.terrain} cx={center.x} cy={center.y - (tile.numberToken ? 14 : 0)} />
-
-              {/* Drag-over bandit tint */}
-              {showDragBandit && !isBandit && (
-                <polygon points={pts} fill="rgba(255,200,0,0.1)" stroke="rgba(255,200,0,0.3)" strokeWidth={2}
-                  style={{ pointerEvents: 'none' }} />
-              )}
-
-              {/* Dice-roll glow: pulsing ring + fill */}
-              {isGlowing && (
-                <g style={{ pointerEvents: 'none' }}>
-                  <polygon points={pts} fill="rgba(251,191,36,0.10)" stroke="none">
-                    <animate attributeName="fill-opacity" values="0.10;0.22;0.10" dur="0.9s" repeatCount="indefinite" />
-                  </polygon>
-                  <polygon points={pts} fill="none" stroke="#fbbf24" filter="url(#diceGlow)">
-                    <animate attributeName="stroke-width" values="2;5;2" dur="0.9s" repeatCount="indefinite" />
-                    <animate attributeName="stroke-opacity" values="1;0.35;1" dur="0.9s" repeatCount="indefinite" />
-                  </polygon>
-                </g>
-              )}
-
-              {/* Number token */}
-              {tile.numberToken && (
-                <g filter={isGlowing ? 'url(#diceGlow)' : isHot ? 'url(#hotGlow)' : undefined}>
-                  {/* Ripple ring expanding from token when glowing */}
-                  {isGlowing && (
-                    <circle cx={center.x} cy={center.y} r={18} fill="none" stroke="#fbbf24" strokeWidth={2} style={{ pointerEvents: 'none' }}>
-                      <animate attributeName="r" values="18;32;18" dur="0.9s" repeatCount="indefinite" />
-                      <animate attributeName="stroke-opacity" values="0.9;0;0.9" dur="0.9s" repeatCount="indefinite" />
-                    </circle>
-                  )}
-                  {/* Token disc */}
-                  <circle cx={center.x} cy={center.y} r={18}
-                    fill="#0a0a0a" stroke={isHot ? '#ff4444' : '#2a2a2a'} strokeWidth={2} />
-                  <circle cx={center.x} cy={center.y} r={15}
-                    fill="none" stroke={isHot ? '#ff444440' : '#ffffff18'} strokeWidth={1} />
-                  <text x={center.x} y={center.y + 5}
-                    textAnchor="middle" fontSize={13} fontWeight="bold"
-                    fill={tokenColor(tile.numberToken)}>
-                    {tile.numberToken}
-                  </text>
-                  {/* Probability pips */}
-                  {Array.from({ length: pips }, (_, i) => (
-                    <circle key={i}
-                      cx={center.x - ((pips - 1) * 3.5) + i * 7} cy={center.y + 15}
-                      r={2} fill={tokenColor(tile.numberToken!)} />
-                  ))}
-                </g>
-              )}
-
-              {/* Bandit token */}
-              {isBandit && !showDragBandit && (
-                <BanditSvg cx={center.x} cy={center.y - 14}
-                  draggable={myTurn && boardMode === 'move_bandit'}
-                  onPointerDown={handleBanditPointerDown} />
-              )}
-            </g>
-          );
-        })}
+        {/* ── Tiles + Ports (memoized — re-renders only on bandit/glow/mode change) ── */}
+        <TileLayer
+          tiles={state.board.tiles}
+          ports={state.board.ports}
+          banditLocation={state.banditLocation}
+          glowCoords={glowCoords}
+          boardMode={boardMode}
+          myTurn={myTurn}
+          showDragBandit={showDragBandit}
+          validSnapTile={validSnapTile}
+          onTileClick={handleTileClick}
+          onBanditPointerDown={handleBanditPointerDown}
+        />
 
         {/* ── Roads ── */}
         {Object.entries(state.roads).map(([edgeId, road]) => {

@@ -28,7 +28,6 @@ import TurnTimer from '../components/game/TurnTimer.js';
 import BuildCostTable from '../components/game/BuildCostTable.js';
 import WarRulesModal from '../components/game/WarRulesModal.js';
 import SoundPanel from '../components/game/SoundPanel.js';
-import { musicEngine } from '../components/game/musicEngine.js';
 import DiscardPanel from '../components/game/DiscardPanel.js';
 import ProfilePanel from '../components/profile/ProfilePanel.js';
 import KickVoteModal from '../components/game/KickVoteModal.js';
@@ -219,6 +218,11 @@ export default function GamePage() {
   const chatMessages     = useGameStore(s => s.chatMessages);
   const lobbySettings      = useGameStore(s => s.lobbySettings);
   const coliseumBattleOver = useGameStore(s => s.coliseumBattleOver);
+  const combatModal    = useGameStore(s => s.combatModal);
+  const dealClosed     = useGameStore(s => s.dealClosed);
+  const warEvent       = useGameStore(s => s.warEvent);
+  const monopolyEvent  = useGameStore(s => s.monopolyEvent);
+  const kickVote       = useGameStore(s => s.kickVote);
   const _boardMode    = useGameStore(s => s.boardMode);
   const _roadEdges    = useGameStore(s => s.roadBuildingEdges);
   const _cancelRoad   = useGameStore(s => s.cancelRoadBuilding);
@@ -307,7 +311,6 @@ export default function GamePage() {
 
     return () => {
       wsService.disconnect();
-      musicEngine.stop();
       didConnect.current = false;
     };
   }, [gameId, token, user]);
@@ -1201,22 +1204,22 @@ export default function GamePage() {
       )}
 
       {/* ── Combat result modal ── */}
-      <CombatResultModal />
+      {combatModal && <CombatResultModal />}
 
       {/* ── Coliseum battle overlay ── */}
-      <ColiseumBattle />
+      {gameState?.coliseumBattle && <ColiseumBattle />}
 
       {/* ── Deal closed overlay ── */}
-      <DealClosedOverlay />
+      {dealClosed && <DealClosedOverlay />}
 
       {/* ── War event overlay ── */}
-      <WarEventOverlay />
+      {warEvent && <WarEventOverlay />}
 
       {/* ── Monopoly overlay ── */}
-      <MonopolyOverlay />
+      {monopolyEvent && <MonopolyOverlay />}
 
       {/* ── Vote-kick modal ── */}
-      {gameState && <KickVoteModal gameId={gameId!}/>}
+      {kickVote && <KickVoteModal gameId={gameId!}/>}
 
       {/* ── War rules modal ── */}
       {showWarRules && (

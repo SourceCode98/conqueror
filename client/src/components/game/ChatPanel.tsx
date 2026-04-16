@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { memo, useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useGameStore } from '../../store/gameStore.js';
 import { wsService } from '../../services/wsService.js';
@@ -7,9 +7,9 @@ interface Props {
   gameId: string;
 }
 
-export default function ChatPanel({ gameId }: Props) {
+export default memo(function ChatPanel({ gameId }: Props) {
   const { t } = useTranslation();
-  const { chatMessages } = useGameStore();
+  const chatMessages = useGameStore(s => s.chatMessages);
   const [text, setText] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -28,7 +28,7 @@ export default function ChatPanel({ gameId }: Props) {
       <div className="flex-1 overflow-y-auto p-2 space-y-0.5" style={{ scrollbarWidth: 'none' }}>
         <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{t('chat')}</p>
         {chatMessages.map((msg, i) => (
-          <p key={i} className="text-xs text-gray-300">
+          <p key={`${i}-${msg.timestamp}`} className="text-xs text-gray-300">
             <span className="text-amber-400 font-medium">{msg.username}:</span> {msg.text}
           </p>
         ))}
@@ -51,4 +51,4 @@ export default function ChatPanel({ gameId }: Props) {
       </form>
     </div>
   );
-}
+});
