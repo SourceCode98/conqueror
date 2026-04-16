@@ -132,52 +132,26 @@ function innerHexPoints(center: { x: number; y: number }, scale = 0.88): string 
 
 /** Terrain icon drawn inside each hex tile (SVG, centered at cx/cy offset from tile center) */
 function TerrainIcon({ terrain, cx, cy }: { terrain: string; cx: number; cy: number }) {
-  // Pseudo-random per-tile offset for staggered animations (0–3s)
-  const d = ((Math.abs(cx) * 7 + Math.abs(cy) * 13) % 30) / 10;
-  const d2 = ((Math.abs(cx) * 11 + Math.abs(cy) * 7) % 20) / 10;
-  const op = 0.6;
+  const op = 0.55; // base opacity — readable but not overwhelming
+  const hi = { opacity: op };
 
   if (terrain === 'timber') {
-    const trees = [
-      { dx: -14, dur: 2.4 + d,  begin: 0 },
-      { dx:   0, dur: 2.8 + d2, begin: d * 0.3 },
-      { dx:  14, dur: 2.2 + d,  begin: d2 * 0.4 },
-    ];
+    // Three pine trees
     return (
-      <g opacity={op} pointerEvents="none">
-        {trees.map(({ dx, dur, begin }, i) => {
-          const bx = cx + dx, by = cy + 7;
-          return (
-            <g key={i}>
-              <g>
-                <animateTransform attributeName="transform" type="rotate"
-                  values={`-4 ${bx} ${by};4 ${bx} ${by};-4 ${bx} ${by}`}
-                  dur={`${dur}s`} begin={`${begin}s`} repeatCount="indefinite"/>
-                <polygon points={`${bx},${by-14} ${bx-9},${by} ${bx+9},${by}`} fill="#4ade80" opacity={0.9}/>
-                <polygon points={`${bx},${by-23} ${bx-11},${by-6} ${bx+11},${by-6}`} fill="#22c55e" opacity={0.75}/>
-                <rect x={bx-2.5} y={by} width={5} height={8} fill="#6b3a10" opacity={0.85}/>
-              </g>
-            </g>
-          );
-        })}
-        {/* Occasional falling leaf */}
-        <circle cx={cx+8} cy={cy-5} r={2} fill="#86efac" opacity={0}>
-          <animate attributeName="cy"
-            values={`${cy-5};${cy+20};${cy-5}`}
-            dur={`${4+d}s`} begin={`${2+d2}s`} repeatCount="indefinite"/>
-          <animate attributeName="cx"
-            values={`${cx+8};${cx+14};${cx+8}`}
-            dur={`${4+d}s`} begin={`${2+d2}s`} repeatCount="indefinite"/>
-          <animate attributeName="opacity"
-            values="0;0.5;0.5;0"
-            keyTimes="0;0.1;0.8;1"
-            dur={`${4+d}s`} begin={`${2+d2}s`} repeatCount="indefinite"/>
-        </circle>
+      <g style={hi} pointerEvents="none">
+        {([-14, 0, 14] as number[]).map((dx, i) => (
+          <g key={i} transform={`translate(${cx + dx},${cy})`}>
+            <polygon points="0,-14 -8,0 8,0" fill="#4ade80" opacity={0.9}/>
+            <polygon points="0,-22 -10,-6 10,-6" fill="#22c55e" opacity={0.7}/>
+            <rect x={-2} y={0} width={4} height={7} fill="#854d0e" opacity={0.8}/>
+          </g>
+        ))}
       </g>
     );
   }
 
   if (terrain === 'clay') {
+    // Brick wall pattern — 4 rows × 3 bricks, offset every other row
     const bricks: { x: number; y: number; key: string }[] = [];
     for (let row = 0; row < 4; row++) {
       for (let col = 0; col < 3; col++) {
@@ -189,82 +163,54 @@ function TerrainIcon({ terrain, cx, cy }: { terrain: string; cx: number; cy: num
       }
     }
     return (
-      <g opacity={op} pointerEvents="none">
+      <g style={hi} pointerEvents="none">
         {bricks.map(b => (
           <rect key={b.key} x={b.x} y={b.y} width={16} height={7}
-            fill="#f97316" stroke="#7c2d12" strokeWidth={1} rx={1} opacity={0.88}/>
+            fill="#f97316" stroke="#7c2d12" strokeWidth={1} rx={1} opacity={0.85}/>
         ))}
-        {/* Heat shimmer — subtle wave on top bricks */}
-        <rect x={cx-27} y={cy-18} width={52} height={4} fill="#f97316" opacity={0}>
-          <animate attributeName="opacity" values="0;0.12;0" dur={`${3+d}s`} repeatCount="indefinite"/>
-          <animate attributeName="y" values={`${cy-18};${cy-22};${cy-18}`}
-            dur={`${3+d}s`} repeatCount="indefinite"/>
-        </rect>
       </g>
     );
   }
 
   if (terrain === 'iron') {
-    // Sparkle positions on snow cap
-    const sparks = [
-      { sx: cx-3, sy: cy-23 },
-      { sx: cx+4, sy: cy-20 },
-      { sx: cx,   sy: cy-18 },
-    ];
+    // Mountain peaks
     return (
-      <g opacity={op} pointerEvents="none">
-        <polygon points={`${cx},${cy-27} ${cx-21},${cy+4} ${cx+21},${cy+4}`}
+      <g style={hi} pointerEvents="none">
+        {/* Back peak */}
+        <polygon points={`${cx},${cy - 26} ${cx - 20},${cy + 4} ${cx + 20},${cy + 4}`}
           fill="#94a3b8" opacity={0.5}/>
-        <polygon points={`${cx},${cy-27} ${cx-7},${cy-14} ${cx+7},${cy-14}`}
-          fill="#f1f5f9" opacity={0.88}/>
-        <polygon points={`${cx-17},${cy-14} ${cx-31},${cy+4} ${cx-3},${cy+4}`}
+        {/* Snow cap */}
+        <polygon points={`${cx},${cy - 26} ${cx - 6},${cy - 14} ${cx + 6},${cy - 14}`}
+          fill="#f1f5f9" opacity={0.8}/>
+        {/* Left peak */}
+        <polygon points={`${cx - 16},${cy - 14} ${cx - 30},${cy + 4} ${cx - 2},${cy + 4}`}
           fill="#64748b" opacity={0.7}/>
-        <polygon points={`${cx+17},${cy-15} ${cx+3},${cy+4} ${cx+31},${cy+4}`}
+        {/* Right peak */}
+        <polygon points={`${cx + 16},${cy - 16} ${cx + 2},${cy + 4} ${cx + 30},${cy + 4}`}
           fill="#64748b" opacity={0.65}/>
-        {/* Snow sparkles */}
-        {sparks.map((s, i) => (
-          <circle key={i} cx={s.sx} cy={s.sy} r={1.2} fill="white" opacity={0}>
-            <animate attributeName="opacity"
-              values="0;0.9;0"
-              dur={`${2+i*0.7+d}s`} begin={`${i*0.8+d2}s`} repeatCount="indefinite"/>
-          </circle>
-        ))}
-        {/* Drifting snow dot */}
-        <circle cx={cx+12} cy={cy-10} r={1} fill="white" opacity={0}>
-          <animate attributeName="cy" values={`${cy-10};${cy+8};${cy-10}`}
-            dur={`${3.5+d}s`} begin={`${d2}s`} repeatCount="indefinite"/>
-          <animate attributeName="opacity" values="0;0.6;0;0.6;0"
-            dur={`${3.5+d}s`} begin={`${d2}s`} repeatCount="indefinite"/>
-        </circle>
       </g>
     );
   }
 
   if (terrain === 'grain') {
-    const stalks = [-16, -8, 0, 8, 16];
+    // Wheat stalks
     return (
-      <g opacity={op} pointerEvents="none">
-        {stalks.map((dx, i) => {
-          const bx = cx + dx, by = cy + 8;
+      <g style={hi} pointerEvents="none">
+        {([-16, -8, 0, 8, 16] as number[]).map((dx, i) => {
+          const yBase = cy + 8;
           const lean = (dx / 16) * 5;
-          const dur = 2 + (i % 3) * 0.5 + d * 0.4;
-          const begin = (i * 0.2 + d2 * 0.3).toFixed(1);
-          const maxLean = 4;
           return (
             <g key={i}>
-              <g>
-                <animateTransform attributeName="transform" type="rotate"
-                  values={`-${maxLean} ${bx} ${by};${maxLean} ${bx} ${by};-${maxLean} ${bx} ${by}`}
-                  dur={`${dur}s`} begin={`${begin}s`} repeatCount="indefinite"/>
-                <line x1={bx} y1={by} x2={bx+lean} y2={cy-18}
-                  stroke="#fbbf24" strokeWidth={1.5} opacity={0.82}/>
-                <ellipse cx={bx+lean} cy={cy-21} rx={3} ry={7}
-                  fill="#fcd34d" opacity={0.92}/>
-                <line x1={bx+lean-1} y1={cy-23} x2={bx+lean-6} y2={cy-16}
-                  stroke="#fbbf24" strokeWidth={1} opacity={0.7}/>
-                <line x1={bx+lean+1} y1={cy-23} x2={bx+lean+6} y2={cy-16}
-                  stroke="#fbbf24" strokeWidth={1} opacity={0.7}/>
-              </g>
+              <line x1={cx + dx} y1={yBase} x2={cx + dx + lean} y2={cy - 18}
+                stroke="#fbbf24" strokeWidth={1.5} opacity={0.8}/>
+              {/* grain head */}
+              <ellipse cx={cx + dx + lean} cy={cy - 20} rx={3} ry={7}
+                fill="#fcd34d" opacity={0.9}/>
+              {/* side grains */}
+              <line x1={cx + dx + lean - 1} y1={cy - 22} x2={cx + dx + lean - 5} y2={cy - 16}
+                stroke="#fbbf24" strokeWidth={1} opacity={0.7}/>
+              <line x1={cx + dx + lean + 1} y1={cy - 22} x2={cx + dx + lean + 5} y2={cy - 16}
+                stroke="#fbbf24" strokeWidth={1} opacity={0.7}/>
             </g>
           );
         })}
@@ -273,113 +219,71 @@ function TerrainIcon({ terrain, cx, cy }: { terrain: string; cx: number; cy: num
   }
 
   if (terrain === 'wool') {
-    const sheep = [
-      { dx: -13, delay: 0 },
-      { dx:  10, delay: d * 0.5 },
-    ];
+    // Two fluffy sheep
     return (
-      <g opacity={op} pointerEvents="none">
-        {sheep.map(({ dx, delay }, i) => {
-          const sx = cx + dx, sy = cy - 4;
-          return (
-            <g key={i}>
-              {/* Breathing body */}
-              <g>
-                <animateTransform attributeName="transform" type="scale"
-                  values={`1 1;1.04 1.03;1 1`}
-                  additive="sum"
-                  dur={`${2.8+d}s`} begin={`${delay}s`} repeatCount="indefinite"/>
-                <circle cx={sx}   cy={sy}   r={9}  fill="#e2e8f0" opacity={0.92}/>
-                <circle cx={sx+7} cy={sy+2} r={7}  fill="#f1f5f9" opacity={0.87}/>
-                <circle cx={sx-6} cy={sy+3} r={7}  fill="#e2e8f0" opacity={0.87}/>
-                <circle cx={sx+2} cy={sy-5} r={6}  fill="#f8fafc" opacity={0.82}/>
-              </g>
-              {/* Head (no breathing) */}
-              <circle cx={sx+10} cy={sy-3} r={5}  fill="#cbd5e1" opacity={0.95}/>
-              <circle cx={sx+12} cy={sy-4} r={1}  fill="#1e293b"/>
-              {/* Legs */}
-              <rect x={sx-4} y={sy+8} width={3} height={8} fill="#94a3b8" rx={1}/>
-              <rect x={sx+1} y={sy+8} width={3} height={8} fill="#94a3b8" rx={1}/>
-            </g>
-          );
-        })}
+      <g style={hi} pointerEvents="none">
+        {([-14, 10] as number[]).map((dx, i) => (
+          <g key={i} transform={`translate(${cx + dx},${cy - 4})`}>
+            {/* Body (fluffy cloud) */}
+            <circle cx={0}  cy={0} r={9}  fill="#e2e8f0" opacity={0.9}/>
+            <circle cx={7}  cy={2} r={7}  fill="#f1f5f9" opacity={0.85}/>
+            <circle cx={-6} cy={3} r={7}  fill="#e2e8f0" opacity={0.85}/>
+            <circle cx={2}  cy={-5} r={6} fill="#f8fafc" opacity={0.8}/>
+            {/* Head */}
+            <circle cx={10} cy={-3} r={5} fill="#cbd5e1" opacity={0.95}/>
+            {/* Eye */}
+            <circle cx={12} cy={-4} r={1} fill="#1e293b"/>
+            {/* Legs */}
+            <rect x={-4} y={8} width={3} height={8} fill="#94a3b8" rx={1}/>
+            <rect x={1}  y={8} width={3} height={8} fill="#94a3b8" rx={1}/>
+          </g>
+        ))}
       </g>
     );
   }
 
   if (terrain === 'desert') {
-    const rays = [0, 45, 90, 135, 180, 225, 270, 315];
+    // Sun above dune lines
     return (
-      <g opacity={op} pointerEvents="none">
-        {/* Rotating sun group */}
-        <g>
-          <animateTransform attributeName="transform" type="rotate"
-            values={`0 ${cx} ${cy-14};360 ${cx} ${cy-14}`}
-            dur={`${12+d*2}s`} repeatCount="indefinite"/>
-          {rays.map(angle => {
-            const rad = (angle * Math.PI) / 180;
-            return (
-              <line key={angle}
-                x1={cx + Math.cos(rad) * 10} y1={cy - 14 + Math.sin(rad) * 10}
-                x2={cx + Math.cos(rad) * 15} y2={cy - 14 + Math.sin(rad) * 15}
-                stroke="#fcd34d" strokeWidth={1.5} opacity={0.8}/>
-            );
-          })}
-        </g>
-        <circle cx={cx} cy={cy-14} r={8} fill="#fde68a" opacity={0.92}>
-          <animate attributeName="r" values="8;9;8" dur={`${3+d}s`} repeatCount="indefinite"/>
-          <animate attributeName="opacity" values="0.92;0.75;0.92" dur={`${3+d}s`} repeatCount="indefinite"/>
-        </circle>
-        {/* Dune wave */}
-        <path d={`M ${cx-28},${cy+6} Q ${cx-14},${cy-2} ${cx},${cy+6} Q ${cx+14},${cy+14} ${cx+28},${cy+6}`}
-          fill="none" stroke="#d97706" strokeWidth={2} opacity={0.72}>
-          <animate attributeName="d"
-            values={`M ${cx-28},${cy+6} Q ${cx-14},${cy-2} ${cx},${cy+6} Q ${cx+14},${cy+14} ${cx+28},${cy+6};
-                     M ${cx-28},${cy+8} Q ${cx-14},${cy} ${cx},${cy+8} Q ${cx+14},${cy+16} ${cx+28},${cy+8};
-                     M ${cx-28},${cy+6} Q ${cx-14},${cy-2} ${cx},${cy+6} Q ${cx+14},${cy+14} ${cx+28},${cy+6}`}
-            dur={`${2.5+d}s`} repeatCount="indefinite"/>
-        </path>
-        <path d={`M ${cx-22},${cy+14} Q ${cx-8},${cy+6} ${cx+8},${cy+14} Q ${cx+18},${cy+20} ${cx+28},${cy+14}`}
-          fill="none" stroke="#b45309" strokeWidth={1.5} opacity={0.5}>
-          <animate attributeName="d"
-            values={`M ${cx-22},${cy+14} Q ${cx-8},${cy+6} ${cx+8},${cy+14} Q ${cx+18},${cy+20} ${cx+28},${cy+14};
-                     M ${cx-22},${cy+16} Q ${cx-8},${cy+8} ${cx+8},${cy+16} Q ${cx+18},${cy+22} ${cx+28},${cy+16};
-                     M ${cx-22},${cy+14} Q ${cx-8},${cy+6} ${cx+8},${cy+14} Q ${cx+18},${cy+20} ${cx+28},${cy+14}`}
-            dur={`${2.5+d}s`} begin={`${d2*0.5}s`} repeatCount="indefinite"/>
-        </path>
-        {/* Sand particles */}
-        {[0,1].map(i => (
-          <circle key={i} cx={cx-10+i*20} cy={cy+10} r={1} fill="#d97706" opacity={0}>
-            <animate attributeName="cx"
-              values={`${cx-10+i*20};${cx+5+i*10};${cx-10+i*20}`}
-              dur={`${3+i+d}s`} begin={`${i*1.5}s`} repeatCount="indefinite"/>
-            <animate attributeName="opacity" values="0;0.5;0"
-              dur={`${3+i+d}s`} begin={`${i*1.5}s`} repeatCount="indefinite"/>
-          </circle>
-        ))}
+      <g style={hi} pointerEvents="none">
+        {/* Sun */}
+        <circle cx={cx} cy={cy - 14} r={8} fill="#fde68a" opacity={0.9}/>
+        {([0, 45, 90, 135, 180, 225, 270, 315] as number[]).map(angle => {
+          const rad = (angle * Math.PI) / 180;
+          return (
+            <line key={angle}
+              x1={cx + Math.cos(rad) * 10} y1={cy - 14 + Math.sin(rad) * 10}
+              x2={cx + Math.cos(rad) * 14} y2={cy - 14 + Math.sin(rad) * 14}
+              stroke="#fcd34d" strokeWidth={1.5} opacity={0.8}/>
+          );
+        })}
+        {/* Dune lines */}
+        <path d={`M ${cx - 28},${cy + 6} Q ${cx - 14},${cy - 2} ${cx},${cy + 6} Q ${cx + 14},${cy + 14} ${cx + 28},${cy + 6}`}
+          fill="none" stroke="#d97706" strokeWidth={2} opacity={0.7}/>
+        <path d={`M ${cx - 22},${cy + 14} Q ${cx - 8},${cy + 6} ${cx + 8},${cy + 14} Q ${cx + 18},${cy + 20} ${cx + 28},${cy + 14}`}
+          fill="none" stroke="#b45309" strokeWidth={1.5} opacity={0.5}/>
       </g>
     );
   }
 
   return null;
 }
-
 const ROAD_SKIN_STYLES: Record<string, { width: number; highlight: string; shadow: string; extraDash?: string }> = {
   // Rookie — simple dirt track
   road_default: { width: 4.5, highlight: 'rgba(255,255,255,0.10)', shadow: 'rgba(0,0,0,0.45)' },
   // Bronze — rustic trail: earthy brown shadow, irregular stone-like dashes
-  road_iron:    { width: 5.5, highlight: 'rgba(180,110,40,0.30)',  shadow: 'rgba(70,35,5,0.75)',   extraDash: '6 5' },
+  road_iron: { width: 5.5, highlight: 'rgba(180,110,40,0.30)', shadow: 'rgba(70,35,5,0.75)', extraDash: '6 5' },
   // Silver — cobblestone: tight uniform blocks, cool grey tones
-  road_stone:   { width: 6,   highlight: 'rgba(200,215,225,0.38)', shadow: 'rgba(35,50,70,0.72)',   extraDash: '8 2' },
+  road_stone: { width: 6, highlight: 'rgba(200,215,225,0.38)', shadow: 'rgba(35,50,70,0.72)', extraDash: '8 2' },
   // Gold — royal road: solid wide path, rich amber glow
-  road_gold:    { width: 7,   highlight: 'rgba(251,191,36,0.65)',  shadow: 'rgba(130,75,0,0.80)' },
+  road_gold: { width: 7, highlight: 'rgba(251,191,36,0.65)', shadow: 'rgba(130,75,0,0.80)' },
 };
 
 const BUILDING_SKIN_STROKE: Record<string, string> = {
   building_default: '#d4d4d4',   // Rookie  — plain light grey
-  building_iron:    '#92400e',   // Bronze  — warm wood brown (rustic cabin)
-  building_stone:   '#7fb5cc',   // Silver  — blue-grey stone (medieval keep)
-  building_gold:    '#fbbf24',   // Gold    — bright amber (grand fortress)
+  building_iron: '#92400e',   // Bronze  — warm wood brown (rustic cabin)
+  building_stone: '#7fb5cc',   // Silver  — blue-grey stone (medieval keep)
+  building_gold: '#fbbf24',   // Gold    — bright amber (grand fortress)
 };
 
 function RoadSvg({ edgeId, color, opacity = 1, dashed = false, skin = 'road_default' }: {
@@ -391,23 +295,23 @@ function RoadSvg({ edgeId, color, opacity = 1, dashed = false, skin = 'road_defa
   return (
     <>
       <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
-        stroke={s.shadow} strokeWidth={s.width + 3} strokeLinecap="round" opacity={opacity}/>
+        stroke={s.shadow} strokeWidth={s.width + 3} strokeLinecap="round" opacity={opacity} />
       <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
         stroke={color} strokeWidth={s.width} strokeLinecap="round" opacity={opacity}
-        strokeDasharray={dashed ? '7 4' : (s.extraDash ?? undefined)}/>
+        strokeDasharray={dashed ? '7 4' : (s.extraDash ?? undefined)} />
       <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
-        stroke={s.highlight} strokeWidth={1.5} strokeLinecap="round" opacity={opacity}/>
+        stroke={s.highlight} strokeWidth={1.5} strokeLinecap="round" opacity={opacity} />
     </>
   );
 }
 
 const PORT_COLOR: Record<string, { bg: string; border: string; icon: string }> = {
   timber: { bg: '#0f2e14', border: '#22c55e', icon: '🪵' },
-  clay:   { bg: '#3b1004', border: '#f97316', icon: '🧱' },
-  iron:   { bg: '#131c2b', border: '#94a3b8', icon: '⚙️' },
-  grain:  { bg: '#2e1d02', border: '#fbbf24', icon: '🌾' },
-  wool:   { bg: '#092b1b', border: '#86efac', icon: '🐑' },
-  any:    { bg: '#1a1a2e', border: '#6b7280', icon: '✦' },
+  clay: { bg: '#3b1004', border: '#f97316', icon: '🧱' },
+  iron: { bg: '#131c2b', border: '#94a3b8', icon: '⚙️' },
+  grain: { bg: '#2e1d02', border: '#fbbf24', icon: '🌾' },
+  wool: { bg: '#092b1b', border: '#86efac', icon: '🐑' },
+  any: { bg: '#1a1a2e', border: '#6b7280', icon: '✦' },
 };
 
 function PortLabel({
@@ -445,10 +349,10 @@ function PortLabel({
       {/* Dock — connects the two coastal vertices */}
       <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
         stroke={theme.border} strokeWidth={3} opacity={0.7}
-        strokeLinecap="round"/>
+        strokeLinecap="round" />
       {/* Badge background */}
       <rect x={bX} y={bY} width={bW} height={bH} rx={7}
-        fill={theme.bg} stroke={theme.border} strokeWidth={1.5} opacity={0.95}/>
+        fill={theme.bg} stroke={theme.border} strokeWidth={1.5} opacity={0.95} />
       {isSpecific ? (
         <>
           {/* Emoji icon — upper portion of badge */}
@@ -457,7 +361,7 @@ function PortLabel({
           </text>
           {/* Divider */}
           <line x1={bX + 4} y1={ly + 6} x2={bX + bW - 4} y2={ly + 6}
-            stroke={theme.border} strokeWidth={0.8} opacity={0.4}/>
+            stroke={theme.border} strokeWidth={0.8} opacity={0.4} />
           {/* Ratio — lower portion */}
           <text x={lx} y={ly + 16} textAnchor="middle" fontSize={9} fontWeight="bold" fill={theme.border} style={{ userSelect: 'none' }}>
             {ratio}:1
@@ -502,8 +406,8 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
   let validEdges: Set<EdgeId> | null = null;
   try {
     if (boardMode === 'place_settlement' && myTurn) validSettVerts = validSettlementVerts(state, myId);
-    if (boardMode === 'place_city'       && myTurn) validCityVerts_ = validCityVerts(state, myId);
-    if (boardMode === 'place_road'       && myTurn) {
+    if (boardMode === 'place_city' && myTurn) validCityVerts_ = validCityVerts(state, myId);
+    if (boardMode === 'place_road' && myTurn) {
       // When using Road Building card, simulate already-selected edges so the second
       // road can be highlighted even if it only connects through the first.
       const simState = roadBuildingEdges?.length
@@ -516,16 +420,16 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
   const snapVertex: VertexId | null =
     dragPiece && (dragPiece.type === 'settlement' || dragPiece.type === 'city')
       ? nearestVertex(dragPiece.svgX, dragPiece.svgY,
-          dragPiece.type === 'settlement' && validSettVerts
-            ? [...validSettVerts]
-            : dragPiece.type === 'city' && validCityVerts_
+        dragPiece.type === 'settlement' && validSettVerts
+          ? [...validSettVerts]
+          : dragPiece.type === 'city' && validCityVerts_
             ? [...validCityVerts_]
             : state.board.vertices)
       : null;
   const snapEdge: EdgeId | null =
     dragPiece?.type === 'road'
       ? nearestEdge(dragPiece.svgX, dragPiece.svgY,
-          validEdges ? [...validEdges] : state.board.edges)
+        validEdges ? [...validEdges] : state.board.edges)
       : null;
   const snapTile: AxialCoord | null =
     dragPiece?.type === 'bandit'
@@ -658,9 +562,11 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
 
     if (!myTurn) return;
     if (boardMode === 'place_settlement' || boardMode === 'place_city') {
-      wsService.send({ type: 'PLACE_BUILDING', payload: {
-        gameId: state.gameId, vertexId, type: boardMode === 'place_city' ? 'city' : 'settlement',
-      } });
+      wsService.send({
+        type: 'PLACE_BUILDING', payload: {
+          gameId: state.gameId, vertexId, type: boardMode === 'place_city' ? 'city' : 'settlement',
+        }
+      });
       setBoardMode(null);
     }
   }
@@ -714,10 +620,10 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
 
   const isRobberClickable = boardMode === 'move_bandit' && myTurn && !dragPiece;
   const isVertexClickable = (boardMode === 'place_settlement' || boardMode === 'place_city' || boardMode === 'recruit_soldier' || boardMode === 'attack' || boardMode === 'transfer_soldiers') && myTurn && !dragPiece;
-  const isEdgeClickable   = boardMode === 'place_road' && myTurn && !dragPiece;
-  const showDragVertex    = dragPiece && (dragPiece.type === 'settlement' || dragPiece.type === 'city');
-  const showDragEdge      = dragPiece?.type === 'road';
-  const showDragBandit    = dragPiece?.type === 'bandit';
+  const isEdgeClickable = boardMode === 'place_road' && myTurn && !dragPiece;
+  const showDragVertex = dragPiece && (dragPiece.type === 'settlement' || dragPiece.type === 'city');
+  const showDragEdge = dragPiece?.type === 'road';
+  const showDragBandit = dragPiece?.type === 'bandit';
   const myColor = state.players.find(p => p.id === localPlayerId)?.color ?? 'red';
 
   return (
@@ -731,44 +637,44 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
         <defs>
           {/* Subtle vignette for ocean depth */}
           <radialGradient id="oceanGrad" cx="50%" cy="50%" r="70%">
-            <stop offset="0%"   stopColor="#0d2a4a"/>
-            <stop offset="100%" stopColor="#060e1c"/>
+            <stop offset="0%" stopColor="#0d2a4a" />
+            <stop offset="100%" stopColor="#060e1c" />
           </radialGradient>
           {/* Hex inner glow on hover */}
           <filter id="hexGlow" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="blur"/>
-            <feFlood floodColor="#ffcc00" floodOpacity="0.3" result="color"/>
-            <feComposite in="color" in2="blur" operator="in" result="shadow"/>
-            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+            <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="blur" />
+            <feFlood floodColor="#ffcc00" floodOpacity="0.3" result="color" />
+            <feComposite in="color" in2="blur" operator="in" result="shadow" />
+            <feMerge><feMergeNode in="shadow" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
           {/* Token glow for 6 and 8 */}
           <filter id="hotGlow" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur in="SourceAlpha" stdDeviation="2.5" result="blur"/>
-            <feFlood floodColor="#dc2626" floodOpacity="0.5" result="color"/>
-            <feComposite in="color" in2="blur" operator="in" result="shadow"/>
-            <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+            <feGaussianBlur in="SourceAlpha" stdDeviation="2.5" result="blur" />
+            <feFlood floodColor="#dc2626" floodOpacity="0.5" result="color" />
+            <feComposite in="color" in2="blur" operator="in" result="shadow" />
+            <feMerge><feMergeNode in="shadow" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
           {/* Dice-roll tile glow */}
           <filter id="diceGlow" x="-40%" y="-40%" width="180%" height="180%">
-            <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="blur"/>
-            <feFlood floodColor="#fbbf24" floodOpacity="0.9" result="color"/>
-            <feComposite in="color" in2="blur" operator="in" result="glow"/>
-            <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+            <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="blur" />
+            <feFlood floodColor="#fbbf24" floodOpacity="0.9" result="color" />
+            <feComposite in="color" in2="blur" operator="in" result="glow" />
+            <feMerge><feMergeNode in="glow" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
         </defs>
 
         {/* Deep ocean background */}
-        <rect x="-400" y="-400" width="800" height="800" fill="url(#oceanGrad)"/>
+        <rect x="-400" y="-400" width="800" height="800" fill="url(#oceanGrad)" />
 
         {/* Ocean grid lines (subtle depth lines) */}
         {Array.from({ length: 9 }, (_, i) => (
           <line key={`h${i}`} x1="-400" y1={-400 + i * 100} x2="400" y2={-400 + i * 100}
-            stroke="rgba(255,255,255,0.02)" strokeWidth={1}/>
+            stroke="rgba(255,255,255,0.02)" strokeWidth={1} />
         ))}
 
         {/* ── Ports — rendered before tiles so badges float in the ocean ── */}
         {state.board.ports.map((port, i) => (
-          <PortLabel key={i} vertices={port.vertices} resource={port.resource as ResourceType | null} ratio={port.ratio}/>
+          <PortLabel key={i} vertices={port.vertices} resource={port.resource as ResourceType | null} ratio={port.ratio} />
         ))}
 
         {/* ── Hex tiles ── */}
@@ -778,7 +684,7 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
           const pts = cornerPointsToString(corners);
           const innerPts = innerHexPoints(center, 0.87);
           const fillColor = TERRAIN_COLORS[tile.terrain] ?? '#1a2a1a';
-          const hlColor   = TERRAIN_HIGHLIGHT[tile.terrain] ?? '#2a3a2a';
+          const hlColor = TERRAIN_HIGHLIGHT[tile.terrain] ?? '#2a3a2a';
           const pips = tile.numberToken ? TOKEN_PIPS[tile.numberToken] : 0;
           const isHot = tile.numberToken === 6 || tile.numberToken === 8;
           const isBandit = state.banditLocation.q === tile.coord.q && state.banditLocation.r === tile.coord.r;
@@ -799,30 +705,30 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
               {/* Outer hex — dark border */}
               <polygon points={pts} fill={fillColor}
                 stroke={isSnapTarget ? '#ffcc00' : visuallyClickable ? '#ffcc00' : isGlowing ? '#fbbf24' : 'rgba(0,0,0,0.6)'}
-                strokeWidth={isSnapTarget ? 3 : visuallyClickable ? 2.5 : isGlowing ? 2 : 1.5}/>
+                strokeWidth={isSnapTarget ? 3 : visuallyClickable ? 2.5 : isGlowing ? 2 : 1.5} />
 
               {/* Inner highlight edge — simulates 3D bevel */}
               <polygon points={innerPts} fill="none"
-                stroke={hlColor} strokeWidth={1} opacity={0.5}/>
+                stroke={hlColor} strokeWidth={1} opacity={0.5} />
 
               {/* Terrain icon */}
-              <TerrainIcon terrain={tile.terrain} cx={center.x} cy={center.y - (tile.numberToken ? 14 : 0)}/>
+              <TerrainIcon terrain={tile.terrain} cx={center.x} cy={center.y - (tile.numberToken ? 14 : 0)} />
 
               {/* Drag-over bandit tint */}
               {showDragBandit && !isBandit && (
                 <polygon points={pts} fill="rgba(255,200,0,0.1)" stroke="rgba(255,200,0,0.3)" strokeWidth={2}
-                  style={{ pointerEvents: 'none' }}/>
+                  style={{ pointerEvents: 'none' }} />
               )}
 
               {/* Dice-roll glow: pulsing ring + fill */}
               {isGlowing && (
                 <g style={{ pointerEvents: 'none' }}>
                   <polygon points={pts} fill="rgba(251,191,36,0.10)" stroke="none">
-                    <animate attributeName="fill-opacity" values="0.10;0.22;0.10" dur="0.9s" repeatCount="indefinite"/>
+                    <animate attributeName="fill-opacity" values="0.10;0.22;0.10" dur="0.9s" repeatCount="indefinite" />
                   </polygon>
                   <polygon points={pts} fill="none" stroke="#fbbf24" filter="url(#diceGlow)">
-                    <animate attributeName="stroke-width" values="2;5;2" dur="0.9s" repeatCount="indefinite"/>
-                    <animate attributeName="stroke-opacity" values="1;0.35;1" dur="0.9s" repeatCount="indefinite"/>
+                    <animate attributeName="stroke-width" values="2;5;2" dur="0.9s" repeatCount="indefinite" />
+                    <animate attributeName="stroke-opacity" values="1;0.35;1" dur="0.9s" repeatCount="indefinite" />
                   </polygon>
                 </g>
               )}
@@ -833,15 +739,15 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
                   {/* Ripple ring expanding from token when glowing */}
                   {isGlowing && (
                     <circle cx={center.x} cy={center.y} r={18} fill="none" stroke="#fbbf24" strokeWidth={2} style={{ pointerEvents: 'none' }}>
-                      <animate attributeName="r" values="18;32;18" dur="0.9s" repeatCount="indefinite"/>
-                      <animate attributeName="stroke-opacity" values="0.9;0;0.9" dur="0.9s" repeatCount="indefinite"/>
+                      <animate attributeName="r" values="18;32;18" dur="0.9s" repeatCount="indefinite" />
+                      <animate attributeName="stroke-opacity" values="0.9;0;0.9" dur="0.9s" repeatCount="indefinite" />
                     </circle>
                   )}
                   {/* Token disc */}
                   <circle cx={center.x} cy={center.y} r={18}
-                    fill="#0a0a0a" stroke={isHot ? '#ff4444' : '#2a2a2a'} strokeWidth={2}/>
+                    fill="#0a0a0a" stroke={isHot ? '#ff4444' : '#2a2a2a'} strokeWidth={2} />
                   <circle cx={center.x} cy={center.y} r={15}
-                    fill="none" stroke={isHot ? '#ff444440' : '#ffffff18'} strokeWidth={1}/>
+                    fill="none" stroke={isHot ? '#ff444440' : '#ffffff18'} strokeWidth={1} />
                   <text x={center.x} y={center.y + 5}
                     textAnchor="middle" fontSize={13} fontWeight="bold"
                     fill={tokenColor(tile.numberToken)}>
@@ -851,7 +757,7 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
                   {Array.from({ length: pips }, (_, i) => (
                     <circle key={i}
                       cx={center.x - ((pips - 1) * 3.5) + i * 7} cy={center.y + 15}
-                      r={2} fill={tokenColor(tile.numberToken!)}/>
+                      r={2} fill={tokenColor(tile.numberToken!)} />
                   ))}
                 </g>
               )}
@@ -860,7 +766,7 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
               {isBandit && !showDragBandit && (
                 <BanditSvg cx={center.x} cy={center.y - 14}
                   draggable={myTurn && boardMode === 'move_bandit'}
-                  onPointerDown={handleBanditPointerDown}/>
+                  onPointerDown={handleBanditPointerDown} />
               )}
             </g>
           );
@@ -870,7 +776,7 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
         {Object.entries(state.roads).map(([edgeId, road]) => {
           const playerColor = state.players.find(p => p.id === road.playerId)?.color ?? 'red';
           const roadSkin = playerCosmetics[road.playerId]?.road ?? 'road_default';
-          return <RoadSvg key={edgeId} edgeId={edgeId as EdgeId} color={resolvePlayerColor(playerColor)} skin={roadSkin}/>;
+          return <RoadSvg key={edgeId} edgeId={edgeId as EdgeId} color={resolvePlayerColor(playerColor)} skin={roadSkin} />;
         })}
 
         {/* ── Buildings ── */}
@@ -889,11 +795,11 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
               {sieged && (
                 <circle cx={pos.x} cy={pos.y} r={18}
                   fill="none" stroke="#ef4444" strokeWidth={2.5} opacity={0.85}
-                  strokeDasharray="5 3"/>
+                  strokeDasharray="5 3" />
               )}
               {building.type === 'settlement'
-                ? <SettlementSvg cx={pos.x} cy={pos.y} fill={fill} stroke={bldStroke} skin={bldSkin}/>
-                : <CitySvg       cx={pos.x} cy={pos.y} fill={fill} stroke={bldStroke} skin={bldSkin}/>
+                ? <SettlementSvg cx={pos.x} cy={pos.y} fill={fill} stroke={bldStroke} skin={bldSkin} />
+                : <CitySvg cx={pos.x} cy={pos.y} fill={fill} stroke={bldStroke} skin={bldSkin} />
               }
               {/* Soldier helmets — 🪖 emoji per soldier, dashed ring for empty slots */}
               {(state as any).warMode && (() => {
@@ -906,7 +812,7 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
                 return (
                   <g style={{ pointerEvents: 'none' }}>
                     <rect x={pos.x - bgW / 2} y={rowCY - 9} width={bgW} height={17} rx={8}
-                      fill="rgba(2,6,23,0.85)" stroke="rgba(255,255,255,0.12)" strokeWidth={0.5}/>
+                      fill="rgba(2,6,23,0.85)" stroke="rgba(255,255,255,0.12)" strokeWidth={0.5} />
                     {Array.from({ length: max }, (_, i) => {
                       const cx = pos.x - totalW / 2 + i * spacing;
                       return i < soldiers ? (
@@ -917,7 +823,7 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
                       ) : (
                         <circle key={i} cx={cx} cy={rowCY} r={4}
                           fill="none" stroke="rgba(107,114,128,0.6)" strokeWidth={1}
-                          strokeDasharray="2 2"/>
+                          strokeDasharray="2 2" />
                       );
                     })}
                   </g>
@@ -929,17 +835,17 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
 
         {/* ── Drag ghosts ── */}
         {showDragEdge && snapEdge && (
-          <RoadSvg edgeId={snapEdge} color={resolvePlayerColor(myColor)} opacity={0.65} dashed/>
+          <RoadSvg edgeId={snapEdge} color={resolvePlayerColor(myColor)} opacity={0.65} dashed />
         )}
         {showDragVertex && snapVertex && (() => {
           const pos = vertexToPixel(snapVertex);
           const fill = resolvePlayerColor(myColor);
           return dragPiece!.type === 'settlement'
-            ? <SettlementSvg cx={pos.x} cy={pos.y} fill={fill} opacity={0.6}/>
-            : <CitySvg       cx={pos.x} cy={pos.y} fill={fill} opacity={0.6}/>;
+            ? <SettlementSvg cx={pos.x} cy={pos.y} fill={fill} opacity={0.6} />
+            : <CitySvg cx={pos.x} cy={pos.y} fill={fill} opacity={0.6} />;
         })()}
         {showDragBandit && dragPiece && (
-          <BanditSvg cx={dragPiece.svgX} cy={dragPiece.svgY}/>
+          <BanditSvg cx={dragPiece.svgX} cy={dragPiece.svgY} />
         )}
 
         {/* ── Click vertex overlays ── */}
@@ -955,7 +861,7 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
               <circle key={vid} cx={pos.x} cy={pos.y} r={12}
                 fill="rgba(251,191,36,0.3)" stroke="#fbbf24" strokeWidth={2}
                 style={{ cursor: 'pointer' }}
-                onClick={() => handleVertexClick(vid as VertexId)}/>
+                onClick={() => handleVertexClick(vid as VertexId)} />
             );
           }
           if (boardMode === 'transfer_soldiers') {
@@ -980,7 +886,7 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
               <circle key={vid} cx={pos.x} cy={pos.y} r={13}
                 fill={`${color}33`} stroke={color} strokeWidth={2}
                 style={{ cursor: 'pointer' }}
-                onClick={() => handleVertexClick(vid as VertexId)}/>
+                onClick={() => handleVertexClick(vid as VertexId)} />
             );
           }
           if (boardMode === 'attack') {
@@ -998,7 +904,7 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
                   stroke={hasSoldiers ? '#fbbf24' : '#6b7280'}
                   strokeWidth={2}
                   style={{ cursor: hasSoldiers ? 'pointer' : 'not-allowed' }}
-                  onClick={() => hasSoldiers ? handleVertexClick(vid as VertexId) : undefined}/>
+                  onClick={() => hasSoldiers ? handleVertexClick(vid as VertexId) : undefined} />
               );
             }
             // Step 2: show origin highlight + enemy targets
@@ -1011,7 +917,7 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
                   stroke='#fbbf24'
                   strokeWidth={isSelected ? 3 : 2}
                   style={{ cursor: 'pointer' }}
-                  onClick={() => handleVertexClick(vid as VertexId)}/>
+                  onClick={() => handleVertexClick(vid as VertexId)} />
               );
             }
             const victim = state.players.find((p: any) => p.id === b.playerId);
@@ -1029,7 +935,7 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
                   strokeWidth={canTarget ? 2 : 1.5}
                   strokeDasharray={canTarget ? undefined : '3 2'}
                   style={{ cursor: canTarget ? 'crosshair' : 'not-allowed' }}
-                  onClick={() => canTarget ? handleVertexClick(vid as VertexId) : undefined}/>
+                  onClick={() => canTarget ? handleVertexClick(vid as VertexId) : undefined} />
                 {reason && (
                   <text x={pos.x} y={pos.y - 18} textAnchor="middle" fontSize={8}
                     fill="#9ca3af" style={{ pointerEvents: 'none', userSelect: 'none' }}>
@@ -1048,7 +954,7 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
             <circle key={vid} cx={pos.x} cy={pos.y} r={10}
               fill="rgba(255,220,0,0.3)" stroke="#ffcc00" strokeWidth={1.5}
               style={{ cursor: 'pointer' }}
-              onClick={() => handleVertexClick(vid as VertexId)}/>
+              onClick={() => handleVertexClick(vid as VertexId)} />
           );
         })}
 
@@ -1062,7 +968,7 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
             <circle key={vid} cx={pos.x} cy={pos.y} r={isSnap ? 14 : 8}
               fill={isSnap ? 'rgba(255,220,0,0.65)' : 'rgba(255,220,0,0.2)'}
               stroke={isSnap ? '#ffcc00' : 'rgba(255,220,0,0.4)'}
-              strokeWidth={isSnap ? 2.5 : 1.5}/>
+              strokeWidth={isSnap ? 2.5 : 1.5} />
           );
         })}
 
@@ -1074,7 +980,7 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
             <circle key={eid} cx={mid.x} cy={mid.y} r={8}
               fill="rgba(255,220,0,0.3)" stroke="#ffcc00" strokeWidth={1.5}
               style={{ cursor: 'pointer' }}
-              onClick={() => handleEdgeClick(eid as EdgeId)}/>
+              onClick={() => handleEdgeClick(eid as EdgeId)} />
           );
         })}
 
@@ -1087,7 +993,7 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
             <circle key={eid} cx={mid.x} cy={mid.y} r={isSnap ? 12 : 6}
               fill={isSnap ? 'rgba(255,220,0,0.65)' : 'rgba(255,220,0,0.15)'}
               stroke={isSnap ? '#ffcc00' : 'rgba(255,220,0,0.35)'}
-              strokeWidth={isSnap ? 2.5 : 1.5}/>
+              strokeWidth={isSnap ? 2.5 : 1.5} />
           );
         })}
       </svg>
@@ -1097,21 +1003,21 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-gray-900/90 border border-amber-600 text-amber-300 px-5 py-2 rounded-full text-sm font-medium shadow-xl flex items-center gap-3 backdrop-blur-sm">
           <span>
             {boardMode === 'place_settlement' && t('actions.buildSettlement')}
-            {boardMode === 'place_city'       && t('actions.buildCity')}
+            {boardMode === 'place_city' && t('actions.buildCity')}
             {boardMode === 'place_road' && (roadBuildingEdges !== null
               ? `Road Building: road ${roadBuildingEdges.length + 1}/2`
               : t('actions.buildRoad'))}
-            {boardMode === 'move_bandit'      && t('bandit.selectTile')}
-            {boardMode === 'recruit_soldier'  && '🪖 Select a building to recruit'}
+            {boardMode === 'move_bandit' && t('bandit.selectTile')}
+            {boardMode === 'recruit_soldier' && '🪖 Select a building to recruit'}
             {boardMode === 'attack' && !attackFromVertex && '⚔️ Select one of your buildings to attack from'}
-            {boardMode === 'attack' && attackFromVertex  && '⚔️ Now select an enemy building to attack'}
+            {boardMode === 'attack' && attackFromVertex && '⚔️ Now select an enemy building to attack'}
             {boardMode === 'transfer_soldiers' && !transferFromVertex && '🪖 Tap a building to move soldiers from'}
-            {boardMode === 'transfer_soldiers' && transferFromVertex  && '🪖 Now tap the destination building'}
+            {boardMode === 'transfer_soldiers' && transferFromVertex && '🪖 Now tap the destination building'}
           </span>
           {boardMode === 'move_bandit'
             ? <span className="text-xs opacity-60">Drag or click a tile</span>
             : <button className="text-xs underline opacity-70 hover:opacity-100" aria-label="Cancel"
-                onClick={() => { setBoardMode(null); cancelRoadBuilding(); }}>Cancel</button>
+              onClick={() => { setBoardMode(null); cancelRoadBuilding(); }}>Cancel</button>
           }
         </div>
       )}
