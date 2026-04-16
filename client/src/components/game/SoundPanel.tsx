@@ -169,6 +169,19 @@ export function playTradeSound() {
   } catch { /* ignore */ }
 }
 
+// ── Background music singleton ────────────────────────────────────────────────
+// Module-level so it survives component remounts and is never duplicated.
+let _bgMusic: HTMLAudioElement | null = null;
+
+function getBgMusic(): HTMLAudioElement {
+  if (!_bgMusic) {
+    _bgMusic = new Audio('/aoest.mp3');
+    _bgMusic.loop = true;
+    _bgMusic.volume = 0.45;
+  }
+  return _bgMusic;
+}
+
 // ── Sound context: global mute state ─────────────────────────────────────────
 let globalMuted = false;
 
@@ -198,26 +211,21 @@ export default function SoundPanel({ gameId, className }: Props) {
   const { profile } = useProfileStore();
   const selectedHorn = profile?.selectedHorn ?? 'horn_default';
   const hornCooldownMs = ((gameState?.hornCooldownSecs) ?? 30) * 1000;
-  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Create audio element once
+  // Start music on first interaction (autoplay policy)
   useEffect(() => {
-    const audio = new Audio('/aoest.mp3');
-    audio.loop = true;
-    audio.volume = musicVol;
-    audioRef.current = audio;
-    const tryStart = () => { audio.play().catch(() => {}); };
-    document.addEventListener('pointerdown', tryStart, { once: true });
-    return () => {
-      document.removeEventListener('pointerdown', tryStart);
-      audio.pause();
+    const audio = getBgMusic();
+    const tryStart = () => {
+      if (musicOn && !muted) audio.play().catch(() => {});
     };
+    document.addEventListener('pointerdown', tryStart, { once: true });
+    return () => document.removeEventListener('pointerdown', tryStart);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync volume
+  // Sync volume to slider
   useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = musicVol;
+    getBgMusic().volume = musicVol;
   }, [musicVol]);
 
   // Play SFX sounds when new toasts arrive
@@ -241,11 +249,12 @@ export default function SoundPanel({ gameId, className }: Props) {
   function togglePanel() { setPanelOpen(o => !o); }
 
   function toggleMusic() {
+    const audio = getBgMusic();
     if (musicOn) {
-      audioRef.current?.pause();
+      audio.pause();
       setMusicOn(false);
     } else {
-      audioRef.current?.play().catch(() => {});
+      if (!muted) audio.play().catch(() => {});
       setMusicOn(true);
     }
   }
