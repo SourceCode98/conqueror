@@ -136,6 +136,7 @@ export class GameOrchestrator {
       log: [],
       winner: null,
       turnStartTime: Date.now(),
+      turnPausedAt: null,
       turnTimeLimit,
       hornCooldownSecs,
       lastAction: null,

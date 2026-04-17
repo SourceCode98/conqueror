@@ -58,7 +58,9 @@ export type ClientMessage =
   | WSMessage<'VOICE_LEAVE',            { gameId: string }>
   | WSMessage<'VOICE_PTT_START',        { gameId: string }>
   | WSMessage<'VOICE_PTT_END',          { gameId: string }>
-  | WSMessage<'VOICE_AUDIO',            { gameId: string; data: string }>;
+  | WSMessage<'VOICE_AUDIO',            { gameId: string; data: string }>
+  | WSMessage<'PAUSE_TURN',             { gameId: string }>
+  | WSMessage<'RESUME_TURN',            { gameId: string }>;
 
 // ─── Server → Client ──────────────────────────────────────────────────────────
 

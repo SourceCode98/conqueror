@@ -187,8 +187,8 @@ function scheduleTurnTimer(gameId: string): void {
   if (!orch) return;
 
   const state = orch.getState();
-  // Don't schedule during setup, game over, or coliseum battle (timer is paused during battle)
-  if (!state.turnTimeLimit || !state.turnStartTime || state.phase === 'GAME_OVER' || state.phase === 'SETUP_FORWARD' || state.phase === 'SETUP_REVERSE' || state.phase === 'COLISEUM_BATTLE') return;
+  // Don't schedule during setup, game over, coliseum battle, or while turn is paused (mobile landscape)
+  if (!state.turnTimeLimit || !state.turnStartTime || state.turnPausedAt !== null || state.phase === 'GAME_OVER' || state.phase === 'SETUP_FORWARD' || state.phase === 'SETUP_REVERSE' || state.phase === 'COLISEUM_BATTLE') return;
 
   const elapsed = Date.now() - state.turnStartTime;
   const remaining = Math.max(0, state.turnTimeLimit * 1000 - elapsed);
@@ -247,6 +247,7 @@ function serverAutoEndTurn(gameId: string, expectedTurnStart: number): void {
     tradeOffer: null,
     discardsPending: {},
     turnStartTime: Date.now(),
+    turnPausedAt: null,
     players: s.players.map(p => ({
       ...p,
       devCardPlayedThisTurn: false,
@@ -331,6 +332,8 @@ function handleMessage(ws: WebSocket, data: RawData): void {
   if (msg.type === 'VOICE_PTT_START') { handleVoicePTTStart(ws); return; }
   if (msg.type === 'VOICE_PTT_END')   { handleVoicePTTEnd(ws); return; }
   if (msg.type === 'VOICE_AUDIO')     { handleVoiceAudio(ws, (msg.payload as any).data); return; }
+  if (msg.type === 'PAUSE_TURN')      { handlePauseTurn(ws); return; }
+  if (msg.type === 'RESUME_TURN')     { handleResumeTurn(ws); return; }
 
   const orch = getOrLoadOrchestrator(meta.gameId);
   if (!orch) {
@@ -589,6 +592,7 @@ if (stateAfter.players.length <= 1) {
       turn: s.turn + 1,
       phase: 'ROLL',
       turnStartTime: Date.now(),
+      turnPausedAt: null,
       diceRoll: null,
       tradeOffer: null,
       discardsPending: {},
@@ -762,6 +766,46 @@ function handleVoiceAudio(ws: WebSocket, data: string): void {
       peer.ws.send(msg);
     }
   }
+}
+
+function handlePauseTurn(ws: WebSocket): void {
+  const meta = clientMeta.get(ws);
+  if (!meta) return;
+  const orch = getOrLoadOrchestrator(meta.gameId);
+  if (!orch) return;
+  const state = orch.getState();
+  // Only the active player can pause; ignore if already paused
+  if (state.activePlayerId !== meta.userId) return;
+  if (state.turnPausedAt !== null) return;
+  if (!state.turnTimeLimit || !state.turnStartTime) return;
+
+  // Cancel the running timeout
+  const existing = turnTimers.get(meta.gameId);
+  if (existing) clearTimeout(existing);
+  turnTimers.delete(meta.gameId);
+
+  orch.updateState(s => ({ ...s, turnPausedAt: Date.now() }));
+  broadcastPersonalizedGameState(meta.gameId, orch);
+}
+
+function handleResumeTurn(ws: WebSocket): void {
+  const meta = clientMeta.get(ws);
+  if (!meta) return;
+  const orch = getOrLoadOrchestrator(meta.gameId);
+  if (!orch) return;
+  const state = orch.getState();
+  if (state.activePlayerId !== meta.userId) return;
+  if (state.turnPausedAt === null) return;
+
+  // Extend turnStartTime by the paused duration so remaining time is preserved
+  const pausedDuration = Date.now() - state.turnPausedAt;
+  orch.updateState(s => ({
+    ...s,
+    turnPausedAt: null,
+    turnStartTime: s.turnStartTime !== null ? s.turnStartTime + pausedDuration : s.turnStartTime,
+  }));
+  broadcastPersonalizedGameState(meta.gameId, orch);
+  scheduleTurnTimer(meta.gameId);
 }
 
 function handleDisconnect(ws: WebSocket): void {

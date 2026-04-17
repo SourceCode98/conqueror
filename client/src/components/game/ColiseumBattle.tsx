@@ -583,7 +583,7 @@ export function ColiseumBattle() {
     };
     const onMouseUp = (e: MouseEvent) => { if (e.button === 2) shielding.current = false; };
     const onMouseMove = (e: MouseEvent) => {
-      if (document.pointerLockElement === renderer.domElement) yawRef.current += e.movementX * 0.0028;
+      if (document.pointerLockElement === renderer.domElement) yawRef.current -= e.movementX * 0.0028;
     };
     renderer.domElement.addEventListener('mousedown', onMouseDown);
     renderer.domElement.addEventListener('mouseup', onMouseUp);

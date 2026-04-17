@@ -46,6 +46,7 @@ export function handleEndTurn(
     diceRoll: null,
     tradeOffer: null,
     turnStartTime: Date.now(),
+    turnPausedAt: null,
     // Reset dev card played flags
     players: s.players.map(p => ({
       ...p,

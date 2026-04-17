@@ -323,6 +323,43 @@ export default function GamePage() {
     return () => clearInterval(interval);
   }, [gameState, fetchLobbyInfo]);
 
+  // Pause turn timer when this mobile player is in landscape and it's their turn
+  useEffect(() => {
+    if (!gameState || !gameId) return;
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || ('ontouchstart' in window);
+    if (!isMobile) return;
+
+    const isMyTurn = gameState.activePlayerId === localPlayerId;
+    const hasTurnLimit = !!gameState.turnTimeLimit;
+    if (!isMyTurn || !hasTurnLimit) return;
+
+    const isLandscape = () => window.innerWidth > window.innerHeight;
+
+    const handleOrientation = () => {
+      setTimeout(() => {
+        if (isLandscape()) {
+          wsService.send({ type: 'PAUSE_TURN', payload: { gameId } });
+        } else {
+          wsService.send({ type: 'RESUME_TURN', payload: { gameId } });
+        }
+      }, 100);
+    };
+
+    // Send initial state if currently in landscape
+    if (isLandscape() && !gameState.turnPausedAt) {
+      wsService.send({ type: 'PAUSE_TURN', payload: { gameId } });
+    } else if (!isLandscape() && gameState.turnPausedAt) {
+      wsService.send({ type: 'RESUME_TURN', payload: { gameId } });
+    }
+
+    window.addEventListener('resize', handleOrientation);
+    window.addEventListener('orientationchange', handleOrientation);
+    return () => {
+      window.removeEventListener('resize', handleOrientation);
+      window.removeEventListener('orientationchange', handleOrientation);
+    };
+  }, [gameState?.activePlayerId, gameState?.turnTimeLimit, gameId, localPlayerId]);
+
   // Fetch cosmetics for all players when game starts
   useEffect(() => {
     if (!gameState || !token) return;
@@ -701,6 +738,7 @@ export default function GamePage() {
           {gameState.turnStartTime && gameState.turnTimeLimit && phase !== 'GAME_OVER' && phase !== 'COLISEUM_BATTLE' && !coliseumBattleOver && (
             <TurnTimer
               turnStartTime={gameState.turnStartTime}
+              turnPausedAt={gameState.turnPausedAt ?? null}
               turnTimeLimit={gameState.turnTimeLimit}
               isMyTurn={isMyTurn}
               gameId={gameId!}
@@ -720,6 +758,7 @@ export default function GamePage() {
           {gameState.turnStartTime && gameState.turnTimeLimit && phase !== 'GAME_OVER' && phase !== 'COLISEUM_BATTLE' && !coliseumBattleOver && (
             <TurnTimer
               turnStartTime={gameState.turnStartTime}
+              turnPausedAt={gameState.turnPausedAt ?? null}
               turnTimeLimit={gameState.turnTimeLimit}
               isMyTurn={isMyTurn}
               gameId={gameId!}

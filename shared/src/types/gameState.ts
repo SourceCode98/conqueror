@@ -129,6 +129,7 @@ export interface GameState {
   log: GameLogEntry[];
   winner: string | null;
   turnStartTime: number | null;    // ms timestamp when current turn started
+  turnPausedAt: number | null;     // ms timestamp when turn was paused (mobile landscape), null = running
   turnTimeLimit: number | null;    // seconds per turn, null = no limit
   hornCooldownSecs: number;        // seconds between horn uses per player
   lastAction: LastAction | null;   // last notable action for toasts
