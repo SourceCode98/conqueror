@@ -177,7 +177,7 @@ function getBgMusic(): HTMLAudioElement {
   if (!_bgMusic) {
     _bgMusic = new Audio('/aoest.mp3');
     _bgMusic.loop = true;
-    _bgMusic.volume = 0.45;
+    _bgMusic.volume = 0.05;
   }
   return _bgMusic;
 }
@@ -203,7 +203,7 @@ export default function SoundPanel({ gameId, className }: Props) {
   const [muted, setMuted] = useState(false);
   const [musicOn, setMusicOn] = useState(true);
   const [panelOpen, setPanelOpen] = useState(false);
-  const [musicVol, setMusicVol] = useState(0.45);
+  const [musicVol, setMusicVol] = useState(0.05);
   const [hornDisabled, setHornDisabled] = useState(false);
   const [hornCooldown, setHornCooldown] = useState(0);
   const toasts = useGameStore(s => s.toasts);
