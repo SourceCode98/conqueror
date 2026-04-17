@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'motion/react';
@@ -18,20 +18,21 @@ import TradeOfferPanel from '../components/game/TradeOfferPanel.js';
 import TradeResponsePanel from '../components/game/TradeResponsePanel.js';
 import GameLog from '../components/game/GameLog.js';
 import ChatPanel from '../components/game/ChatPanel.js';
-import WinCelebration from '../components/game/WinCelebration.js';
-import { CombatResultModal } from '../components/game/CombatResultModal.js';
-import { ColiseumBattle } from '../components/game/ColiseumBattle.js';
-import DealClosedOverlay from '../components/game/DealClosedOverlay.js';
-import WarEventOverlay from '../components/game/WarEventOverlay.js';
-import MonopolyOverlay from '../components/game/MonopolyOverlay.js';
 import ActionToast from '../components/game/ActionToast.js';
 import TurnTimer from '../components/game/TurnTimer.js';
 import BuildCostTable from '../components/game/BuildCostTable.js';
-import WarRulesModal from '../components/game/WarRulesModal.js';
 import SoundPanel from '../components/game/SoundPanel.js';
 import DiscardPanel from '../components/game/DiscardPanel.js';
-import ProfilePanel from '../components/profile/ProfilePanel.js';
-import KickVoteModal from '../components/game/KickVoteModal.js';
+
+const WinCelebration   = lazy(() => import('../components/game/WinCelebration.js'));
+const CombatResultModal = lazy(() => import('../components/game/CombatResultModal.js').then(m => ({ default: m.CombatResultModal })));
+const ColiseumBattle   = lazy(() => import('../components/game/ColiseumBattle.js').then(m => ({ default: m.ColiseumBattle })));
+const DealClosedOverlay = lazy(() => import('../components/game/DealClosedOverlay.js'));
+const WarEventOverlay  = lazy(() => import('../components/game/WarEventOverlay.js'));
+const MonopolyOverlay  = lazy(() => import('../components/game/MonopolyOverlay.js'));
+const WarRulesModal    = lazy(() => import('../components/game/WarRulesModal.js'));
+const ProfilePanel     = lazy(() => import('../components/profile/ProfilePanel.js'));
+const KickVoteModal    = lazy(() => import('../components/game/KickVoteModal.js'));
 import { resolvePlayerColor } from '../components/HexBoard/hexLayout.js';
 import { RESOURCE_ICON_MAP } from '../components/icons/GameIcons.js';
 import { ALL_RESOURCES, edgeVertices } from '@conqueror/shared';
@@ -677,7 +678,7 @@ export default function GamePage() {
             {t('lobby.gameId')} <code className="text-gray-500">{gameId}</code>
           </p>
         </div>
-        {showProfile && <ProfilePanel onClose={() => setShowProfile(false)} />}
+        {showProfile && <Suspense fallback={null}><ProfilePanel onClose={() => setShowProfile(false)} /></Suspense>}
       </div>
     );
   }
@@ -1241,36 +1242,38 @@ export default function GamePage() {
         <ContextBar gameState={gameState} gameId={gameId!}/>
       </div>
 
-      {/* ── Win celebration overlay ── */}
-      {gameState.phase === 'GAME_OVER' && gameState.winner && (
-        <WinCelebration gameState={gameState} localPlayerId={localPlayerId}/>
-      )}
+      <Suspense fallback={null}>
+        {/* ── Win celebration overlay ── */}
+        {gameState.phase === 'GAME_OVER' && gameState.winner && (
+          <WinCelebration gameState={gameState} localPlayerId={localPlayerId}/>
+        )}
 
-      {/* ── Combat result modal ── */}
-      {combatModal && <CombatResultModal />}
+        {/* ── Combat result modal ── */}
+        {combatModal && <CombatResultModal />}
 
-      {/* ── Coliseum battle overlay ── */}
-      {(gameState?.coliseumBattle || coliseumBattleOver) && <ColiseumBattle />}
+        {/* ── Coliseum battle overlay ── */}
+        {(gameState?.coliseumBattle || coliseumBattleOver) && <ColiseumBattle />}
 
-      {/* ── Deal closed overlay ── */}
-      {dealClosed && <DealClosedOverlay />}
+        {/* ── Deal closed overlay ── */}
+        {dealClosed && <DealClosedOverlay />}
 
-      {/* ── War event overlay ── */}
-      {warEvent && <WarEventOverlay />}
+        {/* ── War event overlay ── */}
+        {warEvent && <WarEventOverlay />}
 
-      {/* ── Monopoly overlay ── */}
-      {monopolyEvent && <MonopolyOverlay />}
+        {/* ── Monopoly overlay ── */}
+        {monopolyEvent && <MonopolyOverlay />}
 
-      {/* ── Vote-kick modal ── */}
-      {kickVote && <KickVoteModal gameId={gameId!}/>}
+        {/* ── Vote-kick modal ── */}
+        {kickVote && <KickVoteModal gameId={gameId!}/>}
 
-      {/* ── War rules modal ── */}
-      {showWarRules && (
-        <WarRulesModal
-          onClose={() => setShowWarRules(false)}
-          variants={(gameState as any).warVariants}
-        />
-      )}
+        {/* ── War rules modal ── */}
+        {showWarRules && (
+          <WarRulesModal
+            onClose={() => setShowWarRules(false)}
+            variants={(gameState as any).warVariants}
+          />
+        )}
+      </Suspense>
 
       {/* ── WAR_DESTRUCTION phase overlay (attacker chooses what to destroy) ── */}
       {gameState.warMode && gameState.phase === 'WAR_DESTRUCTION' && gameState.pendingDestruction?.attackerId === localPlayerId && (() => {

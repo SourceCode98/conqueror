@@ -1,4 +1,5 @@
 import { memo, useRef, useEffect, useCallback, useState, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
 import type { PublicGameState, VertexId, EdgeId, AxialCoord, HexTile, ResourceType } from '@conqueror/shared';
 import { edgeVertices, adjacentVertices, roadDistanceToVertex, vertexToVertexDistance, MAX_SOLDIERS_CITY, MAX_SOLDIERS_SETTLEMENT } from '@conqueror/shared';
@@ -434,22 +435,13 @@ const TileLayer = memo(function TileLayer({
             )}
             {isGlowing && (
               <g style={{ pointerEvents: 'none' }}>
-                <polygon points={pts} fill="rgba(251,191,36,0.10)" stroke="none">
-                  <animate attributeName="fill-opacity" values="0.10;0.22;0.10" dur="0.9s" repeatCount="indefinite" />
-                </polygon>
-                <polygon points={pts} fill="none" stroke="#fbbf24" filter="url(#diceGlow)">
-                  <animate attributeName="stroke-width" values="2;5;2" dur="0.9s" repeatCount="indefinite" />
-                  <animate attributeName="stroke-opacity" values="1;0.35;1" dur="0.9s" repeatCount="indefinite" />
-                </polygon>
+                <polygon points={pts} fill="rgba(251,191,36,0.18)" stroke="#fbbf24" strokeWidth={3} strokeOpacity={0.85} />
               </g>
             )}
             {tile.numberToken && (
-              <g filter={isGlowing ? 'url(#diceGlow)' : isHot ? 'url(#hotGlow)' : undefined}>
+              <g>
                 {isGlowing && (
-                  <circle cx={center.x} cy={center.y} r={18} fill="none" stroke="#fbbf24" strokeWidth={2} style={{ pointerEvents: 'none' }}>
-                    <animate attributeName="r" values="18;32;18" dur="0.9s" repeatCount="indefinite" />
-                    <animate attributeName="stroke-opacity" values="0.9;0;0.9" dur="0.9s" repeatCount="indefinite" />
-                  </circle>
+                  <circle cx={center.x} cy={center.y} r={22} fill="none" stroke="#fbbf24" strokeWidth={2} strokeOpacity={0.6} style={{ pointerEvents: 'none' }} />
                 )}
                 {/* Token disc */}
                 <circle cx={center.x} cy={center.y} r={18}
@@ -496,7 +488,24 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
     attackFromVertex, setAttackFromVertex, setAttackTargetVertex,
     transferFromVertex, setTransferFromVertex,
     addToast,
-  } = useGameStore();
+  } = useGameStore(useShallow(s => ({
+    boardMode: s.boardMode,
+    setBoardMode: s.setBoardMode,
+    isMyTurn: s.isMyTurn,
+    roadBuildingEdges: s.roadBuildingEdges,
+    addRoadBuildingEdge: s.addRoadBuildingEdge,
+    setPendingBanditCoord: s.setPendingBanditCoord,
+    dragPiece: s.dragPiece,
+    setDragPiece: s.setDragPiece,
+    cancelRoadBuilding: s.cancelRoadBuilding,
+    localPlayerId: s.localPlayerId,
+    attackFromVertex: s.attackFromVertex,
+    setAttackFromVertex: s.setAttackFromVertex,
+    setAttackTargetVertex: s.setAttackTargetVertex,
+    transferFromVertex: s.transferFromVertex,
+    setTransferFromVertex: s.setTransferFromVertex,
+    addToast: s.addToast,
+  })));
 
   const myTurn = isMyTurn();
 
@@ -543,11 +552,19 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
     !(snapTile.q === state.banditLocation.q && snapTile.r === state.banditLocation.r)
     ? snapTile : null;
 
+  const rafRef = useRef<number | null>(null);
   const handleDragMove = useCallback((e: PointerEvent) => {
     if (!svgRef.current) return;
-    const p = pageToSvg(svgRef.current, e.clientX, e.clientY);
-    if (!p) return;
-    setDragPiece({ ...useGameStore.getState().dragPiece!, svgX: p.x, svgY: p.y });
+    const clientX = e.clientX, clientY = e.clientY;
+    if (rafRef.current !== null) return; // already scheduled
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      const svg = svgRef.current;
+      if (!svg) return;
+      const p = pageToSvg(svg, clientX, clientY);
+      if (!p) return;
+      setDragPiece({ ...useGameStore.getState().dragPiece!, svgX: p.x, svgY: p.y });
+    });
   }, []);
 
   const handleDragEnd = useCallback((e: PointerEvent) => {
@@ -745,27 +762,6 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
             <stop offset="0%" stopColor="#0d2a4a" />
             <stop offset="100%" stopColor="#060e1c" />
           </radialGradient>
-          {/* Hex inner glow on hover */}
-          <filter id="hexGlow" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="blur" />
-            <feFlood floodColor="#ffcc00" floodOpacity="0.3" result="color" />
-            <feComposite in="color" in2="blur" operator="in" result="shadow" />
-            <feMerge><feMergeNode in="shadow" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-          {/* Token glow for 6 and 8 */}
-          <filter id="hotGlow" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur in="SourceAlpha" stdDeviation="2.5" result="blur" />
-            <feFlood floodColor="#dc2626" floodOpacity="0.5" result="color" />
-            <feComposite in="color" in2="blur" operator="in" result="shadow" />
-            <feMerge><feMergeNode in="shadow" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-          {/* Dice-roll tile glow */}
-          <filter id="diceGlow" x="-40%" y="-40%" width="180%" height="180%">
-            <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="blur" />
-            <feFlood floodColor="#fbbf24" floodOpacity="0.9" result="color" />
-            <feComposite in="color" in2="blur" operator="in" result="glow" />
-            <feMerge><feMergeNode in="glow" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
         </defs>
 
         {/* Deep ocean background */}
@@ -1019,7 +1015,7 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
 
       {/* Mode bar */}
       {boardMode && !dragPiece && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-gray-900/90 border border-amber-600 text-amber-300 px-5 py-2 rounded-full text-sm font-medium shadow-xl flex items-center gap-3 backdrop-blur-sm">
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-gray-900/90 border border-amber-600 text-amber-300 px-5 py-2 rounded-full text-sm font-medium shadow-xl flex items-center gap-3 bg-opacity-95">
           <span>
             {boardMode === 'place_settlement' && t('actions.buildSettlement')}
             {boardMode === 'place_city' && t('actions.buildCity')}
@@ -1043,7 +1039,7 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
 
       {/* Drag hint */}
       {dragPiece && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-gray-900/90 border border-gray-600 text-gray-300 px-5 py-2 rounded-full text-sm shadow-xl pointer-events-none select-none backdrop-blur-sm">
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-gray-900/90 border border-gray-600 text-gray-300 px-5 py-2 rounded-full text-sm shadow-xl pointer-events-none select-none bg-opacity-95">
           {dragPiece.type === 'bandit'
             ? (validSnapTile ? '✓ Release to move bandit' : 'Drag to a tile…')
             : (snapVertex || snapEdge ? '✓ Release to place' : 'Drag to a valid position…')
