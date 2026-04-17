@@ -320,6 +320,7 @@
     "endedTurn": "{{player}} terminó su turno",
     "turnTimedOut": "El turno de {{player}} expiró",
     "discarded": "{{player}} descartó {{count}} cartas",
+    "discardedAuto": "{{player}} tuvo {{count}} cartas descartadas automáticamente",
     "playerJoined": "{{player}} se unió a la partida",
     "playerLeft": "{{player}} abandonó la partida",
     "gameStarted": "¡La partida ha comenzado!",

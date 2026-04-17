@@ -2,7 +2,8 @@ import { WebSocketServer, WebSocket, type RawData } from 'ws';
 import { randomUUID } from 'crypto';
 import type { IncomingMessage } from 'http';
 import type { ClientMessage, ServerMessage } from '@conqueror/shared';
-import { applyWarTurnStart } from '@conqueror/shared';
+import { applyWarTurnStart, subtractResources, ALL_RESOURCES } from '@conqueror/shared';
+import type { ResourceBundle, ResourceType } from '@conqueror/shared';
 import db from '../db/index.js';
 import { validateWsToken } from '../middleware/auth.js';
 import { handleGameAction } from './actionRouter.js';
@@ -22,6 +23,9 @@ const clientMeta = new WeakMap<WebSocket, ClientMeta>();
 const hornLastUsed = new Map<string, number>();
 // Server-side turn timers: gameId → timeout handle
 const turnTimers = new Map<string, ReturnType<typeof setTimeout>>();
+// Server-side discard timers: gameId → timeout handle (separate from turn timer)
+const discardTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const DISCARD_TIME_LIMIT_SECS = 30;
 
 // ─── Play-again sessions ──────────────────────────────────────────────────────
 
@@ -187,8 +191,8 @@ function scheduleTurnTimer(gameId: string): void {
   if (!orch) return;
 
   const state = orch.getState();
-  // Don't schedule during setup, game over, coliseum battle, or while turn is paused (mobile landscape)
-  if (!state.turnTimeLimit || !state.turnStartTime || state.turnPausedAt !== null || state.phase === 'GAME_OVER' || state.phase === 'SETUP_FORWARD' || state.phase === 'SETUP_REVERSE' || state.phase === 'COLISEUM_BATTLE') return;
+  // Don't schedule during setup, game over, coliseum battle, discard phase, or while turn is paused (mobile landscape)
+  if (!state.turnTimeLimit || !state.turnStartTime || state.turnPausedAt !== null || state.phase === 'GAME_OVER' || state.phase === 'SETUP_FORWARD' || state.phase === 'SETUP_REVERSE' || state.phase === 'COLISEUM_BATTLE' || state.phase === 'DISCARD') return;
 
   const elapsed = Date.now() - state.turnStartTime;
   const remaining = Math.max(0, state.turnTimeLimit * 1000 - elapsed);
@@ -258,6 +262,82 @@ function serverAutoEndTurn(gameId: string, expectedTurnStart: number): void {
   applyWarTurnStart(orch);
   orch.addLogEntry('log.turnTimedOut', { player: activePlayer.username }, activePlayer.id);
   // broadcastPersonalizedGameState already calls scheduleTurnTimer internally
+  broadcastPersonalizedGameState(gameId, orch);
+}
+
+// ─── Discard timer ───────────────────────────────────────────────────────────
+
+function scheduleDiscardTimer(gameId: string): void {
+  const orch = getOrchestrator(gameId);
+  if (!orch) return;
+
+  const state = orch.getState();
+
+  if (state.phase !== 'DISCARD' || !state.discardStartTime) {
+    // Not in discard phase — cancel any pending discard timer
+    const existing = discardTimers.get(gameId);
+    if (existing) { clearTimeout(existing); discardTimers.delete(gameId); }
+    return;
+  }
+
+  // If a timer is already running for this discard session, don't replace it
+  if (discardTimers.has(gameId)) return;
+
+  const elapsed = Date.now() - state.discardStartTime;
+  const remaining = Math.max(0, DISCARD_TIME_LIMIT_SECS * 1000 - elapsed);
+  const expectedDiscardStart = state.discardStartTime;
+
+  const timer = setTimeout(() => {
+    discardTimers.delete(gameId);
+    serverAutoDiscard(gameId, expectedDiscardStart);
+  }, remaining);
+
+  discardTimers.set(gameId, timer);
+}
+
+function autoDiscardResources(resources: ResourceBundle, count: number): ResourceBundle {
+  const pool: ResourceType[] = [];
+  for (const type of ALL_RESOURCES) {
+    for (let i = 0; i < resources[type]; i++) pool.push(type);
+  }
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const result: ResourceBundle = { timber: 0, clay: 0, iron: 0, grain: 0, wool: 0 };
+  for (const r of pool.slice(0, count)) result[r]++;
+  return result;
+}
+
+function serverAutoDiscard(gameId: string, expectedDiscardStart: number): void {
+  const orch = getOrchestrator(gameId);
+  if (!orch) return;
+
+  const state = orch.getState();
+  if (state.phase !== 'DISCARD' || state.discardStartTime !== expectedDiscardStart) return;
+
+  orch.updateState(s => {
+    const discardDuration = s.discardStartTime ? Date.now() - s.discardStartTime : 0;
+    let players = s.players;
+    for (const [playerId, count] of Object.entries(s.discardsPending)) {
+      const player = players.find(p => p.id === playerId);
+      if (!player) continue;
+      const toDiscard = autoDiscardResources(player.resources, count);
+      players = players.map(p =>
+        p.id === playerId ? { ...p, resources: subtractResources(p.resources, toDiscard) } : p
+      );
+      orch.addLogEntry('log.discardedAuto', { player: player.username, count }, playerId);
+    }
+    return {
+      ...s,
+      phase: 'ROBBER',
+      discardsPending: {},
+      discardStartTime: null,
+      turnStartTime: s.turnStartTime ? s.turnStartTime + discardDuration : s.turnStartTime,
+      players,
+    };
+  });
+
   broadcastPersonalizedGameState(gameId, orch);
 }
 
@@ -895,6 +975,7 @@ export function broadcastPersonalizedGameState(gameId: string, orch: import('../
   }
   // Keep server-side turn timer in sync with game state
   scheduleTurnTimer(gameId);
+  scheduleDiscardTimer(gameId);
 }
 
 export function sendToPlayer(gameId: string, playerId: string, message: ServerMessage): void {

@@ -274,7 +274,7 @@ export default function ActionPanel({ gameState, gameId }: Props) {
 
   // ── Discard phase ─────────────────────────────────────────────────────────
   if (phase === 'DISCARD' && me && myId && gameState.discardsPending[myId] > 0) {
-    return <DiscardPanel gameId={gameId} hand={me.resources as any} requiredCount={gameState.discardsPending[myId]}/>;
+    return <DiscardPanel gameId={gameId} hand={me.resources as any} requiredCount={gameState.discardsPending[myId]} discardStartTime={gameState.discardStartTime}/>;
   }
   if (phase === 'DISCARD') {
     return <div className="text-yellow-400 text-sm text-center py-4">Waiting for others to discard…</div>;

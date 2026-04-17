@@ -37,6 +37,7 @@ export function handleRollDice(
         diceRoll: [d1, d2],
         phase: 'DISCARD',
         discardsPending,
+        discardStartTime: Date.now(),
       }));
     } else {
       orch.updateState(s => ({

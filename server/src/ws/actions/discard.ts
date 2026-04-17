@@ -43,10 +43,14 @@ export function handleDiscardCards(
 
     const allDone = Object.keys(newDiscardsPending).length === 0;
 
+    // When discard finishes, extend turnStartTime so the discard phase time doesn't count against the turn
+    const discardDuration = allDone && s.discardStartTime ? Date.now() - s.discardStartTime : 0;
     return {
       ...s,
       phase: allDone ? 'ROBBER' : 'DISCARD',
       discardsPending: newDiscardsPending,
+      discardStartTime: allDone ? null : s.discardStartTime,
+      turnStartTime: allDone && s.turnStartTime ? s.turnStartTime + discardDuration : s.turnStartTime,
       players: s.players.map(p =>
         p.id === meta.userId ? { ...p, resources: subtractResources(p.resources, payload.cards) } : p
       ),

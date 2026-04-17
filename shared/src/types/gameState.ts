@@ -131,6 +131,7 @@ export interface GameState {
   turnStartTime: number | null;    // ms timestamp when current turn started
   turnPausedAt: number | null;     // ms timestamp when turn was paused (mobile landscape), null = running
   turnTimeLimit: number | null;    // seconds per turn, null = no limit
+  discardStartTime: number | null; // ms timestamp when DISCARD phase started (null outside DISCARD)
   hornCooldownSecs: number;        // seconds between horn uses per player
   lastAction: LastAction | null;   // last notable action for toasts
   // ── War mode ──────────────────────────────────────────────────────────────

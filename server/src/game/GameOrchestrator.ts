@@ -138,6 +138,7 @@ export class GameOrchestrator {
       turnStartTime: Date.now(),
       turnPausedAt: null,
       turnTimeLimit,
+      discardStartTime: null,
       hornCooldownSecs,
       lastAction: null,
       // War mode

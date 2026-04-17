@@ -320,6 +320,7 @@
     "endedTurn": "{{player}} ended their turn",
     "turnTimedOut": "{{player}}'s turn timed out",
     "discarded": "{{player}} discarded {{count}} cards",
+    "discardedAuto": "{{player}} had {{count}} cards auto-discarded",
     "playerJoined": "{{player}} joined the game",
     "playerLeft": "{{player}} left the game",
     "gameStarted": "Game started!",

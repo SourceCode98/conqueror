@@ -1227,7 +1227,7 @@ export default function GamePage() {
         <div className="lg:hidden fixed inset-x-0 bottom-0 z-[54] bg-gray-900 border-t border-red-800"
           style={{ paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${MOBILE_BOARD_PB}px)` }}>
           <div className="px-3 py-2">
-            <DiscardPanel gameId={gameId!} hand={localPlayer.resources as any} requiredCount={discardNeeded}/>
+            <DiscardPanel gameId={gameId!} hand={localPlayer.resources as any} requiredCount={discardNeeded} discardStartTime={gameState.discardStartTime}/>
           </div>
         </div>
       )}

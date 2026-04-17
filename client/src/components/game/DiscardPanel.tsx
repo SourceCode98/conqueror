@@ -1,19 +1,34 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ResourceBundle, ResourceType } from '@conqueror/shared';
 import { ALL_RESOURCES, EMPTY_RESOURCES } from '@conqueror/shared';
 import { wsService } from '../../services/wsService.js';
 import { RESOURCE_ICON_MAP } from '../icons/GameIcons.js';
 
+const DISCARD_TIME_LIMIT_SECS = 30;
+
 interface Props {
   gameId: string;
   hand: ResourceBundle;
   requiredCount: number;
+  discardStartTime?: number | null;
 }
 
-export default function DiscardPanel({ gameId, hand, requiredCount }: Props) {
+export default function DiscardPanel({ gameId, hand, requiredCount, discardStartTime }: Props) {
   const { t } = useTranslation('game');
   const [selected, setSelected] = useState<ResourceBundle>({ ...EMPTY_RESOURCES });
+  const [secondsLeft, setSecondsLeft] = useState<number>(DISCARD_TIME_LIMIT_SECS);
+
+  useEffect(() => {
+    if (!discardStartTime) return;
+    const update = () => {
+      const elapsed = (Date.now() - discardStartTime) / 1000;
+      setSecondsLeft(Math.max(0, Math.ceil(DISCARD_TIME_LIMIT_SECS - elapsed)));
+    };
+    update();
+    const id = setInterval(update, 500);
+    return () => clearInterval(id);
+  }, [discardStartTime]);
 
   const totalSelected = ALL_RESOURCES.reduce((s, r) => s + selected[r], 0);
   const remaining = requiredCount - totalSelected;
@@ -34,9 +49,16 @@ export default function DiscardPanel({ gameId, hand, requiredCount }: Props) {
 
   return (
     <div className="space-y-3">
-      <p className="text-red-400 font-semibold text-sm">
-        {t('discard.title')} — {t('discard.instruction', { count: remaining })}
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-red-400 font-semibold text-sm">
+          {t('discard.title')} — {t('discard.instruction', { count: remaining })}
+        </p>
+        {discardStartTime && (
+          <span className={`text-xs font-bold tabular-nums ${secondsLeft <= 5 ? 'text-red-400 animate-pulse' : 'text-yellow-400'}`}>
+            {secondsLeft}s
+          </span>
+        )}
+      </div>
 
       <div className="grid grid-cols-5 gap-1">
         {ALL_RESOURCES.map(r => (
