@@ -19,57 +19,55 @@ const isMobileDevice = () => /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.u
 
 // ─── Arena builder ────────────────────────────────────────────────────────────
 function buildArena(scene: THREE.Scene, mobile: boolean) {
-  const seg = mobile ? 20 : 40;
+  if (mobile) {
+    // Absolute minimum: flat color, no lighting calc at all
+    const floor = new THREE.Mesh(
+      new THREE.CylinderGeometry(ARENA_RADIUS, ARENA_RADIUS, 0.28, 10),
+      new THREE.MeshBasicMaterial({ color: 0xb8945e }),
+    );
+    scene.add(floor);
+    const pillarMat = new THREE.MeshBasicMaterial({ color: 0x5a4530 });
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.9, 4.6, 0.9), pillarMat);
+      pillar.position.set(Math.sin(a) * (ARENA_RADIUS - 0.8), 2.3, Math.cos(a) * (ARENA_RADIUS - 0.8));
+      scene.add(pillar);
+    }
+    return;
+  }
 
-  // Sand floor
+  // Desktop: full quality
   const floor = new THREE.Mesh(
-    new THREE.CylinderGeometry(ARENA_RADIUS, ARENA_RADIUS, 0.28, seg),
+    new THREE.CylinderGeometry(ARENA_RADIUS, ARENA_RADIUS, 0.28, 40),
     new THREE.MeshStandardMaterial({ color: 0xc8a870, roughness: 0.95 }),
   );
-  floor.receiveShadow = !mobile;
+  floor.receiveShadow = true;
   scene.add(floor);
 
-  // Edge ring
   const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(ARENA_RADIUS, 0.38, 6, seg),
+    new THREE.TorusGeometry(ARENA_RADIUS, 0.38, 6, 40),
     new THREE.MeshStandardMaterial({ color: 0x6b5230, roughness: 0.85 }),
   );
   ring.rotation.x = Math.PI / 2;
   ring.position.y = 0.17;
   scene.add(ring);
 
-  // Pillars — fewer on mobile, no dynamic lights
-  const pillarCount = mobile ? 4 : 8;
-  for (let i = 0; i < pillarCount; i++) {
-    const a = (i / pillarCount) * Math.PI * 2;
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
     const px = Math.sin(a) * (ARENA_RADIUS - 0.8);
     const pz = Math.cos(a) * (ARENA_RADIUS - 0.8);
-
-    const pillar = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.44, 0.5, 4.6, 6),
-      new THREE.MeshStandardMaterial({ color: 0x7a6545, roughness: 0.85 }),
-    );
+    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.5, 4.6, 6), new THREE.MeshStandardMaterial({ color: 0x7a6545, roughness: 0.85 }));
     pillar.position.set(px, 2.3, pz);
-    pillar.castShadow = !mobile;
+    pillar.castShadow = true;
     scene.add(pillar);
-
-    if (!mobile) {
-      // Flame light — desktop only
-      const torch = new THREE.PointLight(0xff7200, 1.8, 10);
-      torch.position.set(px * 0.92, 5.6, pz * 0.92);
-      scene.add(torch);
-    }
-
-    // Small flame sphere
-    const flame = new THREE.Mesh(
-      new THREE.SphereGeometry(0.18, 4, 4),
-      new THREE.MeshBasicMaterial({ color: 0xff9900 }),
-    );
-    flame.position.set(px * 0.92, 5.6, pz * 0.92);
+    const torch = new THREE.PointLight(0xff7200, 1.8, 10);
+    torch.position.set(px * 0.92, 5.6, pz * 0.92);
+    scene.add(torch);
+    const flame = new THREE.Mesh(new THREE.SphereGeometry(0.18, 4, 4), new THREE.MeshBasicMaterial({ color: 0xff9900 }));
+    flame.position.copy(torch.position);
     scene.add(flame);
   }
 
-  // Center mark
   const mark = new THREE.Mesh(
     new THREE.CylinderGeometry(0.9, 0.9, 0.01, 12),
     new THREE.MeshStandardMaterial({ color: 0xa07030, metalness: 0.5 }),
@@ -81,17 +79,58 @@ function buildArena(scene: THREE.Scene, mobile: boolean) {
 // ─── Player mesh ──────────────────────────────────────────────────────────────
 function buildPlayerMesh(hexColor: string, mobile = false): THREE.Group {
   const col = new THREE.Color(hexColor);
+  const g = new THREE.Group();
+
+  if (mobile) {
+    // Absolute minimum: MeshBasicMaterial (zero lighting cost), boxes everywhere
+    const mat = new THREE.MeshBasicMaterial({ color: col });
+    const skinMat = new THREE.MeshBasicMaterial({ color: 0xd4956a });
+    const swordMat = new THREE.MeshBasicMaterial({ color: 0xcccccc });
+
+    // Legs: boxes (12 tris each) instead of cylinders
+    const legGeo = new THREE.BoxGeometry(0.22, 0.75, 0.22);
+    const legLPivot = new THREE.Group(); legLPivot.position.set(-0.14, 0.75, 0); g.add(legLPivot);
+    const legRPivot = new THREE.Group(); legRPivot.position.set(0.14, 0.75, 0); g.add(legRPivot);
+    const legLMesh = new THREE.Mesh(legGeo, mat); legLMesh.position.set(0, -0.375, 0); legLPivot.add(legLMesh);
+    const legRMesh = new THREE.Mesh(legGeo, mat); legRMesh.position.set(0, -0.375, 0); legRPivot.add(legRMesh);
+    g.userData.legL = legLPivot;
+    g.userData.legR = legRPivot;
+
+    // Torso + head: both boxes
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.9, 0.38), mat);
+    torso.position.y = 1.05; g.add(torso);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.42), skinMat);
+    head.position.y = 1.65; g.add(head);
+
+    // Sword: single thin box
+    const swGrp = new THREE.Group();
+    swGrp.position.set(0.44, 1.35, 0.15);
+    swGrp.rotation.z = -0.18;
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.85, 0.06), swordMat);
+    blade.position.y = 0.42; swGrp.add(blade);
+    g.add(swGrp);
+    g.userData.sword = swGrp;
+    g.userData.swordRestZ = 0.15;
+
+    // Shield: single box (hidden)
+    const shGrp = new THREE.Group();
+    shGrp.position.set(-0.44, 1.1, 0.22);
+    shGrp.add(new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.65, 0.09), mat));
+    shGrp.visible = false;
+    g.add(shGrp);
+    g.userData.shield = shGrp;
+
+    g.userData.flash = null; // no transparent mesh on mobile
+    return g;
+  }
+
+  // ── Desktop: full quality ──
   const body = new THREE.MeshStandardMaterial({ color: col, roughness: 0.6 });
   const skin = new THREE.MeshStandardMaterial({ color: 0xf0c080, roughness: 0.7 });
   const metal = new THREE.MeshStandardMaterial({ color: 0xbbbbbb, metalness: 0.85, roughness: 0.2 });
   const wood = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.9 });
-  const headSeg = mobile ? 6 : 10;
 
-  const g = new THREE.Group();
-
-  // Legs
   const legGeo = new THREE.CylinderGeometry(0.11, 0.1, 0.75, 7);
-  // Legs are pivot-groups so we can rotate them at the hip
   const legLPivot = new THREE.Group(); legLPivot.position.set(-0.14, 0.75, 0); g.add(legLPivot);
   const legRPivot = new THREE.Group(); legRPivot.position.set(0.14, 0.75, 0); g.add(legRPivot);
   const legLMesh = new THREE.Mesh(legGeo, body); legLMesh.position.set(0, -0.375, 0); legLPivot.add(legLMesh);
@@ -99,22 +138,14 @@ function buildPlayerMesh(hexColor: string, mobile = false): THREE.Group {
   g.userData.legL = legLPivot;
   g.userData.legR = legRPivot;
 
-  // Torso
   const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 0.9, 8), body);
-  torso.position.y = 1.05;
-  g.add(torso);
+  torso.position.y = 1.05; g.add(torso);
 
-  // Head + helmet
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, headSeg, headSeg), skin);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 10, 10), skin);
   head.position.y = 1.65; g.add(head);
-
-  const helm = new THREE.Mesh(
-    new THREE.SphereGeometry(0.235, headSeg, headSeg, 0, Math.PI * 2, 0, Math.PI * 0.55),
-    metal,
-  );
+  const helm = new THREE.Mesh(new THREE.SphereGeometry(0.235, 10, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), metal);
   helm.position.y = 1.65; g.add(helm);
 
-  // ── Sword (right side) ──
   const swGrp = new THREE.Group();
   swGrp.position.set(0.44, 1.05, 0.15);
   swGrp.rotation.z = -0.18;
@@ -128,7 +159,6 @@ function buildPlayerMesh(hexColor: string, mobile = false): THREE.Group {
   g.userData.sword = swGrp;
   g.userData.swordRestZ = 0.15;
 
-  // ── Shield (left side, hidden when not blocking) ──
   const shGrp = new THREE.Group();
   shGrp.position.set(-0.44, 1.1, 0.22);
   const shBody = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.65, 0.09), new THREE.MeshStandardMaterial({ color: col, metalness: 0.25, roughness: 0.6 }));
@@ -140,7 +170,6 @@ function buildPlayerMesh(hexColor: string, mobile = false): THREE.Group {
   g.add(shGrp);
   g.userData.shield = shGrp;
 
-  // ── Hit flash (red glow sphere, normally invisible) ──
   const flash = new THREE.Mesh(
     new THREE.SphereGeometry(0.65, 8, 8),
     new THREE.MeshBasicMaterial({ color: 0xff2200, transparent: true, opacity: 0, depthWrite: false }),
@@ -555,9 +584,11 @@ export function ColiseumBattle() {
         } else {
           flashMesh = msg.payload.defenderId === localId ? localMesh : remoteMesh;
         }
-        const fl = flashMesh.userData.flash as THREE.Mesh;
-        (fl.material as THREE.MeshBasicMaterial).opacity = 0.65;
-        setTimeout(() => { (fl.material as THREE.MeshBasicMaterial).opacity = 0; }, 300);
+        const fl = flashMesh.userData.flash as THREE.Mesh | null;
+        if (fl) {
+          (fl.material as THREE.MeshBasicMaterial).opacity = 0.65;
+          setTimeout(() => { (fl.material as THREE.MeshBasicMaterial).opacity = 0; }, 300);
+        }
         if (!msg.payload.blocked) shakeAmt = 0.22;
       }
       if (msg.type === 'COLISEUM_THROW') {
@@ -653,9 +684,13 @@ export function ColiseumBattle() {
     let lastJoyUpdate = 0;
     let shakeAmt = 0;
 
+    const FRAME_MS = mobile ? 1000 / 30 : 0; // cap at 30fps on mobile
+
     const tick = () => {
       animId = requestAnimationFrame(tick);
       const now = performance.now();
+      // Skip frame to enforce 30fps cap on mobile
+      if (FRAME_MS > 0 && now - lastT < FRAME_MS) return;
       const dt = Math.min((now - lastT) / 1000, 0.05);
       lastT = now;
 
@@ -767,7 +802,7 @@ export function ColiseumBattle() {
         }
 
         // ── Send position update ──
-        if (now - lastSend > POS_SEND_MS) {
+        if (now - lastSend > (mobile ? 100 : POS_SEND_MS)) {
           lastSend = now;
           wsService.send({
             type: 'COLISEUM_PLAYER_UPDATE',
