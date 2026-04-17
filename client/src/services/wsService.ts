@@ -220,7 +220,9 @@ class WSService {
         if (msg.payload.accepted && msg.payload.byPlayerId) {
           const gs = store.gameState;
           const activeId = gs?.activePlayerId;
-          if (activeId && msg.payload.byPlayerId) {
+          const localId = store.localPlayerId;
+          // Don't show the modal to the active player — they already know who they traded with
+          if (activeId && msg.payload.byPlayerId && localId !== activeId) {
             store.setDealClosed({ activePlayerId: activeId, partnerId: msg.payload.byPlayerId });
           }
         }
