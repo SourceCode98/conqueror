@@ -630,56 +630,74 @@ export default function ContextBar({ gameState, gameId }: Props) {
                     badge={totalSoldiers > 0 ? totalSoldiers : undefined}
                     onClick={openSoldierMenu}
                   >
-                    <span className="text-lg leading-none">⚔️</span>
+                    <span className="text-lg leading-none">{canRecruit ? '🪖' : '⚔️'}</span>
                   </ActionBtn>
                 </div>
-                {showSoldierMenu && createPortal(
+                {createPortal(
                   <AnimatePresence>
-                    <motion.div
-                      key="soldier-menu"
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 6 }}
-                      transition={{ duration: 0.12 }}
-                      style={{
-                        position: 'fixed',
-                        left: soldierMenuPos.x,
-                        top: soldierMenuPos.y - 8,
-                        transform: 'translate(-50%, -100%)',
-                        zIndex: 9999,
-                        background: 'rgba(17,24,39,0.97)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        backdropFilter: 'blur(8px)',
-                      }}
-                      className="flex flex-col items-center gap-1 rounded-2xl p-2"
-                    >
-                      <ActionBtn label={t('ctx.transfer')} disabled={!canTransfer} active={mode === 'transfer_soldiers'}
-                        badge={transfersLeft < 2 ? transfersLeft : undefined}
-                        onClick={() => {
-                          if (!canTransfer) return;
-                          setTransferFromVertex(null);
-                          setBoardMode(mode === 'transfer_soldiers' ? null : 'transfer_soldiers');
-                          setShowSoldierMenu(false);
-                        }}>
-                        <span className={cn('text-lg leading-none', !canTransfer && 'opacity-40')}>↔️</span>
-                      </ActionBtn>
-                      <ActionBtn label={t('ctx.attack')} disabled={!canAttack} active={mode === 'attack'}
-                        onClick={() => {
-                          if (!canAttack) return;
-                          setAttackTargetVertex(null);
-                          setBoardMode(mode === 'attack' ? null : 'attack');
-                          setShowSoldierMenu(false);
-                        }}>
-                        <span className={cn('text-lg leading-none', !canAttack && 'opacity-40')}>⚔️</span>
-                      </ActionBtn>
-                      <ActionBtn label={t('ctx.recruit')} active={mode === 'recruit_soldier'} disabled={!canRecruit}
-                        onClick={() => {
-                          if (canRecruit) setBoardMode(mode === 'recruit_soldier' ? null : 'recruit_soldier');
-                          setShowSoldierMenu(false);
-                        }}>
-                        <span className={cn('text-lg leading-none', !canRecruit && 'opacity-40')}>🪖</span>
-                      </ActionBtn>
-                    </motion.div>
+                    {showSoldierMenu && (
+                      <motion.div
+                        key="soldier-menu"
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 8 }}
+                        transition={{ duration: 0.15 }}
+                        style={{
+                          position: 'fixed',
+                          left: soldierMenuPos.x,
+                          top: soldierMenuPos.y - 6,
+                          transform: 'translate(-50%, -100%)',
+                          zIndex: 9999,
+                          background: 'rgba(15,20,30,0.97)',
+                          border: '1px solid rgba(255,255,255,0.12)',
+                          backdropFilter: 'blur(10px)',
+                          boxShadow: '0 -4px 24px rgba(0,0,0,0.5)',
+                        }}
+                        className="rounded-2xl p-1.5 flex flex-col gap-0.5 min-w-[120px]"
+                      >
+                        {/* Recruit */}
+                        <button
+                          disabled={!canRecruit}
+                          onClick={() => { if (canRecruit) setBoardMode(mode === 'recruit_soldier' ? null : 'recruit_soldier'); setShowSoldierMenu(false); }}
+                          className={cn(
+                            'flex items-center gap-2 w-full rounded-xl px-3 py-2 text-sm font-semibold transition-colors',
+                            mode === 'recruit_soldier' ? 'bg-amber-700/70 text-white' :
+                            canRecruit ? 'hover:bg-gray-700/60 text-gray-200' : 'text-gray-600 cursor-not-allowed',
+                          )}
+                        >
+                          <span className={cn('text-base', !canRecruit && 'opacity-40')}>🪖</span>
+                          <span>{t('ctx.recruit')}</span>
+                        </button>
+                        {/* Attack */}
+                        <button
+                          disabled={!canAttack}
+                          onClick={() => { if (!canAttack) return; setAttackTargetVertex(null); setBoardMode(mode === 'attack' ? null : 'attack'); setShowSoldierMenu(false); }}
+                          className={cn(
+                            'flex items-center gap-2 w-full rounded-xl px-3 py-2 text-sm font-semibold transition-colors',
+                            mode === 'attack' ? 'bg-amber-700/70 text-white' :
+                            canAttack ? 'hover:bg-gray-700/60 text-gray-200' : 'text-gray-600 cursor-not-allowed',
+                          )}
+                        >
+                          <span className={cn('text-base', !canAttack && 'opacity-40')}>⚔️</span>
+                          <span>{t('ctx.attack')}</span>
+                          {totalSoldiers > 0 && <span className="ml-auto text-xs text-gray-400">{totalSoldiers}</span>}
+                        </button>
+                        {/* Transfer */}
+                        <button
+                          disabled={!canTransfer}
+                          onClick={() => { if (!canTransfer) return; setTransferFromVertex(null); setBoardMode(mode === 'transfer_soldiers' ? null : 'transfer_soldiers'); setShowSoldierMenu(false); }}
+                          className={cn(
+                            'flex items-center gap-2 w-full rounded-xl px-3 py-2 text-sm font-semibold transition-colors',
+                            mode === 'transfer_soldiers' ? 'bg-amber-700/70 text-white' :
+                            canTransfer ? 'hover:bg-gray-700/60 text-gray-200' : 'text-gray-600 cursor-not-allowed',
+                          )}
+                        >
+                          <span className={cn('text-base', !canTransfer && 'opacity-40')}>↔️</span>
+                          <span>{t('ctx.transfer')}</span>
+                          {transfersLeft < 2 && <span className="ml-auto text-xs text-gray-400">{transfersLeft}</span>}
+                        </button>
+                      </motion.div>
+                    )}
                   </AnimatePresence>,
                   document.body,
                 )}
