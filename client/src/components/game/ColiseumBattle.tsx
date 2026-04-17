@@ -18,55 +18,60 @@ const STAMINA_REGEN = 22;  // per second while not shielding
 const isMobileDevice = () => /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || ('ontouchstart' in window);
 
 // ─── Arena builder ────────────────────────────────────────────────────────────
-function buildArena(scene: THREE.Scene) {
+function buildArena(scene: THREE.Scene, mobile: boolean) {
+  const seg = mobile ? 20 : 40;
+
   // Sand floor
   const floor = new THREE.Mesh(
-    new THREE.CylinderGeometry(ARENA_RADIUS, ARENA_RADIUS, 0.28, 48),
+    new THREE.CylinderGeometry(ARENA_RADIUS, ARENA_RADIUS, 0.28, seg),
     new THREE.MeshStandardMaterial({ color: 0xc8a870, roughness: 0.95 }),
   );
-  floor.receiveShadow = true;
+  floor.receiveShadow = !mobile;
   scene.add(floor);
 
   // Edge ring
   const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(ARENA_RADIUS, 0.38, 8, 48),
+    new THREE.TorusGeometry(ARENA_RADIUS, 0.38, 6, seg),
     new THREE.MeshStandardMaterial({ color: 0x6b5230, roughness: 0.85 }),
   );
   ring.rotation.x = Math.PI / 2;
   ring.position.y = 0.17;
   scene.add(ring);
 
-  // Pillars + torches
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2;
+  // Pillars — fewer on mobile, no dynamic lights
+  const pillarCount = mobile ? 4 : 8;
+  for (let i = 0; i < pillarCount; i++) {
+    const a = (i / pillarCount) * Math.PI * 2;
     const px = Math.sin(a) * (ARENA_RADIUS - 0.8);
     const pz = Math.cos(a) * (ARENA_RADIUS - 0.8);
 
     const pillar = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.44, 0.5, 4.6, 8),
+      new THREE.CylinderGeometry(0.44, 0.5, 4.6, 6),
       new THREE.MeshStandardMaterial({ color: 0x7a6545, roughness: 0.85 }),
     );
     pillar.position.set(px, 2.3, pz);
-    pillar.castShadow = true;
+    pillar.castShadow = !mobile;
     scene.add(pillar);
 
-    // Flame light
-    const torch = new THREE.PointLight(0xff7200, 1.8, 10);
-    torch.position.set(px * 0.92, 5.6, pz * 0.92);
-    scene.add(torch);
+    if (!mobile) {
+      // Flame light — desktop only
+      const torch = new THREE.PointLight(0xff7200, 1.8, 10);
+      torch.position.set(px * 0.92, 5.6, pz * 0.92);
+      scene.add(torch);
+    }
 
     // Small flame sphere
     const flame = new THREE.Mesh(
-      new THREE.SphereGeometry(0.18, 6, 6),
+      new THREE.SphereGeometry(0.18, 4, 4),
       new THREE.MeshBasicMaterial({ color: 0xff9900 }),
     );
-    flame.position.copy(torch.position);
+    flame.position.set(px * 0.92, 5.6, pz * 0.92);
     scene.add(flame);
   }
 
   // Center mark
   const mark = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.9, 0.9, 0.01, 16),
+    new THREE.CylinderGeometry(0.9, 0.9, 0.01, 12),
     new THREE.MeshStandardMaterial({ color: 0xa07030, metalness: 0.5 }),
   );
   mark.position.y = 0.15;
@@ -74,12 +79,13 @@ function buildArena(scene: THREE.Scene) {
 }
 
 // ─── Player mesh ──────────────────────────────────────────────────────────────
-function buildPlayerMesh(hexColor: string): THREE.Group {
+function buildPlayerMesh(hexColor: string, mobile = false): THREE.Group {
   const col = new THREE.Color(hexColor);
   const body = new THREE.MeshStandardMaterial({ color: col, roughness: 0.6 });
   const skin = new THREE.MeshStandardMaterial({ color: 0xf0c080, roughness: 0.7 });
   const metal = new THREE.MeshStandardMaterial({ color: 0xbbbbbb, metalness: 0.85, roughness: 0.2 });
   const wood = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.9 });
+  const headSeg = mobile ? 6 : 10;
 
   const g = new THREE.Group();
 
@@ -99,11 +105,11 @@ function buildPlayerMesh(hexColor: string): THREE.Group {
   g.add(torso);
 
   // Head + helmet
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 10, 10), skin);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, headSeg, headSeg), skin);
   head.position.y = 1.65; g.add(head);
 
   const helm = new THREE.Mesh(
-    new THREE.SphereGeometry(0.235, 10, 10, 0, Math.PI * 2, 0, Math.PI * 0.55),
+    new THREE.SphereGeometry(0.235, headSeg, headSeg, 0, Math.PI * 2, 0, Math.PI * 0.55),
     metal,
   );
   helm.position.y = 1.65; g.add(helm);
@@ -242,8 +248,11 @@ export function ColiseumBattle() {
   const [fightFlash, setFightFlash] = useState(false);
   const staminaRef = useRef(STAMINA_MAX);
   const staminaMaxRef = useRef(STAMINA_MAX);
-  const [staminaDisplay, setStaminaDisplay] = useState(STAMINA_MAX);
-  const [staminaMax, setStaminaMax] = useState(STAMINA_MAX);
+  // DOM refs for zero-re-render updates
+  const joyMoveKnobRef = useRef<HTMLDivElement>(null);
+  const joyLookKnobRef = useRef<HTMLDivElement>(null);
+  const staminaBarRef = useRef<HTMLDivElement>(null);
+  const staminaTextRef = useRef<HTMLSpanElement>(null);
 
   const battle = gameState?.coliseumBattle;
   const isActive = gameState?.phase === 'COLISEUM_BATTLE' && !!battle;
@@ -277,8 +286,6 @@ export function ColiseumBattle() {
   const localPosRef = useRef({ x: 0, z: 0 });
   const yawRef = useRef(0);
   const resetPosRef = useRef(false); // signal Three.js loop to reset positions
-  // Re-render joystick every frame on mobile
-  const [, forceJoy] = useState(0);
 
   // ── Fullscreen helpers ──
   const enterFullscreen = () => {
@@ -395,7 +402,6 @@ export function ColiseumBattle() {
     // Scene
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0b0704);
-    scene.fog = new THREE.FogExp2(0x120804, 0.032);
 
     // Camera
     const camera = new THREE.PerspectiveCamera(72, W / H, 0.1, 80);
@@ -403,19 +409,21 @@ export function ColiseumBattle() {
     // Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: !mobile, powerPreference: 'high-performance' });
     renderer.setSize(W, H);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1.5 : 2));
+    renderer.setPixelRatio(mobile ? 1 : Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = !mobile;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(renderer.domElement);
 
-    // Lighting
-    scene.add(new THREE.AmbientLight(0xffd090, 0.3));
-    const sun = new THREE.DirectionalLight(0xffe8b0, 0.85);
+    // Lighting — on mobile use stronger ambient to compensate for no torch lights
+    scene.add(new THREE.AmbientLight(0xffd090, mobile ? 0.75 : 0.3));
+    const sun = new THREE.DirectionalLight(0xffe8b0, mobile ? 1.2 : 0.85);
     sun.position.set(5, 14, 7);
     if (!mobile) { sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); }
     scene.add(sun);
 
-    buildArena(scene);
+    if (!mobile) scene.fog = new THREE.FogExp2(0x120804, 0.032);
+
+    buildArena(scene, mobile);
 
     // Players
     const attackerPlayer = gameState?.players.find(p => p.id === battle.attackerId);
@@ -437,12 +445,12 @@ export function ColiseumBattle() {
     localPosRef.current = { x: startX, z: 0 };
     yawRef.current = startYaw;
 
-    const localMesh = buildPlayerMesh(localColor);
+    const localMesh = buildPlayerMesh(localColor, mobile);
     localMesh.position.set(startX, 0, 0);
     localMesh.rotation.y = startYaw;
     scene.add(localMesh);
 
-    const remoteMesh = buildPlayerMesh(remoteColor);
+    const remoteMesh = buildPlayerMesh(remoteColor, mobile);
     remoteMesh.position.set(-startX, 0, 0);
     remoteMesh.rotation.y = -startYaw;
     scene.add(remoteMesh);
@@ -472,8 +480,6 @@ export function ColiseumBattle() {
       : STAMINA_MAX;
     staminaRef.current = myMaxStamina;
     staminaMaxRef.current = myMaxStamina;
-    setStaminaDisplay(myMaxStamina);
-    setStaminaMax(myMaxStamina);
     let walkPhase = 0;       // walk cycle accumulator
     let remoteWalkPhase = 0; // for remote player
 
@@ -750,7 +756,14 @@ export function ColiseumBattle() {
         }
         if (now - lastStaminaSync > 80) {
           lastStaminaSync = now;
-          setStaminaDisplay(Math.round(staminaRef.current));
+          const pct = (staminaRef.current / staminaMaxRef.current) * 100;
+          const sc = staminaRef.current > 50 ? '#eab308' : staminaRef.current > 25 ? '#f97316' : '#ef4444';
+          if (staminaBarRef.current) {
+            staminaBarRef.current.style.width = `${pct}%`;
+            staminaBarRef.current.style.background = sc;
+            staminaBarRef.current.style.boxShadow = `0 0 8px ${staminaRef.current > 50 ? '#eab308aa' : '#f97316aa'}`;
+          }
+          if (staminaTextRef.current) staminaTextRef.current.style.color = sc;
         }
 
         // ── Send position update ──
@@ -848,8 +861,26 @@ export function ColiseumBattle() {
         }
       }
 
-      // Refresh joystick visuals at ~30fps
-      if (mobile && now - lastJoyUpdate > 33) { lastJoyUpdate = now; forceJoy(n => n + 1); }
+      // Refresh joystick knobs via direct DOM at ~30fps (no React re-render)
+      if (mobile && now - lastJoyUpdate > 33) {
+        lastJoyUpdate = now;
+        if (joyMoveKnobRef.current) {
+          const jm = joyMove.current;
+          const kx = jm.active ? Math.max(-36, Math.min(36, jm.dx)) : 0;
+          const ky = jm.active ? Math.max(-36, Math.min(36, jm.dy)) : 0;
+          joyMoveKnobRef.current.style.left = `${36 + kx}px`;
+          joyMoveKnobRef.current.style.top = `${36 + ky}px`;
+          joyMoveKnobRef.current.style.transition = jm.active ? 'none' : 'left 0.1s, top 0.1s';
+        }
+        if (joyLookKnobRef.current) {
+          const jl = joyLook.current;
+          const kx = jl.active ? Math.max(-36, Math.min(36, jl.dx)) : 0;
+          const ky = jl.active ? Math.max(-36, Math.min(36, jl.dy)) : 0;
+          joyLookKnobRef.current.style.left = `${36 + kx}px`;
+          joyLookKnobRef.current.style.top = `${36 + ky}px`;
+          joyLookKnobRef.current.style.transition = jl.active ? 'none' : 'left 0.1s, top 0.1s';
+        }
+      }
 
       renderer.render(scene, camera);
     };
@@ -864,6 +895,14 @@ export function ColiseumBattle() {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('resize', onResize);
       if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();
+      // Dispose all geometries and materials to free GPU memory
+      scene.traverse(obj => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+          else obj.material.dispose();
+        }
+      });
       renderer.dispose();
       renderer.domElement.remove();
     };
@@ -1096,23 +1135,19 @@ export function ColiseumBattle() {
           </AnimatePresence>
         </div>
 
-        {/* Stamina bar — local combatant only */}
+        {/* Stamina bar — local combatant only. Updated via DOM ref, never re-renders */}
         {isCombatant && (
           <div className="absolute bottom-0 left-0 right-0 pointer-events-none flex flex-col items-center pb-3"
             style={{ bottom: mobile ? 250 : 16 }}>
-            <span className="text-[9px] font-black tracking-widest mb-0.5"
-              style={{ color: staminaDisplay > 50 ? '#eab308' : staminaDisplay > 25 ? '#f97316' : '#ef4444', opacity: 0.85 }}>
+            <span ref={staminaTextRef} className="text-[9px] font-black tracking-widest mb-0.5"
+              style={{ color: '#eab308', opacity: 0.85 }}>
               STAMINA
             </span>
             <div className="rounded-full overflow-hidden" style={{ width: 160, height: 6, background: 'rgba(255,255,255,0.08)' }}>
               <div
+                ref={staminaBarRef}
                 className="h-full rounded-full"
-                style={{
-                  width: `${(staminaDisplay / staminaMax) * 100}%`,
-                  background: staminaDisplay > 50 ? '#eab308' : staminaDisplay > 25 ? '#f97316' : '#ef4444',
-                  boxShadow: `0 0 8px ${staminaDisplay > 50 ? '#eab308aa' : '#f97316aa'}`,
-                  transition: 'width 0.08s linear, background 0.3s',
-                }}
+                style={{ width: '100%', background: '#eab308', boxShadow: '0 0 8px #eab308aa', transition: 'width 0.08s linear, background 0.3s' }}
               />
             </div>
           </div>
@@ -1201,36 +1236,24 @@ export function ColiseumBattle() {
       {/* Mobile controls (pointer-events: auto) */}
       {mobile && isCombatant && !battleOver && (
         <>
-          {/* Left joystick (move) */}
+          {/* Left joystick (move) — knob position updated via DOM ref, no re-render */}
           <div className="absolute pointer-events-none" style={{ left: 20, bottom: 20, width: 120, height: 120 }}>
             <div className="absolute inset-0 rounded-full" style={{ background: 'rgba(255,255,255,0.08)', border: '2px solid rgba(255,255,255,0.22)' }} />
             <div
+              ref={joyMoveKnobRef}
               className="absolute rounded-full"
-              style={{
-                width: 48, height: 48,
-                left: 36 + (joyMove.current.active ? Math.max(-36, Math.min(36, joyMove.current.dx)) : 0),
-                top: 36 + (joyMove.current.active ? Math.max(-36, Math.min(36, joyMove.current.dy)) : 0),
-                background: 'rgba(255,255,255,0.30)',
-                border: '2px solid rgba(255,255,255,0.5)',
-                transition: joyMove.current.active ? 'none' : 'left 0.1s, top 0.1s',
-              }}
+              style={{ width: 48, height: 48, left: 36, top: 36, background: 'rgba(255,255,255,0.30)', border: '2px solid rgba(255,255,255,0.5)', transition: 'left 0.1s, top 0.1s' }}
             />
             <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[9px] text-white/40 font-bold tracking-wide">MOVE</span>
           </div>
 
-          {/* Right look joystick */}
+          {/* Right look joystick — knob position updated via DOM ref, no re-render */}
           <div className="absolute pointer-events-none" style={{ right: 20, bottom: 20, width: 120, height: 120 }}>
             <div className="absolute inset-0 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', border: '2px solid rgba(255,255,255,0.18)' }} />
             <div
+              ref={joyLookKnobRef}
               className="absolute rounded-full"
-              style={{
-                width: 48, height: 48,
-                left: 36 + (joyLook.current.active ? Math.max(-36, Math.min(36, joyLook.current.dx)) : 0),
-                top: 36 + (joyLook.current.active ? Math.max(-36, Math.min(36, joyLook.current.dy)) : 0),
-                background: 'rgba(255,255,255,0.22)',
-                border: '2px solid rgba(255,255,255,0.42)',
-                transition: joyLook.current.active ? 'none' : 'left 0.1s, top 0.1s',
-              }}
+              style={{ width: 48, height: 48, left: 36, top: 36, background: 'rgba(255,255,255,0.22)', border: '2px solid rgba(255,255,255,0.42)', transition: 'left 0.1s, top 0.1s' }}
             />
             <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[9px] text-white/40 font-bold tracking-wide">LOOK</span>
           </div>
