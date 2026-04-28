@@ -7,7 +7,13 @@ import { startGame } from '../ws/gameStarter.js';
 export const gamesRouter = Router();
 gamesRouter.use(authMiddleware);
 
-gamesRouter.get('/', (_req, res) => {
+gamesRouter.get('/', (req, res) => {
+  const meta = db.prepare(
+    `SELECT MAX(updated_at) as ts, COUNT(*) as n FROM games WHERE status IN ('lobby','active')`
+  ).get() as { ts: number | null; n: number };
+  const etag = `"${meta.ts ?? 0}-${meta.n}"`;
+  if (req.headers['if-none-match'] === etag) { res.status(304).end(); return; }
+
   const games = db.prepare(`
     SELECT g.id, g.name, g.status, g.max_players, g.created_at,
            u.username as created_by_username,
@@ -20,6 +26,7 @@ gamesRouter.get('/', (_req, res) => {
     ORDER BY g.created_at DESC
     LIMIT 50
   `).all();
+  res.setHeader('ETag', etag);
   res.json(games);
 });
 

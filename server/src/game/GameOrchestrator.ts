@@ -73,6 +73,7 @@ export class GameOrchestrator {
   private db: Database.Database;
   private gameId: string;
   private _dirty = false;
+  private _cachedPublicBase: PublicGameState | null = null;
   // Non-persisted: transient combat state waiting for dice rolls
   private _pendingCombat: PendingCombat | null = null;
   // Non-persisted: coliseum battle choice tracking (choices are secret until revealed)
@@ -179,35 +180,41 @@ export class GameOrchestrator {
    * Hides other players' dev cards and VP card counts.
    */
   getPublicState(forPlayerId?: string): PublicGameState {
-    const { devCardDeck, players, ...rest } = this.state;
-
-    const publicPlayers: PublicPlayerState[] = players.map(p => {
-      if (p.id === forPlayerId) {
-        return {
-          ...p,
-          devCardCount: p.devCards.length,
-          devCards: p.devCards,
-          victoryPointCards: p.victoryPointCards,
-        };
+    if (!forPlayerId) {
+      if (!this._cachedPublicBase) {
+        this._cachedPublicBase = this._computePublicBase();
       }
-      return {
-        ...p,
-        devCardCount: p.devCards.length,
-        devCards: undefined,
-        victoryPointCards: 0, // hidden
-      };
-    });
+      return this._cachedPublicBase;
+    }
+    // Personalized: reuse cached base, swap in this player's private cards
+    const base = this.getPublicState();
+    const fullPlayer = this.state.players.find(p => p.id === forPlayerId);
+    if (!fullPlayer || (fullPlayer.devCards.length === 0 && fullPlayer.victoryPointCards === 0)) {
+      return base; // nothing private to reveal — base is already correct
+    }
+    const players = base.players.map(p =>
+      p.id === forPlayerId
+        ? { ...p, devCards: fullPlayer.devCards, victoryPointCards: fullPlayer.victoryPointCards }
+        : p,
+    );
+    return { ...base, players };
+  }
 
-    return {
-      ...rest,
-      devCardDeckCount: devCardDeck.length,
-      players: publicPlayers,
-    };
+  private _computePublicBase(): PublicGameState {
+    const { devCardDeck, players, ...rest } = this.state;
+    const publicPlayers: PublicPlayerState[] = players.map(p => ({
+      ...p,
+      devCardCount: p.devCards.length,
+      devCards: undefined,
+      victoryPointCards: 0,
+    }));
+    return { ...rest, devCardDeckCount: devCardDeck.length, players: publicPlayers };
   }
 
   updateState(updater: (state: GameState) => GameState): void {
     this.state = updater(this.state);
     this._dirty = true;
+    this._cachedPublicBase = null;
   }
 
   persistIfDirty(): void {
@@ -228,10 +235,12 @@ export class GameOrchestrator {
         p.id === playerId ? { ...p, connected } : p
       ),
     };
+    this._cachedPublicBase = null;
     this.persist();
   }
 
   addLogEntry(messageKey: string, params?: Record<string, string | number>, playerId?: string): void {
+    this._cachedPublicBase = null;
     this.state = {
       ...this.state,
       log: [

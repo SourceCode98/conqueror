@@ -531,6 +531,30 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
     } catch { return null; }
   }, [boardMode, myTurn, state.roads, state.buildings, roadBuildingEdges, myId]);
 
+  // Pre-compute attack distances — avoids calling roadDistanceToVertex() per vertex per render
+  const attackDistanceMap = useMemo<Record<string, number> | null>(() => {
+    if (boardMode !== 'attack' || !myId) return null;
+    const map: Record<string, number> = {};
+    for (const vid of state.board.vertices) {
+      const b = (state.buildings as any)[vid];
+      if (b && b.playerId !== myId) {
+        try { map[vid] = roadDistanceToVertex(state as any, myId, vid as VertexId); } catch { map[vid] = Infinity; }
+      }
+    }
+    return map;
+  }, [boardMode, state.roads, state.buildings, myId]);
+
+  // Pre-compute transfer distances when a source vertex is selected
+  const transferDistanceMap = useMemo<Record<string, number> | null>(() => {
+    if (boardMode !== 'transfer_soldiers' || !transferFromVertex) return null;
+    const map: Record<string, number> = {};
+    for (const vid of state.board.vertices) {
+      if (vid === transferFromVertex) continue;
+      try { map[vid] = vertexToVertexDistance(state as any, transferFromVertex, vid); } catch { map[vid] = Infinity; }
+    }
+    return map;
+  }, [boardMode, transferFromVertex, state.roads]);
+
   const snapVertex: VertexId | null =
     dragPiece && (dragPiece.type === 'settlement' || dragPiece.type === 'city')
       ? nearestVertex(dragPiece.svgX, dragPiece.svgY,
@@ -892,9 +916,7 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
             const maxCap = b.type === 'city' ? MAX_SOLDIERS_CITY : MAX_SOLDIERS_SETTLEMENT;
             const hasFree = (b.soldiers ?? 0) < maxCap;
             const maxTransferDist = 2 + ((state as any).transferDistanceBonus ?? 0);
-            const dist = transferFromVertex
-              ? vertexToVertexDistance(state as any, transferFromVertex, vid)
-              : 0;
+            const dist = transferDistanceMap?.[vid] ?? 0;
             const inRange = !transferFromVertex || vid === transferFromVertex || dist <= maxTransferDist;
             // Source phase: show buildings with soldiers; Dest phase: all own buildings (full = greyed)
             if (!transferFromVertex && !hasSoldiers) return null;
@@ -941,7 +963,7 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
             }
             const victim = state.players.find((p: any) => p.id === b.playerId);
             const victimVP = (victim?.victoryPoints ?? 0) + (victim?.victoryPointCards ?? 0);
-            const dist = roadDistanceToVertex(state as any, localPlayerId!, vid as VertexId);
+            const dist = attackDistanceMap?.[vid] ?? Infinity;
             const outOfRange = dist > 2;
             const vpProtected = victimVP <= 2;
             const canTarget = !outOfRange && !vpProtected;
