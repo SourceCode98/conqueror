@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
 import type { PublicGameState, ResourceType, EdgeId, AxialCoord } from '@conqueror/shared';
 import { ALL_RESOURCES, hexVertexIds, hasResources, SOLDIER_COST, MAX_SOLDIERS_SETTLEMENT, MAX_SOLDIERS_CITY } from '@conqueror/shared';
@@ -62,7 +63,25 @@ export default function ActionPanel({ gameState, gameId }: Props) {
     localPlayerId, openTradePanel,
     attackFromVertex, setAttackFromVertex, attackTargetVertex, setAttackTargetVertex,
     setCombatDicePhase,
-  } = useGameStore();
+  } = useGameStore(useShallow(s => ({
+    isMyTurn: s.isMyTurn,
+    myPlayer: s.myPlayer,
+    canAfford: s.canAfford,
+    boardMode: s.boardMode,
+    setBoardMode: s.setBoardMode,
+    roadBuildingEdges: s.roadBuildingEdges,
+    startRoadBuilding: s.startRoadBuilding,
+    cancelRoadBuilding: s.cancelRoadBuilding,
+    pendingBanditCoord: s.pendingBanditCoord,
+    setPendingBanditCoord: s.setPendingBanditCoord,
+    localPlayerId: s.localPlayerId,
+    openTradePanel: s.openTradePanel,
+    attackFromVertex: s.attackFromVertex,
+    setAttackFromVertex: s.setAttackFromVertex,
+    attackTargetVertex: s.attackTargetVertex,
+    setAttackTargetVertex: s.setAttackTargetVertex,
+    setCombatDicePhase: s.setCombatDicePhase,
+  })));
 
   const myTurn = isMyTurn();
   const me = myPlayer();
@@ -154,8 +173,14 @@ export default function ActionPanel({ gameState, gameId }: Props) {
 
   // ── Setup step ────────────────────────────────────────────────────────────
   const myId = me?.id ?? localPlayerId;
-  const myBuildingCount = myId ? Object.values(gameState.buildings).filter(b => b.playerId === myId).length : 0;
-  const myRoadCount = myId ? Object.values(gameState.roads).filter(r => r.playerId === myId).length : 0;
+  const myBuildingCount = useMemo(
+    () => myId ? Object.values(gameState.buildings).filter(b => b.playerId === myId).length : 0,
+    [gameState.buildings, myId],
+  );
+  const myRoadCount = useMemo(
+    () => myId ? Object.values(gameState.roads).filter(r => r.playerId === myId).length : 0,
+    [gameState.roads, myId],
+  );
   const setupStep: 'settlement' | 'road' = myBuildingCount > myRoadCount ? 'road' : 'settlement';
 
   // ── Bandit adjacent players ───────────────────────────────────────────────

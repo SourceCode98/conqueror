@@ -145,5 +145,7 @@ export function handleGameAction(
       type: 'ERROR',
       payload: { code: 'INTERNAL_ERROR', message: 'An internal error occurred' },
     });
+  } finally {
+    orch.persistIfDirty();
   }
 }

@@ -72,6 +72,7 @@ export class GameOrchestrator {
   private state: GameState;
   private db: Database.Database;
   private gameId: string;
+  private _dirty = false;
   // Non-persisted: transient combat state waiting for dice rolls
   private _pendingCombat: PendingCombat | null = null;
   // Non-persisted: coliseum battle choice tracking (choices are secret until revealed)
@@ -206,7 +207,18 @@ export class GameOrchestrator {
 
   updateState(updater: (state: GameState) => GameState): void {
     this.state = updater(this.state);
+    this._dirty = true;
+  }
+
+  persistIfDirty(): void {
+    if (!this._dirty) return;
     this.persist();
+    this._dirty = false;
+  }
+
+  playerHasPrivateCards(playerId: string): boolean {
+    const p = this.state.players.find(pl => pl.id === playerId);
+    return !!(p && (p.devCards.length > 0 || p.victoryPointCards > 0));
   }
 
   setConnected(playerId: string, connected: boolean): void {

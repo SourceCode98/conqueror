@@ -967,11 +967,18 @@ export function broadcastToRoom(gameId: string, message: ServerMessage, exclude?
 export function broadcastPersonalizedGameState(gameId: string, orch: import('../game/GameOrchestrator.js').GameOrchestrator): void {
   const room = rooms.get(gameId);
   if (!room) return;
+  // Serialize base state once (dev cards hidden); reuse for players without private cards
+  const baseState = orch.getPublicState();
+  const baseMsg = JSON.stringify({ type: 'GAME_STATE', payload: { state: baseState } });
   for (const client of room) {
     if (client.readyState !== WebSocket.OPEN) continue;
     const meta = clientMeta.get(client);
-    const state = orch.getPublicState(meta?.userId);
-    client.send(JSON.stringify({ type: 'GAME_STATE', payload: { state } }));
+    if (meta?.userId && orch.playerHasPrivateCards(meta.userId)) {
+      const state = orch.getPublicState(meta.userId);
+      client.send(JSON.stringify({ type: 'GAME_STATE', payload: { state } }));
+    } else {
+      client.send(baseMsg);
+    }
   }
   // Keep server-side turn timer in sync with game state
   scheduleTurnTimer(gameId);

@@ -748,6 +748,12 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
   const showDragBandit = dragPiece?.type === 'bandit';
   const myColor = state.players.find(p => p.id === localPlayerId)?.color ?? 'red';
 
+  // Pre-compute player color map once per players change — avoids O(n²) lookups in road/building renders
+  const playerColorMap = useMemo(
+    () => Object.fromEntries(state.players.map(p => [p.id, resolvePlayerColor(p.color)])),
+    [state.players],
+  );
+
   return (
     <div className="relative w-full h-full flex items-center justify-center">
       <svg
@@ -789,16 +795,14 @@ export default function HexBoard({ state, playerCosmetics = {} }: HexBoardProps)
 
         {/* ── Roads ── */}
         {Object.entries(state.roads).map(([edgeId, road]) => {
-          const playerColor = state.players.find(p => p.id === road.playerId)?.color ?? 'red';
           const roadSkin = playerCosmetics[road.playerId]?.road ?? 'road_default';
-          return <RoadSvg key={edgeId} edgeId={edgeId as EdgeId} color={resolvePlayerColor(playerColor)} skin={roadSkin} />;
+          return <RoadSvg key={edgeId} edgeId={edgeId as EdgeId} color={playerColorMap[road.playerId] ?? resolvePlayerColor('red')} skin={roadSkin} />;
         })}
 
         {/* ── Buildings ── */}
         {Object.entries(state.buildings).map(([vertexId, building]) => {
           const pos = vertexToPixel(vertexId as VertexId);
-          const playerColor = state.players.find(p => p.id === building.playerId)?.color ?? 'red';
-          const fill = resolvePlayerColor(playerColor);
+          const fill = playerColorMap[building.playerId] ?? resolvePlayerColor('red');
           const bldSkin = playerCosmetics[building.playerId]?.building ?? 'building_default';
           const bldStroke = BUILDING_SKIN_STROKE[bldSkin] ?? 'white';
           const bld = building as any;

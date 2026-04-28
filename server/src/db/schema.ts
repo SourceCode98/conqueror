@@ -25,4 +25,7 @@ export const SCHEMA_SQL = `
     joined_at    INTEGER NOT NULL DEFAULT (unixepoch()),
     PRIMARY KEY (game_id, user_id)
   );
+
+  CREATE INDEX IF NOT EXISTS idx_games_status ON games(status);
+  CREATE INDEX IF NOT EXISTS idx_game_players_game_id ON game_players(game_id);
 `;
